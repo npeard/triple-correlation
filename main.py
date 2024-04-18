@@ -25,9 +25,12 @@ if __name__ == '__main__':
         valid_file = 'C:\\Users\\npeard\\PycharmProjects\\triple-correlation\\data\\Valid1D-kmax3-pix51-ideal-1k.h5'
         train_file = 'C:\\Users\\npeard\\PycharmProjects\\triple-correlation\\data\\Train1D-kmax3-pix51-ideal-20k.h5'
         test_file = 'C:\\Users\\npeard\\PycharmProjects\\triple-correlation\\data\\Test1D-kmax3-pix51-ideal-1k.h5'
-        runner = train.TrainingRunner(train_file, valid_file, test_file, linearOnly=True)
+        #runner = train.TrainingRunner(train_file, valid_file, test_file, linearOnly=True)
+        runner = train.TrainingRunner(train_file, valid_file, test_file)
         #runner.train_singleLinear()
-        runner.train_multiLinear()
+        #runner.train_multiLinear()
+        runner.train_sequential()
+        runner.train_lateral()
 
         # def test_get_g2():
         #     # Test case 1: g2 is already computed
