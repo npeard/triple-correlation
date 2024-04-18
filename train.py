@@ -98,7 +98,7 @@ class TrainingRunner:
 
 		# assign colors based on learning rate
 		fig, (ax1, ax2) = plt.subplots(1, 2)
-		for kappa in [1e-4, 5e-4, 1e-3]:
+		for kappa in [5e-4, 1e-3, 5e-3]:
 			for i, lr in enumerate([2e-2, 1e-2, 7e-3]):
 				# early stopping
 				early_stop_callback = EarlyStopping(monitor="val_loss",
@@ -132,22 +132,22 @@ class TrainingRunner:
 		fig.suptitle("Single Linear (100 epochs)")
 		plt.tight_layout()
 		plt.savefig("./images/singleLinear.png")
-		plt.show()
+		#plt.show()
 
 	def train_multiLinear(self):
 		# checkpoints
 		# saves top-K checkpoints based on "val_loss" metric
 		checkpoint_callback = ModelCheckpoint(
-			save_top_k=5,
+			save_top_k=1,
 			monitor="val_loss",
 			mode="min",
-			dirpath="/content/drive/MyDrive/Colab Notebooks/TriPhase ML/",
+			dirpath=self.checkpoint_dir,
 			filename="multilinear-{epoch:02d}-{val_loss:.2f}",
 		)
 
 		# assign colors based on model size
 		fig, (ax1, ax2, ax3) = plt.subplots(1, 3)
-		for kappa in [1e-6, 1e-5, 1e-4]:
+		for kappa in [1e-4, 5e-4, 1e-3]:
 			for lr in [5e-2, 1e-2, 5e-3, 1e-3]:
 				for i, hidden_size in enumerate(
 						[2 * self.num_inputs, self.num_inputs,
@@ -162,7 +162,7 @@ class TrainingRunner:
 
 					# model
 					multilinear_model = ClosurePhaseDecoder(
-						networks.MultiLinear(self.num_inputs, hidden_size,
+						models.MultiLinear(self.num_inputs, hidden_size,
 										   self.num_outputs),
 						kappa=kappa, lr=lr)
 
@@ -190,8 +190,9 @@ class TrainingRunner:
 								color=self.assign_color(i))
 					ax3.set_xlabel("hidden_size")
 					ax3.set_ylabel("val_loss")
-
+		fig.suptitle("Single Linear (100 epochs)")
 		plt.tight_layout()
+		plt.savefig("./images/multiLinear.png")
 		plt.show()
 
 	def train_sequential(self):
