@@ -8,7 +8,7 @@ from clodecoder import ClosurePhaseDecoder
 import models
 from torch import FloatTensor
 import numpy as np
-import matplotlib as plt
+import matplotlib.pyplot as plt
 import lightning as L
 
 
@@ -16,14 +16,21 @@ import lightning as L
 class CustomDataset(Dataset):
 	def __init__(self, h5_file):
 		self.h5_file = h5_file
-		self.file = h5py.File(self.h5_file, 'r')
-		self.inputs = np.asarray(self.file["cosPhi_marginal"])
-		self.targets = np.asarray(self.file["phase"])
+		with h5py.File(self.h5_file, 'r') as f:
+			self.length = len(f['phase'])
 
+	def open_hdf5(self):
+		# solves issue where hdf5 file opened in __init__ prevents multiple
+		# workers: https://github.com/pytorch/pytorch/issues/11929
+		self.file = h5py.File(self.h5_file, 'r')
+		self.inputs = self.file["cosPhi_marginal"]
+		self.targets = self.file["phase"]
 	def __len__(self):
-		return len(self.targets)
+		return self.length
 
 	def __getitem__(self, idx):
+		if not hasattr(self, self.h5_file):
+			self.open_hdf5()
 		return FloatTensor(self.inputs[idx]), FloatTensor(self.targets[idx])
 
 
@@ -43,16 +50,16 @@ class TrainingRunner:
 		self.num_outputs = next(iter(self.train_loader))[1].size(-1)
 
 		# directories
-		self.checkpoint_dir = "checkpoints"
+		self.checkpoint_dir = "./checkpoints"
 
 	def get_custom_dataloader(self, h5_file, batch_size=128, shuffle=True):
 		# We can use DataLoader to get batches of data
 		dataset = CustomDataset(h5_file)
 		dataloader = DataLoader(dataset, batch_size=batch_size,
-								shuffle=shuffle)  # , num_workers=31)#, persistent_workers=True)
+								shuffle=shuffle, num_workers=16, persistent_workers=True)
 		return dataloader
 
-	def assign_color(number):
+	def assign_color(self, number):
 		colors = ["red", "green", "blue", "yellow", "purple", "cyan"]
 		return colors[number % len(colors)]
 
@@ -60,7 +67,7 @@ class TrainingRunner:
 		# checkpoints
 		# saves top-K checkpoints based on "val_loss" metric
 		checkpoint_callback = ModelCheckpoint(
-			save_top_k=5,
+			save_top_k=1,
 			monitor="val_loss",
 			mode="min",
 			dirpath=self.checkpoint_dir,
@@ -69,8 +76,8 @@ class TrainingRunner:
 
 		# assign colors based on learning rate
 		fig, (ax1, ax2) = plt.subplots(1, 2)
-		for kappa in [1e-6]:  # , 1e-5, 1e-4]:
-			for i, lr in enumerate([5e-2]):  # , 1e-2, 5e-3, 1e-3]):
+		for kappa in [1e-4, 5e-4, 1e-3]:
+			for i, lr in enumerate([2e-2, 1e-2, 7e-3]):
 				# early stopping
 				early_stop_callback = EarlyStopping(monitor="val_loss",
 													min_delta=0.00, patience=3,
@@ -78,7 +85,7 @@ class TrainingRunner:
 
 				# model
 				sequential_model = ClosurePhaseDecoder(
-					networks.Linear(self.num_inputs, self.num_outputs),
+					models.SingleLinear(self.num_inputs, self.num_outputs),
 					kappa=kappa,
 					lr=lr)
 
@@ -100,8 +107,9 @@ class TrainingRunner:
 				ax2.scatter(lr, final_val_loss, color=self.assign_color(i))
 				ax2.set_xlabel("lr")
 				ax2.set_ylabel("val_loss")
-
+		fig.suptitle("Single Linear (100 epochs)")
 		plt.tight_layout()
+		plt.savefig("./images/singleLinear.png")
 		plt.show()
 
 	def train_multiLinear(self):
