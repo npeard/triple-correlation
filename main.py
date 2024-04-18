@@ -25,7 +25,7 @@ if __name__ == '__main__':
         valid_file = 'C:\\Users\\npeard\\PycharmProjects\\triple-correlation\\data\\Valid1D-kmax3-pix51-ideal-1k.h5'
         train_file = 'C:\\Users\\npeard\\PycharmProjects\\triple-correlation\\data\\Train1D-kmax3-pix51-ideal-20k.h5'
         test_file = 'C:\\Users\\npeard\\PycharmProjects\\triple-correlation\\data\\Test1D-kmax3-pix51-ideal-1k.h5'
-        runner = train.TrainingRunner(train_file, valid_file, test_file)
+        runner = train.TrainingRunner(train_file, valid_file, test_file, linearOnly=True)
         runner.train_singleLinear()
 
         # def test_get_g2():

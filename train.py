@@ -6,14 +6,35 @@ from lightning.pytorch.callbacks.early_stopping import EarlyStopping
 from lightning.pytorch.callbacks import ModelCheckpoint
 from clodecoder import ClosurePhaseDecoder
 import models
-from torch import FloatTensor
+from torch import FloatTensor, arccos
 import numpy as np
 import matplotlib.pyplot as plt
 import lightning as L
 
 
 # Define a custom Dataset class
-class CustomDataset(Dataset):
+class PhiDataset(Dataset):
+	def __init__(self, h5_file):
+		self.h5_file = h5_file
+		with h5py.File(self.h5_file, 'r') as f:
+			self.length = len(f['phase'])
+
+	def open_hdf5(self):
+		# solves issue where hdf5 file opened in __init__ prevents multiple
+		# workers: https://github.com/pytorch/pytorch/issues/11929
+		self.file = h5py.File(self.h5_file, 'r')
+		self.inputs = self.file["cosPhi_marginal"]
+		self.targets = self.file["phase"]
+	def __len__(self):
+		return self.length
+
+	def __getitem__(self, idx):
+		if not hasattr(self, self.h5_file):
+			self.open_hdf5()
+		return FloatTensor(np.arccos(self.inputs[idx])), FloatTensor(self.targets[idx])
+
+
+class cosPhiDataset(Dataset):
 	def __init__(self, h5_file):
 		self.h5_file = h5_file
 		with h5py.File(self.h5_file, 'r') as f:
@@ -35,14 +56,12 @@ class CustomDataset(Dataset):
 
 
 class TrainingRunner:
-	def __init__(self, training_h5, validation_h5, testing_h5):
-		self.train_loader = self.get_custom_dataloader(training_h5,
-													   batch_size=128)
-		self.valid_loader = self.get_custom_dataloader(validation_h5,
-													   batch_size=128,
+	def __init__(self, training_h5, validation_h5, testing_h5, linearOnly=False):
+		self.train_loader = self.get_custom_dataloader(training_h5, linearOnly=linearOnly)
+		self.valid_loader = self.get_custom_dataloader(validation_h5, linearOnly=linearOnly,
 													   shuffle=False)
 		self.test_loader = self.get_custom_dataloader(testing_h5,
-													  batch_size=128,
+													  linearOnly=linearOnly,
 													  shuffle=False)
 
 		# dimensions
@@ -52,9 +71,12 @@ class TrainingRunner:
 		# directories
 		self.checkpoint_dir = "./checkpoints"
 
-	def get_custom_dataloader(self, h5_file, batch_size=128, shuffle=True):
+	def get_custom_dataloader(self, h5_file, batch_size=128, shuffle=True, linearOnly=False):
 		# We can use DataLoader to get batches of data
-		dataset = CustomDataset(h5_file)
+		if linearOnly:
+			dataset = PhiDataset(h5_file)
+		else:
+			dataset = cosPhiDataset(h5_file)
 		dataloader = DataLoader(dataset, batch_size=batch_size,
 								shuffle=shuffle, num_workers=16, persistent_workers=True)
 		return dataloader
