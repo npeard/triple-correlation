@@ -24,7 +24,7 @@ class Fluorescence1D:
         self.kmax = kmax
         self.num_pix = num_pix
         self.num_atoms = num_atoms
-        self.x = x # User-supplied coordinates
+        self.x = x  # User-supplied coordinates
         self.init_system()
 
     def init_system(self):
@@ -71,7 +71,7 @@ class Fluorescence1D:
             Returns:
                 weights_2d (float) - array of weights
             """
-        weights_2d = np.zeros((2*num_pix-1, 2*num_pix-1))
+        weights_2d = np.zeros((2 * num_pix - 1, 2 * num_pix - 1))
 
         for k1 in range(num_pix):
             for k2 in range(num_pix):
@@ -100,7 +100,7 @@ class Fluorescence1D:
         self.object[np.digitize(self.coords, self.x_pix)] = 1 / self.num_atoms
         self.object_double = np.zeros_like(self.x_double_pix)
         self.object_double[np.digitize(self.coords, self.x_double_pix)] = (
-                1 / self.num_atoms
+            1 / self.num_atoms
         )
         # object_double is NOT the same object with double sampling, it is
         # slightly different in the binning
@@ -224,7 +224,8 @@ class Fluorescence1D:
         if self.g3 is None:
             self.g3 = self.get_g3(num_shots=num_shots)
 
-        self.g3_2d = self.compute_marginalized_g3(self.g3, num_pix=self.num_pix)
+        self.g3_2d = self.compute_marginalized_g3(
+            self.g3, num_pix=self.num_pix)
 
         if self.weights_2d is None:
             self.init_weights_2d()
@@ -237,16 +238,16 @@ class Fluorescence1D:
     def compute_marginalized_g3(g3, num_pix=1):
         """
         Compute the marginalized triple correlation function by summing the
-		3D array of triple correlations.
+                3D array of triple correlations.
 
-		Args:
-			g3 (ndarray): The 3D array of computed triple correlations.
-			num_pix (int): The number of pixels for the simulation.
+                Args:
+                        g3 (ndarray): The 3D array of computed triple correlations.
+                        num_pix (int): The number of pixels for the simulation.
 
-		Returns:
-			g3_2d (ndarray): The dimension-reduced version of the triple
-			correlation function.
-		"""
+                Returns:
+                        g3_2d (ndarray): The dimension-reduced version of the triple
+                        correlation function.
+                """
         g3_2d = np.zeros((2 * num_pix - 1, 2 * num_pix - 1))
 
         for k1 in range(num_pix):
@@ -310,7 +311,7 @@ class Fluorescence1D:
         weights = self.weights_2d
 
         c = (self.g3_2d - (1 - 3 / n + 4 / n**2) - (1 - 2 / n) * (
-                np.add.outer(g1sq, g1sq) + g1sq[q12])) * (weights > 0)
+            np.add.outer(g1sq, g1sq) + g1sq[q12])) * (weights > 0)
         return c
 
     def cosPhi_from_structure(self) -> np.ndarray:

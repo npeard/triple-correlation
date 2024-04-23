@@ -47,7 +47,7 @@ class Plot1D:
         obj_Phase = np.fft.fftshift(obj_Phase)
 
         scaled_x = np.fft.fftshift(np.fft.fftfreq(
-            self.fluo.num_pix, d=2*self.fluo.kmax/self.fluo.num_pix))
+            self.fluo.num_pix, d=2 * self.fluo.kmax / self.fluo.num_pix))
         P.plot(scaled_x, np.abs(obj_NoPhase),
                label="Object from Intensity")
         P.plot(scaled_x, np.abs(obj_Phase), '--',
@@ -185,16 +185,17 @@ class Plot1D:
         # information?
 
         cosPhi_from_data = cosPhi_from_data[
-                             self.fluo.num_pix-1:3*self.fluo.num_pix//2,
-                             self.fluo.num_pix-1:3*self.fluo.num_pix//2]
-        cosPhi_from_data_symmetrized = (cosPhi_from_data + cosPhi_from_data.T)/2
+            self.fluo.num_pix - 1:3 * self.fluo.num_pix // 2,
+            self.fluo.num_pix - 1:3 * self.fluo.num_pix // 2]
+        cosPhi_from_data_symmetrized = (
+            cosPhi_from_data + cosPhi_from_data.T) / 2
 
         # cosPhi_from_structurePhase = self.fluo.cosPhi_from_structure()[
         #     self.fluo.num_pix-1:, self.fluo.num_pix-1:]
 
         cosPhi_from_phase = self.fluo.cosPhi_from_phase()
         cosPhi_from_phase_symmetrized = (cosPhi_from_phase +
-                                         cosPhi_from_phase.T)/2
+                                         cosPhi_from_phase.T) / 2
         assert cosPhi_from_data.shape == cosPhi_from_phase.shape, \
             "Shapes do not match"
         assert np.allclose(cosPhi_from_phase.T, cosPhi_from_phase), \
@@ -235,12 +236,12 @@ class Plot1D:
         """
         cosPhi = self.fluo.cosPhi_from_data(num_shots=num_shots)
         initial_phase = self.fluo.coh_phase_double[
-                        self.num_pix - 1:3 * self.num_pix // 2][1]
+            self.num_pix - 1:3 * self.num_pix // 2][1]
         solved = TriPhase_1D.simple_PhiSolver(cosPhi,
                                               initial_phase=initial_phase)
         from skimage.restoration import unwrap_phase
         solved = unwrap_phase(solved)
-        real_phase = self.fluo.coh_phase[self.fluo.num_pix//2:]
+        real_phase = self.fluo.coh_phase[self.fluo.num_pix // 2:]
         real_phase = unwrap_phase(real_phase)
 
         fig = P.figure(figsize=(7, 7))
@@ -265,7 +266,7 @@ class Plot1D:
         """
         cosPhi = self.fluo.cosPhi_from_data(num_shots=num_shots)
         initial_phase = self.fluo.coh_phase_double[
-                        self.num_pix - 1:3 * self.num_pix // 2][1]
+            self.num_pix - 1:3 * self.num_pix // 2][1]
         solved, error = TriPhase_1D.PhiSolver(cosPhi,
                                               initial_phase=initial_phase)
         real_phase = self.fluo.coh_phase_double[self.fluo.num_pix - 1:]
@@ -283,7 +284,7 @@ class Plot1D:
         P.plot(np.linspace(0, len(real_phase), len(real_phase)),
                plot_solved, label='Solved')
         P.plot(np.linspace(0, len(real_phase), len(real_phase)),
-               np.cos(plot_real_phase-plot_solved), label='cos(Diff)')
+               np.cos(plot_real_phase - plot_solved), label='cos(Diff)')
         P.legend()
         P.tight_layout()
         P.show()

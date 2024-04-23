@@ -38,7 +38,7 @@ class SinglePerceptron(nn.Module):
         self.tanh = nn.Tanh()
 
     def forward(self, x):
-        out = torch.pi*self.tanh(self.fc(x))
+        out = torch.pi * self.tanh(self.fc(x))
         return out
 
 
@@ -55,7 +55,7 @@ class SequentialNN(nn.Module):
     def forward(self, x):
         out = self.relu(self.fc1(x))
         out = self.relu(self.fc2(out))
-        out = torch.pi*self.tanh(self.fc3(out))
+        out = torch.pi * self.tanh(self.fc3(out))
 
         return out
 
@@ -74,7 +74,7 @@ class LateralNN(nn.Module):
         out1 = self.relu(self.fc1(x))
         out2 = self.relu(self.fc2(out1))
         out3 = torch.add(out1, out2)
-        out = torch.pi*self.tanh(self.fc3(out3))
+        out = torch.pi * self.tanh(self.fc3(out3))
 
         return out
 

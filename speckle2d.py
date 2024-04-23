@@ -32,18 +32,18 @@ class Fluorescence2D:
         """
         print("Initializing system...")
         self.k_pix = np.mgrid[-self.kmax:self.kmax:1j * self.num_pix,
-                     -self.kmax:self.kmax:1j * self.num_pix]
+                              -self.kmax:self.kmax:1j * self.num_pix]
         self.x_pix = np.mgrid[-1:1:1j * self.num_pix,
-                     -1:1:1j * self.num_pix]
+                              -1:1:1j * self.num_pix]
         self.x_double_pix = np.mgrid[-1:1:1j * (2 * self.num_pix - 1),
-                            -1:1:1j * (2 * self.num_pix - 1)]
+                                     -1:1:1j * (2 * self.num_pix - 1)]
         self.weights_2d = np.correlate(np.ones(self.num_pix),
                                        np.ones(self.num_pix),
                                        mode='full')
         self.weights_2d = np.multiply.outer(self.weights_2d, self.weights_2d)
         self.q_pix = np.mgrid[
-                     -2 * self.kmax:2 * self.kmax:(2 * self.num_pix - 1) * 1j,
-                     -2 * self.kmax:2 * self.kmax:(2 * self.num_pix - 1) * 1j]
+            -2 * self.kmax:2 * self.kmax:(2 * self.num_pix - 1) * 1j,
+            -2 * self.kmax:2 * self.kmax:(2 * self.num_pix - 1) * 1j]
         self.g2 = None
         self.g3 = None
         self.g2_2d = None
@@ -71,8 +71,11 @@ class Fluorescence2D:
         Returns:
             weights_4d (float): array of weights
         """
-        weights_4d = np.zeros((2*num_pix-1, 2*num_pix-1, 2*num_pix-1,
-                               2*num_pix-1))
+        weights_4d = np.zeros(
+            (2 * num_pix - 1,
+             2 * num_pix - 1,
+             2 * num_pix - 1,
+             2 * num_pix - 1))
 
         for k1x in range(num_pix):
             for k2x in range(num_pix):
@@ -117,13 +120,11 @@ class Fluorescence2D:
         self.qr_product_y = np.multiply.outer(self.q_pix[1, :, :],
                                               self.coords[1, :])
 
-        self.coh_ft = np.exp(
-            -1j * (self.kr_product_x + self.kr_product_y + 0) * 2 * np.pi).mean(
-            2)
+        self.coh_ft = np.exp(-1j * (self.kr_product_x +
+                             self.kr_product_y + 0) * 2 * np.pi).mean(2)
         self.coh_phase = np.angle(self.coh_ft)
-        self.coh_ft_double = np.exp(
-            -1j * (self.qr_product_x + self.qr_product_y + 0) * 2 * np.pi).mean(
-            2)
+        self.coh_ft_double = np.exp(-1j * (self.qr_product_x +
+                                    self.qr_product_y + 0) * 2 * np.pi).mean(2)
         self.coh_phase_double = np.angle(self.coh_ft_double)
 
     import numpy as np
@@ -191,7 +192,8 @@ class Fluorescence2D:
         if self.g2 is None:
             self.g2 = self.get_g2(num_shots=num_shots)
 
-        self.g2_2d = self.compute_marginalized_g2(self.g2, num_pix=self.num_pix)
+        self.g2_2d = self.compute_marginalized_g2(
+            self.g2, num_pix=self.num_pix)
         self.g2_2d[self.weights_2d > 0] /= self.weights_2d[self.weights_2d > 0]
 
         return self.g2_2d
@@ -220,7 +222,7 @@ class Fluorescence2D:
                         g2_2d[
                             num_pix - 1 + k1x - k2x,
                             num_pix - 1 + k1y - k2y
-                            ] += g2[k1x, k1y, k2x, k2y]
+                        ] += g2[k1x, k1y, k2x, k2y]
 
         return g2_2d
 
@@ -242,7 +244,8 @@ class Fluorescence2D:
         self.g3 = np.zeros(6 * (self.num_pix,))
         for i in range(num_shots):
             incoh = self.get_incoh_intens()
-            self.g3 += np.multiply.outer(np.multiply.outer(incoh, incoh), incoh)
+            self.g3 += np.multiply.outer(np.multiply.outer(incoh,
+                                         incoh), incoh)
             ave_intens += incoh
         self.g3 *= num_shots**2 / np.multiply.outer(
             np.multiply.outer(ave_intens, ave_intens), ave_intens)
@@ -264,7 +267,8 @@ class Fluorescence2D:
         if self.g3 is None:
             self.g3 = self.get_g3(num_shots=num_shots)
 
-        self.g3_4d = self.compute_marginalized_g3(self.g3, num_pix=self.num_pix)
+        self.g3_4d = self.compute_marginalized_g3(
+            self.g3, num_pix=self.num_pix)
 
         if self.weights_4d is None:
             self.init_weights_4d()
@@ -352,8 +356,8 @@ class Fluorescence2D:
         if self.g2_2d is None:
             self.marginalize_g2(num_shots=num_shots)
 
-        g1sq = self.g2_2d - 1 + 1./self.num_atoms
-        dim = 2 * self.num_pix-1
+        g1sq = self.g2_2d - 1 + 1. / self.num_atoms
+        dim = 2 * self.num_pix - 1
         qx, qy = np.indices(2 * (dim,))
         q12x = np.add.outer(qx, qx)
         q12x -= dim // 2
@@ -365,8 +369,8 @@ class Fluorescence2D:
 
         weights = self.weights_4d
 
-        c = ((self.g3_4d - (1 - 3/n + 4/n**2)
-             - (1-2/n)*(np.add.outer(g1sq, g1sq)+g1sq[q12x, q12y]))
+        c = ((self.g3_4d - (1 - 3 / n + 4 / n**2)
+             - (1 - 2 / n) * (np.add.outer(g1sq, g1sq) + g1sq[q12x, q12y]))
              * (weights > 0))
         return c
 
@@ -397,11 +401,11 @@ class Fluorescence2D:
         clos = clos / 2
 
         # Remove magnitude of the g1 product
-        g1sq = self.g2_2d - 1 + 1./self.num_atoms
+        g1sq = self.g2_2d - 1 + 1. / self.num_atoms
         g1sq[g1sq < 0] = 0.00000000001
         g1 = np.sqrt(g1sq)
         dim = 2 * self.num_pix - 1
-        qx, qy = np.indices(2*(dim,))
+        qx, qy = np.indices(2 * (dim,))
         q12x = np.add.outer(qx, qx)
         q12x -= dim // 2
         q12x[(q12x < 0) | (q12x >= dim)] = 0
