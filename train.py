@@ -85,7 +85,7 @@ class TrainingRunner:
     def get_custom_dataloader(
             self,
             h5_file,
-            batch_size=128,
+            batch_size=512,
             shuffle=True,
             linearOnly=False):
         # We can use DataLoader to get batches of data
@@ -229,11 +229,7 @@ class TrainingRunner:
         fig, (ax1, ax2, ax3) = plt.subplots(1, 3)
         for kappa in [1e-4]:  # , 1e-5, 1e-4]:
             for lr in [1e-2]:  # , 1e-2, 5e-3, 1e-3]:
-                for i, hidden_size in enumerate([self.num_inputs,
-                                                 5 * self.num_outputs,
-                                                 3 * self.num_outputs,
-                                                 2 * self.num_outputs,
-                                                 self.num_outputs]):
+                for i, num_layers in enumerate([10, 20]):
                     # early stopping
                     early_stop_callback = EarlyStopping(monitor="val_loss",
                                                         min_delta=0.00,
@@ -243,7 +239,7 @@ class TrainingRunner:
 
                     # model
                     sequential_model = ClosurePhaseDecoder(
-                        models.SequentialNN(self.num_inputs, hidden_size,
+                        models.SequentialNN(self.num_inputs, num_layers,
                                             self.num_outputs),
                         kappa=kappa, lr=lr)
 

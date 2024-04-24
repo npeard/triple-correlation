@@ -13,6 +13,7 @@ class ClosurePhaseDecoder(L.LightningModule):
         self.lr = lr
         self.save_hyperparameters()
         self.model = model
+        torch.set_float32_matmul_precision('medium')
 
     def antisymmetry_loss(self, outputs):
         # Should this be using views instead of slicing?

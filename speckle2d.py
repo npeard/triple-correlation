@@ -30,7 +30,7 @@ class Fluorescence2D:
         Initialize arrays and variables, generate atomic array. Some arrays
         are not initialized on startup to save resources.
         """
-        print("Initializing system...")
+        # print("Initializing system...")
         self.k_pix = np.mgrid[-self.kmax:self.kmax:1j * self.num_pix,
                               -self.kmax:self.kmax:1j * self.num_pix]
         self.x_pix = np.mgrid[-1:1:1j * self.num_pix,

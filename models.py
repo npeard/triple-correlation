@@ -44,18 +44,18 @@ class SinglePerceptron(nn.Module):
 
 # Define a sequential dense model
 class SequentialNN(nn.Module):
-    def __init__(self, input_size, hidden_size, num_outputs):
+    def __init__(self, input_size, num_layers, num_outputs):
         super(SequentialNN, self).__init__()
-        self.fc1 = nn.Linear(input_size, hidden_size)
-        self.fc2 = nn.Linear(hidden_size, hidden_size)
-        self.fc3 = nn.Linear(hidden_size, num_outputs)
-        self.relu = nn.ReLU()
-        self.tanh = nn.Tanh()
+        self.layers = []
+        for i in range(num_layers):
+            self.layers.append(nn.Linear(input_size, input_size))
+            self.layers.append(nn.ReLU())
+        self.layers.append(nn.Linear(input_size, num_outputs))
+        self.layers.append(nn.Tanh())
+        self.model = nn.Sequential(*self.layers)
 
     def forward(self, x):
-        out = self.relu(self.fc1(x))
-        out = self.relu(self.fc2(out))
-        out = torch.pi * self.tanh(self.fc3(out))
+        out = torch.pi * self.model(x)
 
         return out
 

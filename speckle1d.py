@@ -32,7 +32,7 @@ class Fluorescence1D:
         Initialize arrays and variables, generate atomic array. Some arrays
         are not initialized on startup to save resources.
         """
-        print("Initializing system...")
+        # print("Initializing system...")
         self.k_pix = np.linspace(-self.kmax, self.kmax, self.num_pix)
         self.k_pix_even = np.linspace(-self.kmax, self.kmax, self.num_pix + 1)
         self.x_pix = np.linspace(-1, 1, self.num_pix)

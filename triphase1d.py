@@ -3,6 +3,7 @@
 import numpy as np
 from scipy import optimize
 import h5py
+from tqdm import tqdm
 import speckle1d
 
 
@@ -302,7 +303,7 @@ def generate_training_set_from_reverse(
             image_stack_depth (int) - the number of images that should be
             generated per stack in each data/label set
             """
-    for _ in range(num_data):
+    for _ in tqdm(range(num_data)):
         fluo = speckle1d.Fluorescence1D(
             kmax=3,
             num_pix=51,
