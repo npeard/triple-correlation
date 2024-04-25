@@ -10,6 +10,7 @@ from torch import FloatTensor, arccos
 import numpy as np
 import matplotlib.pyplot as plt
 import lightning as L
+from lightning.pytorch.loggers import TensorBoardLogger
 
 
 # Define a custom Dataset class
@@ -219,7 +220,7 @@ class TrainingRunner:
         # saves top-K checkpoints based on "val_loss" metric
         checkpoint_callback = ModelCheckpoint(
             save_top_k=1,
-            monitor="val_loss",
+            monitor="hp/val_loss",
             mode="min",
             dirpath=self.checkpoint_dir,
             filename="sequential-{epoch:02d}-{val_loss:.2f}",
@@ -231,7 +232,7 @@ class TrainingRunner:
             for lr in [1e-2]:  # , 1e-2, 5e-3, 1e-3]:
                 for i, num_layers in enumerate([10, 20]):
                     # early stopping
-                    early_stop_callback = EarlyStopping(monitor="val_loss",
+                    early_stop_callback = EarlyStopping(monitor="hp/val_loss",
                                                         min_delta=0.00,
                                                         patience=3,
                                                         verbose=True,
@@ -243,14 +244,21 @@ class TrainingRunner:
                                             self.num_outputs),
                         kappa=kappa, lr=lr)
 
+                    # logger
+                    logger = TensorBoardLogger("lightning_logs",
+                                               name="sequential",
+                                               default_hp_metric=False)
+
                     # train model
                     trainer = L.Trainer(accelerator="gpu", devices=1,
-                                        max_epochs=100,
+                                        max_epochs=20,
                                         callbacks=[early_stop_callback],
-                                        check_val_every_n_epoch=10)
+                                        check_val_every_n_epoch=10,
+                                        logger=logger)
+                    #trainer.logger.log_hyperparams(params={'learning_rate': lr, 'kappa': kappa})
                     trainer.fit(sequential_model, self.train_loader,
                                 self.valid_loader)
-                    final_val_loss = trainer.callback_metrics['val_loss']
+                    final_val_loss = trainer.callback_metrics['hp/val_loss']
                     print(final_val_loss)
 
                     # plot for trends
