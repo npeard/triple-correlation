@@ -10,7 +10,7 @@ from torch import FloatTensor, arccos
 import numpy as np
 import matplotlib.pyplot as plt
 import lightning as L
-from lightning.pytorch.loggers import TensorBoardLogger
+from lightning.pytorch.loggers import WandbLogger
 
 
 # Define a custom Dataset class
@@ -68,12 +68,13 @@ class TrainingRunner:
             validation_h5,
             testing_h5,
             linearOnly=False):
+        self.batch_size = 512
         self.train_loader = self.get_custom_dataloader(
-            training_h5, linearOnly=linearOnly)
+            training_h5, linearOnly=linearOnly, batch_size=self.batch_size)
         self.valid_loader = self.get_custom_dataloader(
-            validation_h5, linearOnly=linearOnly, shuffle=False)
+            validation_h5, linearOnly=linearOnly, batch_size=self.batch_size, shuffle=False)
         self.test_loader = self.get_custom_dataloader(testing_h5,
-                                                      linearOnly=linearOnly,
+                                                      linearOnly=linearOnly, batch_size=self.batch_size,
                                                       shuffle=False)
 
         # dimensions
@@ -220,19 +221,18 @@ class TrainingRunner:
         # saves top-K checkpoints based on "val_loss" metric
         checkpoint_callback = ModelCheckpoint(
             save_top_k=1,
-            monitor="hp/val_loss",
+            monitor="val_loss",
             mode="min",
             dirpath=self.checkpoint_dir,
             filename="sequential-{epoch:02d}-{val_loss:.2f}",
         )
 
         # assign colors based on model size
-        fig, (ax1, ax2, ax3) = plt.subplots(1, 3)
-        for kappa in [1e-4]:  # , 1e-5, 1e-4]:
-            for lr in [1e-2]:  # , 1e-2, 5e-3, 1e-3]:
-                for i, num_layers in enumerate([10, 20]):
+        for kappa in [1e-3, 1e-4, 1e-5]:
+            for lr in [2e-2, 1e-2, 5e-3, 1e-3]:
+                for i, num_layers in enumerate([10, 20, 30, 40, 50]):
                     # early stopping
-                    early_stop_callback = EarlyStopping(monitor="hp/val_loss",
+                    early_stop_callback = EarlyStopping(monitor="val_loss",
                                                         min_delta=0.00,
                                                         patience=3,
                                                         verbose=True,
@@ -245,40 +245,27 @@ class TrainingRunner:
                         kappa=kappa, lr=lr)
 
                     # logger
-                    logger = TensorBoardLogger("lightning_logs",
-                                               name="sequential",
-                                               default_hp_metric=False)
+                    logger = WandbLogger(project='triple_correlation', group="sequential", log_model=True)
+
+                    # add your batch size to the wandb config
+                    #logger.experiment.config["batch_size"] = self.batch_size
+                    #logger.experiment.config["num_layers"] = num_layers
+                    logger.experiment.config.update({"batch_size": self.batch_size, "num_layers": num_layers}, allow_val_change=True)
 
                     # train model
                     trainer = L.Trainer(accelerator="gpu", devices=1,
-                                        max_epochs=20,
+                                        max_epochs=200,
                                         callbacks=[early_stop_callback],
                                         check_val_every_n_epoch=10,
                                         logger=logger)
-                    #trainer.logger.log_hyperparams(params={'learning_rate': lr, 'kappa': kappa})
+
                     trainer.fit(sequential_model, self.train_loader,
                                 self.valid_loader)
-                    final_val_loss = trainer.callback_metrics['hp/val_loss']
-                    print(final_val_loss)
+                    # final_val_loss = trainer.callback_metrics['val_loss']
 
-                    # plot for trends
-                    ax1.scatter(kappa, final_val_loss,
-                                color=self.assign_color(i))
-                    ax1.set_xlabel("kappa")
-                    ax1.set_ylabel("val_loss")
-
-                    ax2.scatter(lr, final_val_loss, color=self.assign_color(i))
-                    ax2.set_xlabel("lr")
-                    ax2.set_ylabel("val_loss")
-
-                    ax3.scatter(hidden_size, final_val_loss,
-                                color=self.assign_color(i))
-                    ax3.set_xlabel("hidden_size")
-                    ax3.set_ylabel("val_loss")
-        fig.suptitle("Sequential NN (100 epochs)")
-        plt.tight_layout()
-        plt.savefig("./images/sequential.png")
-        # plt.show()
+                    # finish Weights and Biases run, must include this line so
+                    # that a new run is instantiated
+                    logger.experiment.finish()
 
     def train_lateral(self):
         # checkpoints

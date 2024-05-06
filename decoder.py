@@ -10,8 +10,8 @@ class ClosurePhaseDecoder(L.LightningModule):
         super().__init__()
         self.kappa = kappa
         self.lr = lr
-        #self.save_hyperparameters()
         self.model = model
+        self.save_hyperparameters()
         torch.set_float32_matmul_precision('medium')
         #self.hparams = {'lr': lr, 'kappa': kappa}
 
@@ -26,11 +26,6 @@ class ClosurePhaseDecoder(L.LightningModule):
             outputs[:, outputs.size(1) // 2]**2)
         return loss
 
-    def on_train_start(self):
-        print(self.hparams)
-        self.logger.log_hyperparams(self.hparams,
-                                    {"hp/val_loss": 0, "hp/train_loss": 0})
-
     def training_step(self, batch, batch_idx):
         # training_step defines the train loop.
         # it is independent of forward
@@ -40,7 +35,7 @@ class ClosurePhaseDecoder(L.LightningModule):
         loss = (nn.functional.mse_loss(y_hat, y) + self.kappa *
                 self.antisymmetry_loss(y_hat))
         # Logging to TensorBoard (if installed) by default
-        self.log("hp/train_loss", loss, prog_bar=True)
+        self.log("train_loss", loss, prog_bar=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -53,7 +48,7 @@ class ClosurePhaseDecoder(L.LightningModule):
         # hyperparameters for every model
         loss = nn.functional.mse_loss(y_hat, y) + self.antisymmetry_loss(y_hat)
         # Logging to TensorBoard (if installed) by default
-        self.log("hp/val_loss", loss, prog_bar=True)
+        self.log("val_loss", loss, prog_bar=True)
         return loss
 
     def configure_optimizers(self):
