@@ -47,8 +47,10 @@ class SequentialNN(nn.Module):
     def __init__(self, input_size, num_layers, num_outputs):
         super(SequentialNN, self).__init__()
         self.layers = []
+        self.layers.append(nn.LayerNorm(input_size))
         for i in range(num_layers):
             self.layers.append(nn.Linear(input_size, input_size))
+            self.layers.append(nn.LayerNorm(input_size))
             self.layers.append(nn.ReLU())
         self.layers.append(nn.Linear(input_size, num_outputs))
         self.layers.append(nn.Tanh())
