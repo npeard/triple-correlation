@@ -11,6 +11,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import lightning as L
 from lightning.pytorch.loggers import WandbLogger
+from itertools import product
 
 
 # Define a custom Dataset class
@@ -62,20 +63,15 @@ class cosPhiDataset(Dataset):
 
 
 class TrainingRunner:
-    def __init__(
-            self,
-            training_h5,
-            validation_h5,
-            testing_h5,
-            linearOnly=False):
-        self.batch_size = 512
-        self.train_loader = self.get_custom_dataloader(
-            training_h5, linearOnly=linearOnly, batch_size=self.batch_size)
-        self.valid_loader = self.get_custom_dataloader(
-            validation_h5, linearOnly=linearOnly, batch_size=self.batch_size, shuffle=False)
-        self.test_loader = self.get_custom_dataloader(testing_h5,
-                                                      linearOnly=linearOnly, batch_size=self.batch_size,
-                                                      shuffle=False)
+    def __init__(self, training_h5, validation_h5, testing_h5,
+                 linear_only=False):
+        self.training_h5 = training_h5
+        self.validation_h5 = validation_h5
+        self.testing_h5 = testing_h5
+        self.linear_only = linear_only
+
+        # get dataloaders
+        self.set_dataloaders()
 
         # dimensions
         self.num_inputs = next(iter(self.train_loader))[0].size(-1)**2
@@ -84,14 +80,10 @@ class TrainingRunner:
         # directories
         self.checkpoint_dir = "./checkpoints"
 
-    def get_custom_dataloader(
-            self,
-            h5_file,
-            batch_size=512,
-            shuffle=True,
-            linearOnly=False):
+    def get_custom_dataloader(self, h5_file, batch_size=128, shuffle=True,
+                              linear_only=False):
         # We can use DataLoader to get batches of data
-        if linearOnly:
+        if linear_only:
             dataset = PhiDataset(h5_file)
         else:
             dataset = cosPhiDataset(h5_file)
@@ -100,12 +92,15 @@ class TrainingRunner:
             batch_size=batch_size,
             shuffle=shuffle,
             num_workers=16,
-            persistent_workers=True)
+            persistent_workers=True,
+            pin_memory=True)
         return dataloader
 
-    def assign_color(self, number):
-        colors = ["red", "green", "blue", "yellow", "purple", "cyan"]
-        return colors[number % len(colors)]
+    def set_dataloaders(self, batch_size=128):
+        self.batch_size = batch_size
+        self.train_loader = self.get_custom_dataloader(self.training_h5, linear_only=self.linear_only, batch_size=self.batch_size)
+        self.valid_loader = self.get_custom_dataloader(self.validation_h5, linear_only=self.linear_only, batch_size=self.batch_size, shuffle=False)
+        self.test_loader = self.get_custom_dataloader(self.testing_h5, linear_only=self.linear_only, batch_size=self.batch_size, shuffle=False)
 
     def train_singleLinear(self):
         # checkpoints
@@ -131,7 +126,7 @@ class TrainingRunner:
                 sequential_model = ClosurePhaseDecoder(
                     models.SingleLinear(self.num_inputs, self.num_outputs),
                     kappa=kappa,
-                    lr=lr)
+                    learning_rate=lr)
 
                 # train model
                 trainer = L.Trainer(max_epochs=100,
@@ -185,7 +180,7 @@ class TrainingRunner:
                     multilinear_model = ClosurePhaseDecoder(
                         models.MultiLinear(self.num_inputs, hidden_size,
                                            self.num_outputs),
-                        kappa=kappa, lr=lr)
+                        kappa=kappa, learning_rate=lr)
 
                     # train model
                     trainer = L.Trainer(max_epochs=100,
@@ -228,44 +223,52 @@ class TrainingRunner:
         )
 
         # assign colors based on model size
-        for kappa in [1e-3, 1e-4, 1e-5]:
-            for lr in [2e-2, 1e-2, 5e-3, 1e-3]:
-                for i, num_layers in enumerate([10, 20, 30, 40, 50]):
-                    # early stopping
-                    early_stop_callback = EarlyStopping(monitor="val_loss",
-                                                        min_delta=0.00,
-                                                        patience=3,
-                                                        verbose=True,
-                                                        mode="min")
+        for batch_size, lr, num_layers, activation, norm in product([128, 512], [1e-2, 5e-2], [4, 5], ["LeakyReLU", "Tanh"], [True, False]):
+            # early stopping
+            early_stop_callback = EarlyStopping(monitor="val_loss",
+                                                min_delta=0.00,
+                                                patience=3,
+                                                verbose=True,
+                                                mode="min")
 
-                    # model
-                    sequential_model = ClosurePhaseDecoder(
-                        models.SequentialNN(self.num_inputs, num_layers,
-                                            self.num_outputs),
-                        kappa=kappa, lr=lr)
+            # reset dataloaders
+            self.set_dataloaders(batch_size=batch_size)
 
-                    # logger
-                    logger = WandbLogger(project='triple_correlation', group="sequential", log_model=True)
+            # model
+            sequential_model = ClosurePhaseDecoder(
+                models.SequentialNN(self.num_inputs, num_layers,
+                                    self.num_outputs, activation=activation, norm=norm), learning_rate=lr)
 
-                    # add your batch size to the wandb config
-                    #logger.experiment.config["batch_size"] = self.batch_size
-                    #logger.experiment.config["num_layers"] = num_layers
-                    logger.experiment.config.update({"batch_size": self.batch_size, "num_layers": num_layers}, allow_val_change=True)
+            # logger
+            logger = WandbLogger(project='triple_correlation',
+                                 group="sequential", log_model=True)
 
-                    # train model
-                    trainer = L.Trainer(accelerator="gpu", devices=1,
-                                        max_epochs=200,
-                                        callbacks=[early_stop_callback],
-                                        check_val_every_n_epoch=10,
-                                        logger=logger)
+            # add your batch size to the wandb config
+            config = {"batch_size": self.batch_size,
+                      "num_layers": num_layers,
+                      "activation": activation,
+                      "norm": norm}
+            logger.experiment.config.update(config,
+                                            allow_val_change=True)
 
-                    trainer.fit(sequential_model, self.train_loader,
-                                self.valid_loader)
-                    # final_val_loss = trainer.callback_metrics['val_loss']
+            # watch gradients
+            logger.watch(sequential_model)
 
-                    # finish Weights and Biases run, must include this line so
-                    # that a new run is instantiated
-                    logger.experiment.finish()
+            # train model
+            trainer = L.Trainer(accelerator="gpu", devices=1,
+                                max_epochs=200,
+                                callbacks=[],
+                                check_val_every_n_epoch=10,
+                                logger=logger)
+
+            trainer.fit(sequential_model, self.train_loader,
+                        self.valid_loader)
+            # final_val_loss = trainer.callback_metrics['val_loss']
+
+            # finish Weights and Biases run, must include this line so
+            # that a new run is instantiated
+            logger.experiment.unwatch(sequential_model)
+            logger.experiment.finish()
 
     def train_lateral(self):
         # checkpoints
@@ -298,7 +301,7 @@ class TrainingRunner:
                     sequential_model = ClosurePhaseDecoder(
                         models.LateralNN(self.num_inputs, hidden_size,
                                          self.num_outputs),
-                        kappa=kappa, lr=lr)
+                        kappa=kappa, learning_rate=lr)
 
                     # train model
                     trainer = L.Trainer(accelerator="gpu", devices=1,
@@ -334,7 +337,7 @@ class TrainingRunner:
             "/content/drive/MyDrive/Colab Notebooks/TriPhase ML/sequential-epoch=39-val_loss=3.17.ckpt")
 
         print(model.kappa)
-        print(model.lr)
+        print(model.learning_rate)
 
         # disable randomness, dropout, etc...
         model.eval()

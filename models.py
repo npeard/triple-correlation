@@ -44,14 +44,22 @@ class SinglePerceptron(nn.Module):
 
 # Define a sequential dense model
 class SequentialNN(nn.Module):
-    def __init__(self, input_size, num_layers, num_outputs):
+    def __init__(self, input_size, num_layers, num_outputs, activation="Tanh", norm=False):
         super(SequentialNN, self).__init__()
         self.layers = []
-        self.layers.append(nn.LayerNorm(input_size))
+        # Don't modify inputs before a linear layer, absolute value of inputs
+        # is important for learning
         for i in range(num_layers):
             self.layers.append(nn.Linear(input_size, input_size))
-            self.layers.append(nn.LayerNorm(input_size))
-            self.layers.append(nn.ReLU())
+            if norm:
+                self.layers.append(nn.LayerNorm(input_size))
+
+            if activation == "Tanh":
+                self.layers.append(nn.Tanh())
+            elif activation == "LeakyReLU":
+                self.layers.append(nn.LeakyReLU())
+            else:
+                raise ValueError("Invalid activation function")
         self.layers.append(nn.Linear(input_size, num_outputs))
         self.layers.append(nn.Tanh())
         self.model = nn.Sequential(*self.layers)
@@ -62,21 +70,38 @@ class SequentialNN(nn.Module):
         return out
 
 
-# Define a dense model with lateral connections
-class LateralNN(nn.Module):
-    def __init__(self, input_size, hidden_size, num_outputs):
-        super(LateralNN, self).__init__()
-        self.fc1 = nn.Linear(input_size, hidden_size)
-        self.fc2 = nn.Linear(hidden_size, hidden_size)
-        self.fc3 = nn.Linear(hidden_size, num_outputs)
+class LateralBlock(nn.Module):
+    def __init__(self, input_size):
+        super(LateralBlock, self).__init__()
+        self.fc1 = nn.Linear(input_size, input_size)
+        self.fc2 = nn.Linear(input_size, input_size)
         self.relu = nn.ReLU()
-        self.tanh = nn.Tanh()
 
     def forward(self, x):
         out1 = self.relu(self.fc1(x))
         out2 = self.relu(self.fc2(out1))
-        out3 = torch.add(out1, out2)
-        out = torch.pi * self.tanh(self.fc3(out3))
+        out = torch.add(out1, out2)
+        return out
+
+
+# Define a dense model with lateral connections
+# See https://blog.paperspace.com/writing-resnet-from-scratch-in-pytorch/
+class LateralNoSkip(nn.Module):
+    def __init__(self, input_size, num_layers, num_outputs):
+        super(LateralNoSkip, self).__init__()
+        self.layers = []
+        # Don't modify inputs before a linear layer, absolute value of inputs
+        # is important for learning
+        for i in range(num_layers):
+            self.layers.append(LateralBlock(input_size))
+            # self.layers.append(nn.LayerNorm(input_size, elementwise_affine=False, bias=False))
+            self.layers.append(nn.ReLU())
+        self.layers.append(nn.Linear(input_size, num_outputs))
+        self.layers.append(nn.Tanh())
+        self.model = nn.Sequential(*self.layers)
+
+    def forward(self, x):
+        out = torch.pi * self.model(x)
 
         return out
 

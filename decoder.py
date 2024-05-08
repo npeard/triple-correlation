@@ -6,10 +6,10 @@ import lightning as L
 
 # define the LightningModule
 class ClosurePhaseDecoder(L.LightningModule):
-    def __init__(self, model, kappa=0.1, lr=1e-3):
+    def __init__(self, model, kappa=0., learning_rate=1e-3):
         super().__init__()
         self.kappa = kappa
-        self.lr = lr
+        self.learning_rate = learning_rate
         self.model = model
         self.save_hyperparameters()
         torch.set_float32_matmul_precision('medium')
@@ -34,7 +34,6 @@ class ClosurePhaseDecoder(L.LightningModule):
         y_hat = self.model(x)
         loss = (nn.functional.mse_loss(y_hat, y) + self.kappa *
                 self.antisymmetry_loss(y_hat))
-        # Logging to TensorBoard (if installed) by default
         self.log("train_loss", loss, prog_bar=True)
         return loss
 
@@ -47,13 +46,12 @@ class ClosurePhaseDecoder(L.LightningModule):
         # into the loss function, but compute the total loss with maximal
         # hyperparameters for every model
         loss = nn.functional.mse_loss(y_hat, y) + self.antisymmetry_loss(y_hat)
-        # Logging to TensorBoard (if installed) by default
         self.log("val_loss", loss, prog_bar=True)
         return loss
 
     def configure_optimizers(self):
         # optimizer = optim.AdamW(self.parameters(), lr=self.lr)
-        optimizer = optim.SGD(self.parameters(), lr=self.lr, momentum=0.9)
+        optimizer = optim.SGD(self.parameters(), lr=self.learning_rate, momentum=0.9)
         return optimizer
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
