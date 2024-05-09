@@ -71,31 +71,44 @@ class SequentialNN(nn.Module):
 
 
 class LateralBlock(nn.Module):
-    def __init__(self, input_size):
+    def __init__(self, input_size, skip=0, activation="Tanh", norm=False):
         super(LateralBlock, self).__init__()
-        self.fc1 = nn.Linear(input_size, input_size)
-        self.fc2 = nn.Linear(input_size, input_size)
-        self.relu = nn.ReLU()
+
+        if activation == "Tanh":
+            self.activate = nn.Tanh()
+        elif activation == "LeakyReLU":
+            self.activate = nn.LeakyReLU()
+        else:
+            raise ValueError("Invalid activation function")
+
+        if norm:
+            self.activate = nn.Sequential(self.activate,
+                                          nn.LayerNorm(input_size))
+
+        # networks layers with no connections
+        self.layers = []
+        for i in range(skip + 1):
+            self.layers.append(nn.Linear(input_size, input_size))
+            self.layers.append(self.activate)
+        self.block = nn.Sequential(*self.layers)
 
     def forward(self, x):
-        out1 = self.relu(self.fc1(x))
-        out2 = self.relu(self.fc2(out1))
-        out = torch.add(out1, out2)
+        out = self.block(x)
+        out = torch.add(out, x)
         return out
 
 
 # Define a dense model with lateral connections
 # See https://blog.paperspace.com/writing-resnet-from-scratch-in-pytorch/
 class LateralNoSkip(nn.Module):
-    def __init__(self, input_size, num_layers, num_outputs):
+    def __init__(self, input_size, num_layers, num_outputs, activation="Tanh", norm=False):
         super(LateralNoSkip, self).__init__()
+
         self.layers = []
         # Don't modify inputs before a linear layer, absolute value of inputs
         # is important for learning
         for i in range(num_layers):
-            self.layers.append(LateralBlock(input_size))
-            # self.layers.append(nn.LayerNorm(input_size, elementwise_affine=False, bias=False))
-            self.layers.append(nn.ReLU())
+            self.layers.append(LateralBlock(input_size, 0, activation, norm))
         self.layers.append(nn.Linear(input_size, num_outputs))
         self.layers.append(nn.Tanh())
         self.model = nn.Sequential(*self.layers)
