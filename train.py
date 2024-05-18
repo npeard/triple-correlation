@@ -223,7 +223,7 @@ class TrainingRunner:
         )
 
         # assign colors based on model size
-        for batch_size, lr, num_layers, activation, norm in product([128, 512], [1e-2, 5e-2], [4, 5], ["LeakyReLU", "Tanh"], [True, False]):
+        for batch_size, lr, num_layers, activation, norm in product([128, 512], [1e-2, 5e-2], [2, 3], ["LeakyReLU", "Tanh"], [True, False]):
             # early stopping
             early_stop_callback = EarlyStopping(monitor="val_loss",
                                                 min_delta=0.00,
@@ -237,7 +237,8 @@ class TrainingRunner:
             # model
             sequential_model = ClosurePhaseDecoder(
                 models.SequentialNN(self.num_inputs, num_layers,
-                                    self.num_outputs, activation=activation, norm=norm), learning_rate=lr)
+                                    self.num_outputs, activation=activation, norm=norm),
+                learning_rate=lr, zeta=1.)
 
             # logger
             logger = WandbLogger(project='triple_correlation',
@@ -285,7 +286,7 @@ class TrainingRunner:
         for batch_size, lr, num_layers, activation, norm in product([128, 512],
                                                                     [1e-2,
                                                                      5e-2],
-                                                                    [4, 5], [
+                                                                    [2, 3], [
                                                                         "LeakyReLU",
                                                                         "Tanh"],
                                                                     [True,
@@ -304,7 +305,7 @@ class TrainingRunner:
             lateral_model = ClosurePhaseDecoder(
                 models.LateralNoSkip(self.num_inputs, num_layers,
                                     self.num_outputs, activation=activation,
-                                    norm=norm), learning_rate=lr)
+                                    norm=norm), learning_rate=lr, zeta=1.)
 
             # logger
             logger = WandbLogger(project='triple_correlation',

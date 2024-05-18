@@ -2,35 +2,67 @@
 
 import numpy as np
 import sys
+import torch
+
+import models
 import plot1d
 #import plot2d
 #import PaperFigures
-#import timeit
+import timeit
 
 import speckle1d
 #import speckle2d
 import triphase1d
 #import triphase2d
 import train
+import decoder
+import models
 
 if __name__ == '__main__':
-    np.random.seed(0x5EED)
+    np.random.seed(0x5EED+73)
     if len(sys.argv) == 1:
         """Run functions in this scratch area. 
         """
 
-        # triphase1d.generate_training_set_from_reverse(num_data=20000,
-        #                                    file='C:\\Users\\npeard\\PycharmProjects\\triple-correlation\\data\\Valid1D-kmax3-pix51-ideal-20k.h5')
+        # triphase1d.generate_training_set_from_reverse(num_data=1000,
+        #                                    file='C:\\Users\\npeard\\PycharmProjects\\triple-correlation\\data\\Valid1D-kmax3-pix51-ideal-1k.h5')
 
         valid_file = 'C:\\Users\\npeard\\PycharmProjects\\triple-correlation\\data\\Valid1D-kmax3-pix51-ideal-20k.h5'
         train_file = 'C:\\Users\\npeard\\PycharmProjects\\triple-correlation\\data\\Train1D-kmax3-pix51-ideal-100k.h5'
         test_file = 'C:\\Users\\npeard\\PycharmProjects\\triple-correlation\\data\\Test1D-kmax3-pix51-ideal-1k.h5'
-        #runner = train.TrainingRunner(train_file, valid_file, test_file, linearOnly=True)
+        # #runner = train.TrainingRunner(train_file, valid_file, test_file, linearOnly=True)
         runner = train.TrainingRunner(train_file, valid_file, test_file)
         #runner.train_singleLinear()
         #runner.train_multiLinear()
-        #runner.train_sequential()
+        runner.train_sequential()
         runner.train_lateral()
+
+        # test_dataloader = runner.get_custom_dataloader(test_file, batch_size=1024)
+        #
+        # num_inputs = next(iter(test_dataloader))[0].size(-1) ** 2
+        # num_outputs = next(iter(test_dataloader))[1].size(-1)
+        #
+        # closure = []
+        # phases = []
+        #
+        # dec_obj = decoder.ClosurePhaseDecoder(model=models.SequentialNN(0,0,0))
+        #
+        # for i, (inputs, labels) in enumerate(test_dataloader):
+        #     if i == 1:  # We only need one batch
+        #         break
+        #     #inputs = inputs.view(-1, num_inputs)  # Reshape the input data
+        #     closure.extend(inputs.numpy())
+        #     phases.extend(labels.numpy())
+        #     start = timeit.default_timer()
+        #     loss = dec_obj.encoding_loss2(outputs=labels, inputs=inputs)
+        #     print("The difference of time is :",
+        #           timeit.default_timer() - start)
+        #
+        # print(loss)
+        # closure_ex = np.asarray(closure)[:3, :, :]
+        # phases_ex = np.asarray(phases)[:3, num_outputs // 2:]
+        #
+        # print(closure_ex.shape, phases_ex.shape)
 
         # def test_get_g2():
         #     # Test case 1: g2 is already computed
