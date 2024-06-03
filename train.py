@@ -1,10 +1,12 @@
 #!/usr/bin/env python
 
+import os, sys
+import torch
 from torch.utils.data import Dataset, DataLoader
 import h5py
 from lightning.pytorch.callbacks.early_stopping import EarlyStopping
 from lightning.pytorch.callbacks import ModelCheckpoint
-from decoder import ClosurePhaseDecoder
+from decoder import ClosurePhaseDecoder, EvalDecoder
 import models
 from torch import FloatTensor, arccos
 import numpy as np
@@ -338,15 +340,40 @@ class TrainingRunner:
             logger.experiment.unwatch(lateral_model)
             logger.experiment.finish()
 
-    def load_checkpoint(self):
-        model = ClosurePhaseDecoder.load_from_checkpoint(
-            "/content/drive/MyDrive/Colab Notebooks/TriPhase ML/sequential-epoch=39-val_loss=3.17.ckpt")
+    def load_checkpoint(self, checkpoint_reference='xgoqwdlf'):
+        # reference can be retrieved in artifacts panel
+        # "VERSION" can be a version (ex: "v2") or an alias ("latest or "best")
+        # checkpoint_reference = 'mm-wave/triple_correlation/xgoqwdlf:v0'
 
-        print(model.kappa)
-        print(model.learning_rate)
+        # logger = WandbLogger(log_model=True)
+        # artifact_dir = logger.download_artifact(checkpoint_reference, artifact_type="model")
+        path = 'triple_correlation/'+checkpoint_reference+'/checkpoints/model.ckpt'
+        print(path)
+
+        # load checkpoint
+        model = EvalDecoder.load_from_checkpoint(path, strict=False)
+
+        #print(model.kappa)
+        #print(model.learning_rate)
 
         # disable randomness, dropout, etc...
         model.eval()
 
+        phases = []
+        predictions = []
+        for i, (inputs, labels) in enumerate(self.test_loader):
+            if i == 1:  # We only need one batch
+                break
+            inputs = inputs.view(-1, self.num_inputs)  # Reshape the input data
+            #closure.extend(inputs.numpy())
+            phases.extend(labels.numpy())
+
+        #closure_ex = np.asarray(closure)[:3, :, :]
+        predictions = model(inputs)
+        predictions_ex = np.asarray(predictions)[:3, self.num_outputs // 2:]
+        phases_ex = np.asarray(phases)[:3, self.num_outputs // 2:]
+
+        print(predictions_ex.shape, phases_ex.shape)
+
         # predict with the model
-        y_hat = model(x)
+        # y_hat = model(x)

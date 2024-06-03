@@ -333,13 +333,14 @@ class Fluorescence1D:
             phase.
         """
         true_phase = self.coh_phase_double[self.num_pix - 1:]
-        cosPhi = self.compute_cosPhi_from_phase(true_phase)
+        Phi = self.compute_Phi_from_phase(true_phase)
+        cosPhi = np.cos(Phi)
 
-        return cosPhi
+        return cosPhi, Phi
 
     @staticmethod
     @jit(nopython=True, parallel=False)
-    def compute_cosPhi_from_phase(phase):
+    def compute_Phi_from_phase(phase):
         """
         Computes the cosine of the phase difference array.
 
@@ -355,7 +356,7 @@ class Fluorescence1D:
                 np.abs(np.roll(phase, -n) - phase - phase[n]))
         Phi = Phi[:phase.shape[0] // 2 + 1, :phase.shape[0] // 2 + 1]
 
-        return np.cos(Phi)
+        return Phi
 
     def cosPhi_from_data(self, num_shots=1000) -> np.ndarray:
         """Compute the cosine of the closure phase from correlations of

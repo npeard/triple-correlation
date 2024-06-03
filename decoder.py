@@ -89,3 +89,16 @@ class ClosurePhaseDecoder(L.LightningModule):
         x = x.view(-1, x.size(1)**2)
         y_hat = self.model(x)
         return y_hat, y
+
+class EvalDecoder(L.LightningModule):
+    def __init__(self, *args, **kwargs):
+        self.save_hyperparameters()
+        super().__init__()
+        print(self.hparams)
+        torch.set_float32_matmul_precision('medium')
+
+    def predict_step(self, batch, batch_idx, dataloader_idx=0):
+        x, y = batch
+        x = x.view(-1, x.size(1)**2)
+        y_hat = self.model(x)
+        return y_hat, y

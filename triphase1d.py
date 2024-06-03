@@ -210,7 +210,7 @@ def find_next_phi(xdata=None, ydata=None, AltReturn=False):
     return np.arctan2(np.sin(thetaFinal), np.cos(thetaFinal)), fFinal
 
 
-def append_to_h5file(cosPhi_marginal, phase,
+def append_to_h5file(cosPhi_marginal, Phi_marginal, phase,
                      filename="data.h5"):
     """Appends training data consisting of an image stack, the associated
     marginalized cosPhi, and the structure phase to a file.
@@ -235,7 +235,18 @@ def append_to_h5file(cosPhi_marginal, phase,
                              data=np.expand_dims(cosPhi_marginal, axis=0),
                              maxshape=(None, cosPhi_marginal.shape[0],
                                        cosPhi_marginal.shape[1]),
-                             compression="gzip", compression_opts=9,
+                             chunks=True)
+
+        if "Phi_marginal" in f.keys():
+            f["Phi_marginal"].resize(
+                (f["Phi_marginal"].shape[0] + 1), axis=0)
+            new_data = np.expand_dims(Phi_marginal, axis=0)
+            f["Phi_marginal"][-1:] = new_data
+        else:
+            f.create_dataset("Phi_marginal",
+                             data=np.expand_dims(Phi_marginal, axis=0),
+                             maxshape=(None, Phi_marginal.shape[0],
+                                       Phi_marginal.shape[1]),
                              chunks=True)
 
         if "phase" in f.keys():
@@ -247,7 +258,6 @@ def append_to_h5file(cosPhi_marginal, phase,
             f.create_dataset("phase",
                              data=np.expand_dims(phase, axis=0),
                              maxshape=(None, phase.shape[0]),
-                             compression="gzip", compression_opts=9,
                              chunks=True)
 
 
@@ -311,15 +321,17 @@ def generate_training_set_from_reverse(
                 3,
                 high=20))
         phase_target = fluo.coh_phase_double
-        cosPhi_from_phase = fluo.cosPhi_from_phase()
+        cosPhi_from_phase, Phi_from_phase = fluo.cosPhi_from_phase()
 
-        append_to_h5file(cosPhi_from_phase, phase_target,
+        append_to_h5file(cosPhi_from_phase, Phi_from_phase, phase_target,
                          filename=file)
 
     # Check that the file opens and contains data of the expected size
     with h5py.File(file, 'r') as f:
         cosPhi_marginal_data = f["cosPhi_marginal"][:]
+        Phi_marginal_data = f["Phi_marginal"][:]
         phase_data = f["phase"][:]
 
     print("cosPhi_marginal_data: ", cosPhi_marginal_data.shape)
+    print("Phi_marginal_data: ", Phi_marginal_data.shape)
     print("phase_data: ", phase_data.shape)
