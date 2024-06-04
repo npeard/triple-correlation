@@ -104,114 +104,59 @@ class TrainingRunner:
         self.valid_loader = self.get_custom_dataloader(self.validation_h5, linear_only=self.linear_only, batch_size=self.batch_size, shuffle=False)
         self.test_loader = self.get_custom_dataloader(self.testing_h5, linear_only=self.linear_only, batch_size=self.batch_size, shuffle=False)
 
-    def train_singleLinear(self):
-        # checkpoints
-        # saves top-K checkpoints based on "val_loss" metric
-        checkpoint_callback = ModelCheckpoint(
-            save_top_k=1,
-            monitor="val_loss",
-            mode="min",
-            dirpath=self.checkpoint_dir,
-            filename="singleLinear-{epoch:02d}-{val_loss:.2f}",
-        )
+    def train_model(model_name, save_name=None, **kwargs):
+        """Train model.
 
-        # assign colors based on learning rate
-        fig, (ax1, ax2) = plt.subplots(1, 2)
-        for kappa in [5e-4, 1e-3, 5e-3]:
-            for i, lr in enumerate([2e-2, 1e-2, 7e-3]):
-                # early stopping
-                early_stop_callback = EarlyStopping(monitor="val_loss",
-                                                    min_delta=0.00, patience=3,
-                                                    verbose=True, mode="min")
+        Args:
+            model_name: Name of the model you want to run. Is used to look up the class in "model_dict"
+            save_name (optional): If specified, this name will be used for creating the checkpoint and logging directory.
+        """
+        if save_name is None:
+            save_name = model_name
 
-                # model
-                sequential_model = ClosurePhaseDecoder(
-                    models.SingleLinear(self.num_inputs, self.num_outputs),
-                    kappa=kappa,
-                    learning_rate=lr)
+        # Create a PyTorch Lightning trainer with the generation callback
+        trainer = L.Trainer(
+            default_root_dir=os.path.join(CHECKPOINT_PATH, save_name),
+            # Where to save models
+            # We run on a single GPU (if possible)
+            accelerator="auto",
+            devices=1,
+            # How many epochs to train for if no patience is set
+            max_epochs=180,
+            callbacks=[
+                ModelCheckpoint(
+                    save_weights_only=True, mode="max", monitor="val_acc"
+                ),
+                # Save the best checkpoint based on the maximum val_acc recorded. Saves only weights and not optimizer
+                LearningRateMonitor("epoch"),
+            ],  # Log learning rate every epoch
+        )  # In case your notebook crashes due to the progress bar, consider increasing the refresh rate
+        trainer.logger._log_graph = True  # If True, we plot the computation graph in tensorboard
+        trainer.logger._default_hp_metric = None  # Optional logging argument that we don't need
 
-                # train model
-                trainer = L.Trainer(max_epochs=100,
-                                    callbacks=[early_stop_callback,
-                                               checkpoint_callback],
-                                    check_val_every_n_epoch=10)
-                trainer.fit(sequential_model, self.train_loader,
-                            self.valid_loader)
-                final_val_loss = trainer.callback_metrics['val_loss']
-                print(final_val_loss)
+        # Check whether pretrained model exists. If yes, load it and skip training
+        pretrained_filename = os.path.join(CHECKPOINT_PATH, save_name + ".ckpt")
+        if os.path.isfile(pretrained_filename):
+            print(
+                f"Found pretrained model at {pretrained_filename}, loading...")
+            # Automatically loads the model with the saved hyperparameters
+            model = CIFARModule.load_from_checkpoint(pretrained_filename)
+        else:
+            L.seed_everything(42)  # To be reproducible
+            model = CIFARModule(model_name=model_name, **kwargs)
+            trainer.fit(model, train_loader, val_loader)
+            model = CIFARModule.load_from_checkpoint(
+                trainer.checkpoint_callback.best_model_path
+            )  # Load best checkpoint after training
 
-                # plot for trends
-                ax1.scatter(kappa, final_val_loss, color=self.assign_color(i))
-                ax1.set_xlabel("kappa")
-                ax1.set_ylabel("val_loss")
+        # Test best model on validation and test set
+        val_result = trainer.test(model, dataloaders=val_loader, verbose=False)
+        test_result = trainer.test(model, dataloaders=test_loader,
+                                   verbose=False)
+        result = {"test": test_result[0]["test_acc"],
+                  "val": val_result[0]["test_acc"]}
 
-                ax2.scatter(lr, final_val_loss, color=self.assign_color(i))
-                ax2.set_xlabel("lr")
-                ax2.set_ylabel("val_loss")
-        fig.suptitle("Single Linear (100 epochs)")
-        plt.tight_layout()
-        plt.savefig("./images/singleLinear.png")
-        plt.show()
-
-    def train_multiLinear(self):
-        # checkpoints
-        # saves top-K checkpoints based on "val_loss" metric
-        checkpoint_callback = ModelCheckpoint(
-            save_top_k=1,
-            monitor="val_loss",
-            mode="min",
-            dirpath=self.checkpoint_dir,
-            filename="multilinear-{epoch:02d}-{val_loss:.2f}",
-        )
-
-        # assign colors based on model size
-        fig, (ax1, ax2, ax3) = plt.subplots(1, 3)
-        for kappa in [1e-3, 1e-2, 1e-1]:
-            for lr in [7e-2, 5e-2, 1e-2]:
-                for i, hidden_size in enumerate(
-                    [self.num_inputs, 5 * self.num_outputs,
-                     self.num_outputs]):
-                    # early stopping
-                    early_stop_callback = EarlyStopping(monitor="val_loss",
-                                                        min_delta=0.00,
-                                                        patience=3,
-                                                        verbose=True,
-                                                        mode="min")
-
-                    # model
-                    multilinear_model = ClosurePhaseDecoder(
-                        models.MultiLinear(self.num_inputs, hidden_size,
-                                           self.num_outputs),
-                        kappa=kappa, learning_rate=lr)
-
-                    # train model
-                    trainer = L.Trainer(max_epochs=100,
-                                        callbacks=[early_stop_callback,
-                                                   checkpoint_callback],
-                                        check_val_every_n_epoch=10)
-                    trainer.fit(multilinear_model, self.train_loader,
-                                self.valid_loader)
-                    final_val_loss = trainer.callback_metrics['val_loss']
-                    print(final_val_loss)
-
-                    # plot for trends
-                    ax1.scatter(kappa, final_val_loss,
-                                color=self.assign_color(i))
-                    ax1.set_xlabel("kappa")
-                    ax1.set_ylabel("val_loss")
-
-                    ax2.scatter(lr, final_val_loss, color=self.assign_color(i))
-                    ax2.set_xlabel("lr")
-                    ax2.set_ylabel("val_loss")
-
-                    ax3.scatter(hidden_size, final_val_loss,
-                                color=self.assign_color(i))
-                    ax3.set_xlabel("hidden_size")
-                    ax3.set_ylabel("val_loss")
-        fig.suptitle("Multi Linear (100 epochs)")
-        plt.tight_layout()
-        plt.savefig("./images/multiLinear.png")
-        plt.show()
+        return model, result
 
     def train_sequential(self):
         # checkpoints
@@ -351,10 +296,14 @@ class TrainingRunner:
         print(path)
 
         # load checkpoint
-        model = EvalDecoder.load_from_checkpoint(path, strict=False)
+        # model = EvalDecoder.load_from_checkpoint(path, strict=False)
+        checkpoint = torch.load(path)
+        print(checkpoint.keys())
+        print(checkpoint["state_dict"].items())
+        decoder_weights = {k: v for k, v in checkpoint["state_dict"].items() if k.startswith("model.")}
 
-        #print(model.kappa)
-        #print(model.learning_rate)
+        # print(model.kappa)
+        # print(model.learning_rate)
 
         # disable randomness, dropout, etc...
         model.eval()

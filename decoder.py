@@ -4,17 +4,72 @@ from torch import optim, nn
 import torch
 import lightning as L
 
+model_dict = {"SequentialNN", "LateralNN"}
+
 # define the LightningModule
 class ClosurePhaseDecoder(L.LightningModule):
-    def __init__(self, model, kappa=0., zeta=0., learning_rate=1e-3, linear_only=False):
+    # def __init__(self, model, kappa=0., zeta=0., learning_rate=1e-3, linear_only=False):
+    def __init__(self, model_name, model_hparams, optimizer_name,
+                 optimizer_hparams):
+        """Decoder for the closure phase
+
+        Args:
+            model_name: Name of the model/CNN to run. Used for creating the model (see function below)
+            model_hparams: Hyperparameters for the model, as dictionary.
+            optimizer_name: Name of the optimizer to use. Currently supported: Adam, SGD
+            optimizer_hparams: Hyperparameters for the optimizer, as dictionary. This includes learning rate, weight decay, etc.
+        """
         super().__init__()
-        self.kappa = kappa
-        self.zeta = zeta
-        self.learning_rate = learning_rate
-        self.model = model
-        self.linear_only = linear_only
+        # Exports the hyperparameters to a YAML file, and create "self.hparams" namespace
         self.save_hyperparameters()
+        # Create model
+        self.model = self.create_model(model_name, model_hparams)
+        # Create loss module
+        self.loss_function = self.get_loss_function(loss_hparams)
+
+        # self.kappa = kappa
+        # self.zeta = zeta
+        # self.learning_rate = learning_rate
+        # self.model = model
+        # self.linear_only = linear_only
         torch.set_float32_matmul_precision('medium')
+
+    def create_model(self, model_name, model_hparams):
+        if model_name in model_dict:
+            return model_dict[model_name](**model_hparams)
+        else:
+            assert False, f'Unknown model name "{model_name}". Available models are: {str(model_dict.keys())}'
+
+    def forward(self, x):
+        return self.model(x)
+    def configure_optimizers(self):
+        # We will support Adam or SGD as optimizers.
+        if self.hparams.optimizer_name == "Adam":
+            # AdamW is Adam with a correct implementation of weight decay (see here
+            # for details: https://arxiv.org/pdf/1711.05101.pdf)
+            optimizer = optim.AdamW(self.parameters(),
+                                    **self.hparams.optimizer_hparams)
+        elif self.hparams.optimizer_name == "SGD":
+            optimizer = optim.SGD(self.parameters(),
+                                  **self.hparams.optimizer_hparams)
+        else:
+            assert False, f'Unknown optimizer: "{self.hparams.optimizer_name}"'
+
+        # We will reduce the learning rate by 0.1 after 100 and 150 epochs
+        scheduler = optim.lr_scheduler.MultiStepLR(optimizer,
+                                                   milestones=[100, 150],
+                                                   gamma=0.1)
+        return [optimizer], [scheduler]
+
+    def get_loss_function(self, loss_hparams):
+        if loss_hparams["loss_name"] == "mse":
+            self.loss_function = nn.MSELoss()
+        else:
+            assert False, f'Unknown loss: "{loss_hparams["loss_name"]}"'
+
+        # if loss_hparams["kappa"] > 0:
+        #     self.loss_function += loss_hparams["kappa"] * self.antisymmetry_loss()
+
 
     def antisymmetry_loss(self, outputs):
         # Punish phases that are not antisymmetric about the origin
@@ -54,12 +109,10 @@ class ClosurePhaseDecoder(L.LightningModule):
         # it is independent of forward
         x, y = batch
         x = x.view(-1, x.size(1)**2)
-        y_hat = self.model(x)
-        loss = nn.functional.mse_loss(y_hat, y)
-        if self.kappa > 0:
-            loss += self.kappa * self.antisymmetry_loss(y_hat)
-        if self.zeta > 0:
-            loss = self.zeta * self.encoding_loss(y_hat, x)
+        preds = self.model(x)
+        loss = self.loss_module(preds, y)
+        acc = (preds.argmax(dim=-1) == y).float().mean()
+        self.log("train_acc", acc, on_step=False, on_epoch=True)
         self.log("train_loss", loss, prog_bar=True)
         return loss
 
@@ -67,35 +120,26 @@ class ClosurePhaseDecoder(L.LightningModule):
         # validation_step defines the validation loop.
         x, y = batch
         x = x.view(-1, x.size(1)**2)
-        y_hat = self.model(x)
-        # to make models comparable from check point, don't multiply hyperparameters
-        # into the loss function, but compute the total loss with maximal
-        # hyperparameters for every model
-        loss = nn.functional.mse_loss(y_hat, y)
-        if self.kappa > 0:
-            loss += self.kappa * self.antisymmetry_loss(y_hat)
-        if self.zeta > 0:
-            loss = self.zeta * self.encoding_loss(y_hat, x)
+        preds = self.model(x)
+        loss = self.loss_module(preds, y)
+        acc = (preds.argmax(dim=-1) == y).float().mean()
+        self.log("val_acc", acc, on_step=False, on_epoch=True)
         self.log("val_loss", loss, prog_bar=True)
         return loss
 
-    def configure_optimizers(self):
-        # optimizer = optim.AdamW(self.parameters(), lr=self.lr)
-        optimizer = optim.SGD(self.parameters(), lr=self.learning_rate, momentum=0.9)
-        return optimizer
-
-    def predict_step(self, batch, batch_idx, dataloader_idx=0):
+    # def configure_optimizers(self):
+    #     # optimizer = optim.AdamW(self.parameters(), lr=self.lr)
+    #     optimizer = optim.SGD(self.parameters(), lr=self.learning_rate, momentum=0.9)
+    #     return optimizer
+    def test_step(self, batch, batch_idx):
         x, y = batch
         x = x.view(-1, x.size(1)**2)
-        y_hat = self.model(x)
-        return y_hat, y
-
-class EvalDecoder(L.LightningModule):
-    def __init__(self, *args, **kwargs):
-        self.save_hyperparameters()
-        super().__init__()
-        print(self.hparams)
-        torch.set_float32_matmul_precision('medium')
+        preds = self.model(x)
+        loss = self.loss_module(preds, y)
+        acc = (preds.argmax(dim=-1) == y).float().mean()
+        self.log("test_acc", acc, on_step=False, on_epoch=True)
+        self.log("test_loss", loss, prog_bar=True)
+        return loss
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         x, y = batch

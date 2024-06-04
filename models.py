@@ -3,71 +3,57 @@
 from torch import nn
 import torch
 
+act_fn_by_name = {"Tanh": nn.Tanh, "ReLU": nn.ReLU, "LeakyReLU": nn.LeakyReLU}
 
-# Define a single layer linear model
-class SingleLinear(nn.Module):
-    def __init__(self, input_size, num_outputs):
-        super(SingleLinear, self).__init__()
-        self.fc = nn.Linear(input_size, num_outputs)
+# Define a linear network
+class LinearNet(nn.Module):
+    def __init__(self, input_size, num_layers, hidden_size, output_size, norm=False):
+        super(LinearNet, self).__init__()
+        self.layers = []
+        if num_layers > 1:
+            self.layers.append(nn.Linear(input_size, hidden_size))
+            for i in range(num_layers - 2):
+                self.layers.append(nn.Linear(hidden_size, hidden_size))
+                if norm:
+                    self.layers.append(nn.LayerNorm(hidden_size))
+            self.layers.append(nn.Linear(hidden_size, output_size))
+        else:
+            self.layers.append(nn.Linear(input_size, output_size))
 
-    def forward(self, x):
-        out = self.fc(x)
-        return out
-
-
-# Define a multilayer linear model
-class MultiLinear(nn.Module):
-    def __init__(self, input_size, hidden_size, num_outputs):
-        super(MultiLinear, self).__init__()
-        self.fc1 = nn.Linear(input_size, hidden_size)
-        self.fc2 = nn.Linear(hidden_size, hidden_size)
-        self.fc3 = nn.Linear(hidden_size, num_outputs)
-
-    def forward(self, x):
-        out = self.fc1(x)
-        out = self.fc2(out)
-        out = self.fc3(out)
-        return out
-
-
-# Define a single layer perceptron model
-class SinglePerceptron(nn.Module):
-    def __init__(self, input_size, num_outputs):
-        super(SinglePerceptron, self).__init__()
-        self.fc = nn.Linear(input_size, num_outputs)
-        self.tanh = nn.Tanh()
+        self.model = nn.Sequential(*self.layers)
 
     def forward(self, x):
-        out = torch.pi * self.tanh(self.fc(x))
-        return out
+        pred = self.model(x)
+        return pred
 
 
-# Define a sequential dense model
+# Define a sequential dense network
 class SequentialNN(nn.Module):
-    def __init__(self, input_size, num_layers, num_outputs, activation="Tanh", norm=False):
+    def __init__(self, input_size, num_layers, hidden_size, output_size,
+                 activation="Tanh", norm=False):
         super(SequentialNN, self).__init__()
         self.layers = []
         # Don't modify inputs before a linear layer, absolute value of inputs
         # is important for learning
-        for i in range(num_layers):
-            self.layers.append(nn.Linear(input_size, input_size))
-            if norm:
-                self.layers.append(nn.LayerNorm(input_size))
+        if num_layers > 1:
+            self.layers.append(nn.Linear(input_size, hidden_size))
+            self.layers.append(act_fn_by_name[activation])
+            for i in range(num_layers - 2):
+                self.layers.append(nn.Linear(hidden_size, input_size))
+                if norm:
+                    self.layers.append(nn.LayerNorm(hidden_size))
+                self.layers.append(act_fn_by_name[activation])
+            self.layers.append(nn.Linear(hidden_size, output_size))
+            self.layers.append(nn.Tanh())
+        else:
+            self.layers.append(nn.Linear(input_size, output_size))
+            self.layers.append(nn.Tanh())
 
-            if activation == "Tanh":
-                self.layers.append(nn.Tanh())
-            elif activation == "LeakyReLU":
-                self.layers.append(nn.LeakyReLU())
-            else:
-                raise ValueError("Invalid activation function")
-        self.layers.append(nn.Linear(input_size, num_outputs))
-        self.layers.append(nn.Tanh())
         self.model = nn.Sequential(*self.layers)
 
     def forward(self, x):
-        out = torch.pi * self.model(x)
-
-        return out
+        pred = torch.pi * self.model(x)
+        return pred
 
 
 class LateralBlock(nn.Module):
