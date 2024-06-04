@@ -3,12 +3,12 @@
 from torch import optim, nn
 import torch
 import lightning as L
+from models import SequentialNN
 
-model_dict = {"SequentialNN", "LateralNN"}
+model_dict = {"SequentialNN": SequentialNN}
 
 # define the LightningModule
 class ClosurePhaseDecoder(L.LightningModule):
-    # def __init__(self, model, kappa=0., zeta=0., learning_rate=1e-3, linear_only=False):
     def __init__(self, model_name, model_hparams, optimizer_name,
                  optimizer_hparams):
         """Decoder for the closure phase
@@ -25,7 +25,7 @@ class ClosurePhaseDecoder(L.LightningModule):
         # Create model
         self.model = self.create_model(model_name, model_hparams)
         # Create loss module
-        self.loss_function = self.get_loss_function(loss_hparams)
+        self.loss_function = nn.MSELoss()
 
         # self.kappa = kappa
         # self.zeta = zeta
@@ -110,8 +110,8 @@ class ClosurePhaseDecoder(L.LightningModule):
         x, y = batch
         x = x.view(-1, x.size(1)**2)
         preds = self.model(x)
-        loss = self.loss_module(preds, y)
-        acc = (preds.argmax(dim=-1) == y).float().mean()
+        loss = self.loss_function(preds, y)
+        acc = (preds == y).float().mean()
         self.log("train_acc", acc, on_step=False, on_epoch=True)
         self.log("train_loss", loss, prog_bar=True)
         return loss
@@ -121,8 +121,8 @@ class ClosurePhaseDecoder(L.LightningModule):
         x, y = batch
         x = x.view(-1, x.size(1)**2)
         preds = self.model(x)
-        loss = self.loss_module(preds, y)
-        acc = (preds.argmax(dim=-1) == y).float().mean()
+        loss = self.loss_function(preds, y)
+        acc = (preds == y).float().mean()
         self.log("val_acc", acc, on_step=False, on_epoch=True)
         self.log("val_loss", loss, prog_bar=True)
         return loss
@@ -135,8 +135,8 @@ class ClosurePhaseDecoder(L.LightningModule):
         x, y = batch
         x = x.view(-1, x.size(1)**2)
         preds = self.model(x)
-        loss = self.loss_module(preds, y)
-        acc = (preds.argmax(dim=-1) == y).float().mean()
+        loss = self.loss_function(preds, y)
+        acc = (preds == y).float().mean()
         self.log("test_acc", acc, on_step=False, on_epoch=True)
         self.log("test_loss", loss, prog_bar=True)
         return loss

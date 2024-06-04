@@ -1,13 +1,12 @@
 #!/usr/bin/env python
 
-import os, sys
+import os, sys, glob
 import torch
 from torch.utils.data import Dataset, DataLoader
 import h5py
 from lightning.pytorch.callbacks.early_stopping import EarlyStopping
 from lightning.pytorch.callbacks import ModelCheckpoint
-from decoder import ClosurePhaseDecoder, EvalDecoder
-import models
+from decoder import ClosurePhaseDecoder
 from torch import FloatTensor, arccos
 import numpy as np
 import matplotlib.pyplot as plt
@@ -27,7 +26,7 @@ class PhiDataset(Dataset):
         # solves issue where hdf5 file opened in __init__ prevents multiple
         # workers: https://github.com/pytorch/pytorch/issues/11929
         self.file = h5py.File(self.h5_file, 'r')
-        self.inputs = self.file["cosPhi_marginal"]
+        self.inputs = self.file["Phi_marginal"]
         self.targets = self.file["phase"]
 
     def __len__(self):
@@ -36,10 +35,7 @@ class PhiDataset(Dataset):
     def __getitem__(self, idx):
         if not hasattr(self, self.h5_file):
             self.open_hdf5()
-        return FloatTensor(
-            np.arccos(
-                self.inputs[idx])), FloatTensor(
-            self.targets[idx])
+        return FloatTensor(self.inputs[idx]), FloatTensor(self.targets[idx])
 
 
 class cosPhiDataset(Dataset):
@@ -76,26 +72,24 @@ class TrainingRunner:
         self.set_dataloaders()
 
         # dimensions
-        self.num_inputs = next(iter(self.train_loader))[0].size(-1)**2
-        self.num_outputs = next(iter(self.train_loader))[1].size(-1)
+        self.input_size = next(iter(self.train_loader))[0].size(-1) ** 2
+        self.output_size = next(iter(self.train_loader))[1].size(-1)
 
         # directories
         self.checkpoint_dir = "./checkpoints"
 
     def get_custom_dataloader(self, h5_file, batch_size=128, shuffle=True,
                               linear_only=False):
-        # We can use DataLoader to get batches of data
         if linear_only:
             dataset = PhiDataset(h5_file)
         else:
             dataset = cosPhiDataset(h5_file)
-        dataloader = DataLoader(
-            dataset,
-            batch_size=batch_size,
-            shuffle=shuffle,
-            num_workers=16,
-            persistent_workers=True,
-            pin_memory=True)
+
+        # We can use DataLoader to get batches of data
+        dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle,
+                                num_workers=16, persistent_workers=True,
+                                pin_memory=True)
+
         return dataloader
 
     def set_dataloaders(self, batch_size=128):
@@ -104,7 +98,7 @@ class TrainingRunner:
         self.valid_loader = self.get_custom_dataloader(self.validation_h5, linear_only=self.linear_only, batch_size=self.batch_size, shuffle=False)
         self.test_loader = self.get_custom_dataloader(self.testing_h5, linear_only=self.linear_only, batch_size=self.batch_size, shuffle=False)
 
-    def train_model(model_name, save_name=None, **kwargs):
+    def train_model(self, model_name, save_name=None, **kwargs):
         """Train model.
 
         Args:
@@ -114,49 +108,83 @@ class TrainingRunner:
         if save_name is None:
             save_name = model_name
 
+        # logger
+        logger = WandbLogger(project='triple_correlation',
+                             group=model_name, log_model=True,
+                             save_dir=self.checkpoint_dir)
+
+        # callbacks
+        # early stopping
+        early_stop_callback = EarlyStopping(monitor="val_loss",
+                                            min_delta=0.00,
+                                            patience=3,
+                                            verbose=True,
+                                            mode="min")
+        checkpoint_callback = ModelCheckpoint(save_weights_only=True,
+                                              mode="max", monitor="val_acc")
+        # Save the best checkpoint based on the maximum val_acc recorded.
+        # Saves only weights and not optimizer
+
         # Create a PyTorch Lightning trainer with the generation callback
         trainer = L.Trainer(
-            default_root_dir=os.path.join(CHECKPOINT_PATH, save_name),
-            # Where to save models
-            # We run on a single GPU (if possible)
-            accelerator="auto",
-            devices=1,
-            # How many epochs to train for if no patience is set
-            max_epochs=180,
-            callbacks=[
-                ModelCheckpoint(
-                    save_weights_only=True, mode="max", monitor="val_acc"
-                ),
-                # Save the best checkpoint based on the maximum val_acc recorded. Saves only weights and not optimizer
-                LearningRateMonitor("epoch"),
-            ],  # Log learning rate every epoch
-        )  # In case your notebook crashes due to the progress bar, consider increasing the refresh rate
-        trainer.logger._log_graph = True  # If True, we plot the computation graph in tensorboard
-        trainer.logger._default_hp_metric = None  # Optional logging argument that we don't need
+            default_root_dir=os.path.join(self.checkpoint_dir, save_name),
+            accelerator="gpu",
+            devices=[0],
+            max_epochs=11,
+            callbacks=[early_stop_callback, checkpoint_callback],
+            check_val_every_n_epoch=10,
+            logger=logger
+        )
 
         # Check whether pretrained model exists. If yes, load it and skip training
-        pretrained_filename = os.path.join(CHECKPOINT_PATH, save_name + ".ckpt")
+        pretrained_filename = os.path.join(self.checkpoint_dir, save_name + ".ckpt")
         if os.path.isfile(pretrained_filename):
             print(
                 f"Found pretrained model at {pretrained_filename}, loading...")
             # Automatically loads the model with the saved hyperparameters
-            model = CIFARModule.load_from_checkpoint(pretrained_filename)
+            model = ClosurePhaseDecoder.load_from_checkpoint(pretrained_filename)
         else:
             L.seed_everything(42)  # To be reproducible
-            model = CIFARModule(model_name=model_name, **kwargs)
-            trainer.fit(model, train_loader, val_loader)
-            model = CIFARModule.load_from_checkpoint(
+            model = ClosurePhaseDecoder(model_name=model_name, **kwargs)
+            trainer.fit(model, self.train_loader, self.valid_loader)
+            model = ClosurePhaseDecoder.load_from_checkpoint(
                 trainer.checkpoint_callback.best_model_path
             )  # Load best checkpoint after training
 
         # Test best model on validation and test set
-        val_result = trainer.test(model, dataloaders=val_loader, verbose=False)
-        test_result = trainer.test(model, dataloaders=test_loader,
+        val_result = trainer.test(model, dataloaders=self.valid_loader, verbose=False)
+        test_result = trainer.test(model, dataloaders=self.test_loader,
                                    verbose=False)
         result = {"test": test_result[0]["test_acc"],
                   "val": val_result[0]["test_acc"]}
 
+        logger.experiment.finish()
+
         return model, result
+
+    def scan_hyperparams(self):
+        for batch_size, lr, num_layers, hidden_size, activation in product([128],
+                                                                    [1e-2],
+                                                                    [2, 3],
+                                                                    [self.input_size, 2*self.input_size],
+                                                                    ["LeakyReLU", "Tanh"]):
+            # reset dataloaders
+            self.set_dataloaders(batch_size=batch_size)
+
+            model_config = {"num_layers": num_layers,
+                            "activation": activation,
+                            "norm": False,
+                            "input_size": self.input_size,
+                            "output_size": self.output_size,
+                            "hidden_size": hidden_size,}
+            optimizer_config = {"lr": lr,
+                                "momentum": 0.9,}
+
+            self.train_model(model_name="SequentialNN",
+                             model_hparams=model_config,
+                             optimizer_name="SGD",
+                             optimizer_hparams=optimizer_config)
+
 
     def train_sequential(self):
         # checkpoints
@@ -183,8 +211,8 @@ class TrainingRunner:
 
             # model
             sequential_model = ClosurePhaseDecoder(
-                models.SequentialNN(self.num_inputs, num_layers,
-                                    self.num_outputs, activation=activation, norm=norm),
+                models.SequentialNN(self.input_size, num_layers,
+                                    self.output_size, activation=activation, norm=norm),
                 learning_rate=lr, zeta=1.)
 
             # logger
@@ -250,9 +278,9 @@ class TrainingRunner:
 
             # model
             lateral_model = ClosurePhaseDecoder(
-                models.LateralNoSkip(self.num_inputs, num_layers,
-                                    self.num_outputs, activation=activation,
-                                    norm=norm), learning_rate=lr, zeta=1.)
+                models.LateralNoSkip(self.input_size, num_layers,
+                                     self.output_size, activation=activation,
+                                     norm=norm), learning_rate=lr, zeta=1.)
 
             # logger
             logger = WandbLogger(project='triple_correlation',
@@ -285,44 +313,30 @@ class TrainingRunner:
             logger.experiment.unwatch(lateral_model)
             logger.experiment.finish()
 
-    def load_checkpoint(self, checkpoint_reference='xgoqwdlf'):
-        # reference can be retrieved in artifacts panel
-        # "VERSION" can be a version (ex: "v2") or an alias ("latest or "best")
-        # checkpoint_reference = 'mm-wave/triple_correlation/xgoqwdlf:v0'
+    def load_model(self):
+        # Check whether pretrained model exists. If yes, load it and skip training
+        pretrained_filename = os.path.join(self.checkpoint_dir, "triple_correlation", "f63rieqp",
+                                           "checkpoints", "*" + ".ckpt")
+        print(pretrained_filename)
+        if os.path.isfile(glob.glob(pretrained_filename)[0]):
+            pretrained_filename = glob.glob(pretrained_filename)[0]
+            print(
+                f"Found pretrained model at {pretrained_filename}, loading...")
+            # Automatically loads the model with the saved hyperparameters
+            model = ClosurePhaseDecoder.load_from_checkpoint(pretrained_filename)
 
-        # logger = WandbLogger(log_model=True)
-        # artifact_dir = logger.download_artifact(checkpoint_reference, artifact_type="model")
-        path = 'triple_correlation/'+checkpoint_reference+'/checkpoints/model.ckpt'
-        print(path)
+            # Create a PyTorch Lightning trainer with the generation callback
+            trainer = L.Trainer(
+                accelerator="gpu",
+                devices=[0]
+            )
 
-        # load checkpoint
-        # model = EvalDecoder.load_from_checkpoint(path, strict=False)
-        checkpoint = torch.load(path)
-        print(checkpoint.keys())
-        print(checkpoint["state_dict"].items())
-        decoder_weights = {k: v for k, v in checkpoint["state_dict"].items() if k.startswith("model.")}
+            # Test best model on validation and test set
+            val_result = trainer.test(model, dataloaders=self.valid_loader,
+                                      verbose=False)
+            test_result = trainer.test(model, dataloaders=self.test_loader,
+                                       verbose=False)
+            result = {"test": test_result[0]["test_acc"],
+                      "val": val_result[0]["test_acc"]}
 
-        # print(model.kappa)
-        # print(model.learning_rate)
-
-        # disable randomness, dropout, etc...
-        model.eval()
-
-        phases = []
-        predictions = []
-        for i, (inputs, labels) in enumerate(self.test_loader):
-            if i == 1:  # We only need one batch
-                break
-            inputs = inputs.view(-1, self.num_inputs)  # Reshape the input data
-            #closure.extend(inputs.numpy())
-            phases.extend(labels.numpy())
-
-        #closure_ex = np.asarray(closure)[:3, :, :]
-        predictions = model(inputs)
-        predictions_ex = np.asarray(predictions)[:3, self.num_outputs // 2:]
-        phases_ex = np.asarray(phases)[:3, self.num_outputs // 2:]
-
-        print(predictions_ex.shape, phases_ex.shape)
-
-        # predict with the model
-        # y_hat = model(x)
+            return model, result

@@ -36,7 +36,8 @@ if __name__ == '__main__':
         #runner.train_multiLinear()
         #runner.train_sequential()
         #runner.train_lateral()
-        runner.load_checkpoint()
+        #runner.scan_hyperparams()
+        runner.load_model()
 
         # test_dataloader = runner.get_custom_dataloader(test_file, batch_size=1024)
         #

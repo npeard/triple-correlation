@@ -3,7 +3,7 @@
 from torch import nn
 import torch
 
-act_fn_by_name = {"Tanh": nn.Tanh, "ReLU": nn.ReLU, "LeakyReLU": nn.LeakyReLU}
+act_fn_by_name = {"Tanh": nn.Tanh(), "LeakyReLU": nn.LeakyReLU()}
 
 # Define a linear network
 class LinearNet(nn.Module):
