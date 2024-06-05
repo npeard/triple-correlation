@@ -111,13 +111,13 @@ class TrainingRunner:
         # logger
         logger = WandbLogger(project='triple_correlation',
                              group=model_name, log_model=True,
-                             save_dir=self.checkpoint_dir)
+                             save_dir=os.path.join(self.checkpoint_dir, save_name))
 
         # callbacks
         # early stopping
         early_stop_callback = EarlyStopping(monitor="val_loss",
                                             min_delta=0.00,
-                                            patience=3,
+                                            patience=5,
                                             verbose=True,
                                             mode="min")
         checkpoint_callback = ModelCheckpoint(save_weights_only=True,
@@ -130,29 +130,82 @@ class TrainingRunner:
             default_root_dir=os.path.join(self.checkpoint_dir, save_name),
             accelerator="gpu",
             devices=[0],
-            max_epochs=11,
+            max_epochs=180,
             callbacks=[early_stop_callback, checkpoint_callback],
             check_val_every_n_epoch=10,
             logger=logger
         )
 
-        # Check whether pretrained model exists. If yes, load it and skip training
-        pretrained_filename = os.path.join(self.checkpoint_dir, save_name + ".ckpt")
-        if os.path.isfile(pretrained_filename):
-            print(
-                f"Found pretrained model at {pretrained_filename}, loading...")
-            # Automatically loads the model with the saved hyperparameters
-            model = ClosurePhaseDecoder.load_from_checkpoint(pretrained_filename)
-        else:
-            L.seed_everything(42)  # To be reproducible
-            model = ClosurePhaseDecoder(model_name=model_name, **kwargs)
-            trainer.fit(model, self.train_loader, self.valid_loader)
-            model = ClosurePhaseDecoder.load_from_checkpoint(
-                trainer.checkpoint_callback.best_model_path
-            )  # Load best checkpoint after training
+        # L.seed_everything(42)  # To be reproducible
+        model = ClosurePhaseDecoder(model_name=model_name, **kwargs)
+        trainer.fit(model, self.train_loader, self.valid_loader)
+
+        # Load best checkpoint after training
+        model = ClosurePhaseDecoder.load_from_checkpoint(
+            trainer.checkpoint_callback.best_model_path)
 
         # Test best model on validation and test set
-        val_result = trainer.test(model, dataloaders=self.valid_loader, verbose=False)
+        val_result = trainer.test(model, dataloaders=self.valid_loader,
+                                  verbose=False)
+        test_result = trainer.test(model, dataloaders=self.test_loader,
+                                   verbose=False)
+        result = {"test": test_result[0]["test_acc"],
+                  "val": val_result[0]["test_acc"]}
+
+        logger.experiment.finish()
+
+        return model, result
+
+    def train_linear_model(self, model_name, save_name=None, **kwargs):
+        """Train model.
+
+        Args:
+            model_name: Name of the model you want to run. Is used to look up the class in "model_dict"
+            save_name (optional): If specified, this name will be used for creating the checkpoint and logging directory.
+        """
+        if save_name is None:
+            save_name = model_name
+
+        # logger
+        logger = WandbLogger(project='triple_correlation',
+                             group=model_name, log_model=True,
+                             save_dir=os.path.join(self.checkpoint_dir,
+                                                   save_name))
+
+        # callbacks
+        # early stopping
+        early_stop_callback = EarlyStopping(monitor="val_loss",
+                                            min_delta=0.00,
+                                            patience=5,
+                                            verbose=True,
+                                            mode="min")
+        checkpoint_callback = ModelCheckpoint(save_weights_only=True,
+                                              mode="max", monitor="val_acc")
+        # Save the best checkpoint based on the maximum val_acc recorded.
+        # Saves only weights and not optimizer
+
+        # Create a PyTorch Lightning trainer with the generation callback
+        trainer = L.Trainer(
+            default_root_dir=os.path.join(self.checkpoint_dir, save_name),
+            accelerator="gpu",
+            devices=[0],
+            max_epochs=180,
+            callbacks=[early_stop_callback, checkpoint_callback],
+            check_val_every_n_epoch=10,
+            logger=logger
+        )
+
+        # L.seed_everything(42)  # To be reproducible
+        model = ClosurePhaseDecoder(model_name=model_name, **kwargs)
+        trainer.fit(model, self.train_loader, self.valid_loader)
+
+        # Load best checkpoint after training
+        model = ClosurePhaseDecoder.load_from_checkpoint(
+            trainer.checkpoint_callback.best_model_path)
+
+        # Test best model on validation and test set
+        val_result = trainer.test(model, dataloaders=self.valid_loader,
+                                  verbose=False)
         test_result = trainer.test(model, dataloaders=self.test_loader,
                                    verbose=False)
         result = {"test": test_result[0]["test_acc"],
@@ -163,13 +216,10 @@ class TrainingRunner:
         return model, result
 
     def scan_hyperparams(self):
-        for batch_size, lr, num_layers, hidden_size, activation in product([128],
-                                                                    [1e-2],
-                                                                    [2, 3],
-                                                                    [self.input_size, 2*self.input_size],
-                                                                    ["LeakyReLU", "Tanh"]):
-            # reset dataloaders
-            self.set_dataloaders(batch_size=batch_size)
+        for lr, num_layers, hidden_size, activation in product([1e-2, 3e-2],
+                                                                [2, 3],
+                                                                [self.input_size, 2*self.input_size],
+                                                                ["LeakyReLU", "Tanh"]):
 
             model_config = {"num_layers": num_layers,
                             "activation": activation,
@@ -179,139 +229,35 @@ class TrainingRunner:
                             "hidden_size": hidden_size,}
             optimizer_config = {"lr": lr,
                                 "momentum": 0.9,}
+            misc_config = {"batch_size": self.batch_size}
 
             self.train_model(model_name="SequentialNN",
                              model_hparams=model_config,
                              optimizer_name="SGD",
-                             optimizer_hparams=optimizer_config)
+                             optimizer_hparams=optimizer_config,
+                             misc_hparams=misc_config)
 
+    def scan_linear_hyperparams(self):
+        for lr, num_layers, hidden_size, Phi_sign in product([1e-2, 3e-2],
+                                                    [2, 3],
+                                                    [self.input_size, 2*self.input_size],
+                                                    [True, False]):
 
-    def train_sequential(self):
-        # checkpoints
-        # saves top-K checkpoints based on "val_loss" metric
-        checkpoint_callback = ModelCheckpoint(
-            save_top_k=1,
-            monitor="val_loss",
-            mode="min",
-            dirpath=self.checkpoint_dir,
-            filename="sequential-{epoch:02d}-{val_loss:.2f}",
-        )
+            model_config = {"num_layers": num_layers,
+                            "norm": False,
+                            "input_size": self.input_size,
+                            "output_size": self.output_size,
+                            "hidden_size": hidden_size,
+                            "Phi_sign": Phi_sign,}
+            optimizer_config = {"lr": lr,
+                                "momentum": 0.9,}
+            misc_config = {"batch_size": self.batch_size}
 
-        # assign colors based on model size
-        for batch_size, lr, num_layers, activation, norm in product([128, 512], [1e-2, 5e-2], [2, 3], ["LeakyReLU", "Tanh"], [True, False]):
-            # early stopping
-            early_stop_callback = EarlyStopping(monitor="val_loss",
-                                                min_delta=0.00,
-                                                patience=3,
-                                                verbose=True,
-                                                mode="min")
-
-            # reset dataloaders
-            self.set_dataloaders(batch_size=batch_size)
-
-            # model
-            sequential_model = ClosurePhaseDecoder(
-                models.SequentialNN(self.input_size, num_layers,
-                                    self.output_size, activation=activation, norm=norm),
-                learning_rate=lr, zeta=1.)
-
-            # logger
-            logger = WandbLogger(project='triple_correlation',
-                                 group="sequential", log_model=True)
-
-            # add your batch size to the wandb config
-            config = {"batch_size": self.batch_size,
-                      "num_layers": num_layers,
-                      "activation": activation,
-                      "norm": norm}
-            logger.experiment.config.update(config,
-                                            allow_val_change=True)
-
-            # watch gradients
-            logger.watch(sequential_model)
-
-            # train model
-            trainer = L.Trainer(accelerator="gpu", devices=[0],
-                                max_epochs=200,
-                                callbacks=[],
-                                check_val_every_n_epoch=10,
-                                logger=logger)
-
-            trainer.fit(sequential_model, self.train_loader,
-                        self.valid_loader)
-            # final_val_loss = trainer.callback_metrics['val_loss']
-
-            # finish Weights and Biases run, must include this line so
-            # that a new run is instantiated
-            logger.experiment.unwatch(sequential_model)
-            logger.experiment.finish()
-
-    def train_lateral(self):
-        # checkpoints
-        # saves top-K checkpoints based on "val_loss" metric
-        checkpoint_callback = ModelCheckpoint(
-            save_top_k=1,
-            monitor="val_loss",
-            mode="min",
-            dirpath=self.checkpoint_dir,
-            filename="lateral-{epoch:02d}-{val_loss:.2f}",
-        )
-
-        # assign colors based on model size
-        for batch_size, lr, num_layers, activation, norm in product([128, 512],
-                                                                    [1e-2,
-                                                                     5e-2],
-                                                                    [2, 3], [
-                                                                        "LeakyReLU",
-                                                                        "Tanh"],
-                                                                    [True,
-                                                                     False]):
-            # early stopping
-            early_stop_callback = EarlyStopping(monitor="val_loss",
-                                                min_delta=0.00,
-                                                patience=3,
-                                                verbose=True,
-                                                mode="min")
-
-            # reset dataloaders
-            self.set_dataloaders(batch_size=batch_size)
-
-            # model
-            lateral_model = ClosurePhaseDecoder(
-                models.LateralNoSkip(self.input_size, num_layers,
-                                     self.output_size, activation=activation,
-                                     norm=norm), learning_rate=lr, zeta=1.)
-
-            # logger
-            logger = WandbLogger(project='triple_correlation',
-                                 group="lateral_no_skip", log_model=True)
-
-            # add your batch size to the wandb config
-            config = {"batch_size": self.batch_size,
-                      "num_layers": num_layers,
-                      "activation": activation,
-                      "norm": norm}
-            logger.experiment.config.update(config,
-                                            allow_val_change=True)
-
-            # watch gradients
-            logger.watch(lateral_model)
-
-            # train model
-            trainer = L.Trainer(accelerator="gpu", devices=[0],
-                                max_epochs=200,
-                                callbacks=[],
-                                check_val_every_n_epoch=10,
-                                logger=logger)
-
-            trainer.fit(lateral_model, self.train_loader,
-                        self.valid_loader)
-            # final_val_loss = trainer.callback_metrics['val_loss']
-
-            # finish Weights and Biases run, must include this line so
-            # that a new run is instantiated
-            logger.experiment.unwatch(lateral_model)
-            logger.experiment.finish()
+            self.train_linear_model(model_name="LinearNet",
+                             model_hparams=model_config,
+                             optimizer_name="SGD",
+                             optimizer_hparams=optimizer_config,
+                             misc_hparams=misc_config)
 
     def load_model(self):
         # Check whether pretrained model exists. If yes, load it and skip training

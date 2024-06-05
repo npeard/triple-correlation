@@ -7,9 +7,11 @@ act_fn_by_name = {"Tanh": nn.Tanh(), "LeakyReLU": nn.LeakyReLU()}
 
 # Define a linear network
 class LinearNet(nn.Module):
-    def __init__(self, input_size, num_layers, hidden_size, output_size, norm=False):
+    def __init__(self, input_size, num_layers, hidden_size, output_size, norm=False, Phi_sign=False):
         super(LinearNet, self).__init__()
         self.layers = []
+        if not Phi_sign:
+            self.layers.append(torch.abs)
         if num_layers > 1:
             self.layers.append(nn.Linear(input_size, hidden_size))
             for i in range(num_layers - 2):

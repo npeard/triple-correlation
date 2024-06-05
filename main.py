@@ -19,25 +19,22 @@ import decoder
 import models
 
 if __name__ == '__main__':
-    np.random.seed(0x5EED+703)
+    np.random.seed(0x5EED+3)
     if len(sys.argv) == 1:
         """Run functions in this scratch area. 
         """
 
-        # triphase1d.generate_training_set_from_reverse(num_data=int(1e6),
-        #                                    file='C:\\Users\\npeard\\PycharmProjects\\triple-correlation\\data\\Train1D-kmax3-pix51-ideal-1e6.h5')
+        # triphase1d.generate_training_set_from_reverse(num_data=int(1e3),
+        #                                    file='C:\\Users\\npeard\\PycharmProjects\\triple-correlation\\data\\Test1D-kmax3-pix51-ideal-1e3.h5')
 
-        valid_file = 'C:\\Users\\npeard\\PycharmProjects\\triple-correlation\\data\\Valid1D-kmax3-pix51-ideal-20k.h5'
-        train_file = 'C:\\Users\\npeard\\PycharmProjects\\triple-correlation\\data\\Train1D-kmax3-pix51-ideal-100k.h5'
-        test_file = 'C:\\Users\\npeard\\PycharmProjects\\triple-correlation\\data\\Test1D-kmax3-pix51-ideal-1k.h5'
-        # #runner = train.TrainingRunner(train_file, valid_file, test_file, linearOnly=True)
+        valid_file = 'C:\\Users\\npeard\\PycharmProjects\\triple-correlation\\data\\Valid1D-kmax3-pix51-ideal-2e4.h5'
+        train_file = 'C:\\Users\\npeard\\PycharmProjects\\triple-correlation\\data\\Train1D-kmax3-pix51-ideal-1e6.h5'
+        test_file = 'C:\\Users\\npeard\\PycharmProjects\\triple-correlation\\data\\Test1D-kmax3-pix51-ideal-1e3.h5'
         runner = train.TrainingRunner(train_file, valid_file, test_file)
-        #runner.train_singleLinear()
-        #runner.train_multiLinear()
-        #runner.train_sequential()
-        #runner.train_lateral()
-        #runner.scan_hyperparams()
-        runner.load_model()
+        runner.scan_hyperparams()
+        runner = train.TrainingRunner(train_file, valid_file, test_file, linear_only=True)
+        runner.scan_linear_hyperparams()
+        #runner.load_model()
 
         # test_dataloader = runner.get_custom_dataloader(test_file, batch_size=1024)
         #

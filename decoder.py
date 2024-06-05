@@ -3,14 +3,14 @@
 from torch import optim, nn
 import torch
 import lightning as L
-from models import SequentialNN
+from models import SequentialNN, LinearNet
 
-model_dict = {"SequentialNN": SequentialNN}
+model_dict = {"SequentialNN": SequentialNN, "LinearNet": LinearNet}
 
-# define the LightningModule
+
 class ClosurePhaseDecoder(L.LightningModule):
     def __init__(self, model_name, model_hparams, optimizer_name,
-                 optimizer_hparams):
+                 optimizer_hparams, misc_hparams):
         """Decoder for the closure phase
 
         Args:
@@ -27,11 +27,6 @@ class ClosurePhaseDecoder(L.LightningModule):
         # Create loss module
         self.loss_function = nn.MSELoss()
 
-        # self.kappa = kappa
-        # self.zeta = zeta
-        # self.learning_rate = learning_rate
-        # self.model = model
-        # self.linear_only = linear_only
         torch.set_float32_matmul_precision('medium')
 
     def create_model(self, model_name, model_hparams):
@@ -42,6 +37,7 @@ class ClosurePhaseDecoder(L.LightningModule):
 
     def forward(self, x):
         return self.model(x)
+
     def configure_optimizers(self):
         # We will support Adam or SGD as optimizers.
         if self.hparams.optimizer_name == "Adam":
@@ -69,7 +65,6 @@ class ClosurePhaseDecoder(L.LightningModule):
 
         # if loss_hparams["kappa"] > 0:
         #     self.loss_function += loss_hparams["kappa"] * self.antisymmetry_loss()
-
 
     def antisymmetry_loss(self, outputs):
         # Punish phases that are not antisymmetric about the origin
