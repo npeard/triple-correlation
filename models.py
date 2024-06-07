@@ -5,13 +5,20 @@ import torch
 
 act_fn_by_name = {"Tanh": nn.Tanh(), "LeakyReLU": nn.LeakyReLU()}
 
+class AbsBlock(nn.Module):
+    def __init__(self):
+        super(AbsBlock, self).__init__()
+
+    def forward(self, x):
+        return torch.abs(x)
+
 # Define a linear network
 class LinearNet(nn.Module):
     def __init__(self, input_size, num_layers, hidden_size, output_size, norm=False, Phi_sign=False):
         super(LinearNet, self).__init__()
         self.layers = []
         if not Phi_sign:
-            self.layers.append(torch.abs)
+            self.layers.append(AbsBlock())
         if num_layers > 1:
             self.layers.append(nn.Linear(input_size, hidden_size))
             for i in range(num_layers - 2):
@@ -41,7 +48,7 @@ class SequentialNN(nn.Module):
             self.layers.append(nn.Linear(input_size, hidden_size))
             self.layers.append(act_fn_by_name[activation])
             for i in range(num_layers - 2):
-                self.layers.append(nn.Linear(hidden_size, input_size))
+                self.layers.append(nn.Linear(hidden_size, hidden_size))
                 if norm:
                     self.layers.append(nn.LayerNorm(hidden_size))
                 self.layers.append(act_fn_by_name[activation])

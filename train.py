@@ -216,9 +216,9 @@ class TrainingRunner:
         return model, result
 
     def scan_hyperparams(self):
-        for lr, num_layers, hidden_size, activation in product([1e-2, 3e-2],
+        for lr, num_layers, hidden_size, activation in product([1e-3, 1e-2, 3e-2],
                                                                 [2, 3],
-                                                                [self.input_size, 2*self.input_size],
+                                                                [self.input_size, 2*self.input_size, 3*self.input_size],
                                                                 ["LeakyReLU", "Tanh"]):
 
             model_config = {"num_layers": num_layers,
@@ -227,20 +227,20 @@ class TrainingRunner:
                             "input_size": self.input_size,
                             "output_size": self.output_size,
                             "hidden_size": hidden_size,}
-            optimizer_config = {"lr": lr,
-                                "momentum": 0.9,}
+            optimizer_config = {"lr": lr}
+                                #"momentum": 0.9,}
             misc_config = {"batch_size": self.batch_size}
 
             self.train_model(model_name="SequentialNN",
                              model_hparams=model_config,
-                             optimizer_name="SGD",
+                             optimizer_name="Adam",
                              optimizer_hparams=optimizer_config,
                              misc_hparams=misc_config)
 
     def scan_linear_hyperparams(self):
         for lr, num_layers, hidden_size, Phi_sign in product([1e-2, 3e-2],
                                                     [2, 3],
-                                                    [self.input_size, 2*self.input_size],
+                                                    [self.input_size, 2*self.input_size, 3*self.input_size],
                                                     [True, False]):
 
             model_config = {"num_layers": num_layers,
