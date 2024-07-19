@@ -31,6 +31,7 @@ class ClosurePhaseDecoder(L.LightningModule):
 
     def create_model(self, model_name, model_hparams):
         if model_name in model_dict:
+            self.model_name = model_name
             return model_dict[model_name](**model_hparams)
         else:
             assert False, f'Unknown model name "{model_name}". Available models are: {str(model_dict.keys())}'
@@ -103,7 +104,10 @@ class ClosurePhaseDecoder(L.LightningModule):
         # training_step defines the train loop.
         # it is independent of forward
         x, y = batch
-        x = x.view(-1, x.size(1)**2)
+        if self.model_name == "WideCNN":
+            x = x.view(-1, 1, x.size(1), x.size(2))
+        else:
+            x = x.view(-1, x.size(1)**2)
         preds = self.model(x)
         loss = self.loss_function(preds, y)
         acc = (preds == y).float().mean()
@@ -114,7 +118,10 @@ class ClosurePhaseDecoder(L.LightningModule):
     def validation_step(self, batch, batch_idx):
         # validation_step defines the validation loop.
         x, y = batch
-        x = x.view(-1, x.size(1)**2)
+        if self.model_name == "WideCNN":
+            x = x.view(-1, 1, x.size(1), x.size(2))
+        else:
+            x = x.view(-1, x.size(1) ** 2)
         preds = self.model(x)
         loss = self.loss_function(preds, y)
         acc = (preds == y).float().mean()
@@ -128,7 +135,10 @@ class ClosurePhaseDecoder(L.LightningModule):
     #     return optimizer
     def test_step(self, batch, batch_idx):
         x, y = batch
-        x = x.view(-1, x.size(1)**2)
+        if self.model_name == "WideCNN":
+            x = x.view(-1, 1, x.size(1), x.size(2))
+        else:
+            x = x.view(-1, x.size(1) ** 2)
         preds = self.model(x)
         loss = self.loss_function(preds, y)
         acc = (preds == y).float().mean()
@@ -138,6 +148,9 @@ class ClosurePhaseDecoder(L.LightningModule):
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         x, y = batch
-        x = x.view(-1, x.size(1)**2)
+        if self.model_name == "WideCNN":
+            x = x.view(-1, 1, x.size(1), x.size(2))
+        else:
+            x = x.view(-1, x.size(1) ** 2)
         y_hat = self.model(x)
         return y_hat, y

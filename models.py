@@ -130,7 +130,7 @@ class ConvolutionBlock(nn.Module):
         self.layers.append(nn.Conv2d(1, output_channels, kernel_size=kernel_size, padding='same'))
         self.layers.append(self.activate)
         for i in range(num_layers - 1):
-            self.layers.append(nn.MaxPool2d(kernel_size=2))
+            # self.layers.append(nn.MaxPool2d(kernel_size=2))
             self.layers.append(nn.Conv2d(output_channels, output_channels, kernel_size=kernel_size, padding='same'))
             self.layers.append(self.activate)
         self.block = nn.Sequential(*self.layers)
@@ -144,14 +144,16 @@ class ConvolutionBlock(nn.Module):
 # use the same number of channels in each layer with "same" padding
 # computationally inefficient, but easy to implement and preserves edge information
 class WideCNN(nn.Module):
-    def __init__(self, input_size, num_conv_layers, num_fc_layers, kernel_size, output_size, hidden_size=None,
+    def __init__(self, input_size, num_conv_layers, num_layers, kernel_size, output_size, hidden_size=None,
                  activation="Tanh", norm=False):
         super(WideCNN, self).__init__()
         self.conv_block = ConvolutionBlock(output_channels=output_size, num_layers=num_conv_layers,
                                            kernel_size=kernel_size, activation=activation)
-        self.fc_block = SequentialNN(input_size=output_size*input_size, num_layers=num_fc_layers,
+        self.fc_block = SequentialNN(input_size=output_size*input_size, num_layers=num_layers,
                                      output_size=output_size, hidden_size=hidden_size, activation=activation, norm=norm)
     def forward(self, x):
         out = self.conv_block(x)
-        out = self.fc_layers(out)
+        # flatten the output of the convolutional block for the fully connected block
+        # (batch_size, channels, dim1,) -> (batch_size, channels*dim1*dim2)
+        out = self.fc_block(out.view(out.size(0), out.size(1)*out.size(2)*out.size(3)))
         return out

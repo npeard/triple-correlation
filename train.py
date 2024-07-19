@@ -216,24 +216,26 @@ class TrainingRunner:
         return model, result
 
     def scan_hyperparams(self):
-        for lr, num_layers, hidden_size, activation in product([1e-3, 1e-2, 3e-2],
-                                                                [2, 3],
-                                                                [self.input_size, 2*self.input_size, 3*self.input_size],
+        for lr, num_layers, num_conv_layers, kernel_size, activation in product([1e-3, 1e-2, 3e-2],
+                                                                [1],
+                                                                [3, 5],
+                                                                [3, 5, 7],
                                                                 ["LeakyReLU", "Tanh"]):
 
             model_config = {"num_layers": num_layers,
+                            "num_conv_layers": num_conv_layers,
                             "activation": activation,
                             "norm": False,
                             "input_size": self.input_size,
                             "output_size": self.output_size,
-                            "hidden_size": hidden_size,}
-            optimizer_config = {"lr": lr}
-                                #"momentum": 0.9,}
+                            "kernel_size": kernel_size,}
+            optimizer_config = {"lr": lr,
+                                "momentum": 0.9,}
             misc_config = {"batch_size": self.batch_size}
 
-            self.train_model(model_name="SequentialNN",
+            self.train_model(model_name="WideCNN",
                              model_hparams=model_config,
-                             optimizer_name="Adam",
+                             optimizer_name="SGD",
                              optimizer_hparams=optimizer_config,
                              misc_hparams=misc_config)
 
