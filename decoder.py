@@ -3,9 +3,9 @@
 from torch import optim, nn
 import torch
 import lightning as L
-from models import SequentialNN, LinearNet
+from models import SequentialNN, LinearNet, WideCNN
 
-model_dict = {"SequentialNN": SequentialNN, "LinearNet": LinearNet}
+model_dict = {"SequentialNN": SequentialNN, "LinearNet": LinearNet, "WideCNN": WideCNN}
 
 
 class ClosurePhaseDecoder(L.LightningModule):

@@ -30,10 +30,10 @@ if __name__ == '__main__':
         valid_file = 'C:\\Users\\npeard\\PycharmProjects\\triple-correlation\\data\\Valid1D-kmax3-pix51-ideal-2e4.h5'
         train_file = 'C:\\Users\\npeard\\PycharmProjects\\triple-correlation\\data\\Train1D-kmax3-pix51-ideal-1e6.h5'
         test_file = 'C:\\Users\\npeard\\PycharmProjects\\triple-correlation\\data\\Test1D-kmax3-pix51-ideal-1e3.h5'
-        runner = train.TrainingRunner(train_file, valid_file, test_file)
-        runner.scan_hyperparams()
         runner = train.TrainingRunner(train_file, valid_file, test_file, linear_only=True)
         runner.scan_linear_hyperparams()
+        runner = train.TrainingRunner(train_file, valid_file, test_file)
+        runner.scan_hyperparams()
         #runner.load_model()
 
         # test_dataloader = runner.get_custom_dataloader(test_file, batch_size=1024)

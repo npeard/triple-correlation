@@ -38,7 +38,7 @@ class LinearNet(nn.Module):
 
 # Define a sequential dense network
 class SequentialNN(nn.Module):
-    def __init__(self, input_size, num_layers, hidden_size, output_size,
+    def __init__(self, input_size, num_layers, output_size, hidden_size=None,
                  activation="Tanh", norm=False):
         super(SequentialNN, self).__init__()
         self.layers = []
@@ -114,26 +114,44 @@ class LateralNoSkip(nn.Module):
         return out
 
 
-# Define a CNN model that acts on a 2D input and produces the 1D phase output
-class CNN(nn.Module):
-    def __init__(self, input_size, output_size):
-        super(CNN, self).__init__()
-        self.conv_layers = nn.Sequential(
-            nn.Conv2d(1, 16, kernel_size=(3, 3), padding=(1, 1)),
-            nn.ReLU(),
-            nn.MaxPool2d(kernel_size=(2, 2)),
-            nn.Conv2d(16, 32, kernel_size=(3, 3), padding=(1, 1)),
-            nn.ReLU(),
-            nn.MaxPool2d(kernel_size=(2, 2))
-        )
-        self.fc_layers = nn.Sequential(
-            nn.Linear(32 * 6 * 6, 128),
-            nn.ReLU(),
-            nn.Linear(128, output_size)
-        )
+class ConvolutionBlock(nn.Module):
+    def __init__(self, output_channels, num_layers, activation="Tanh", kernel_size=3):
+        super(ConvolutionBlock, self).__init__()
+
+        if activation == "Tanh":
+            self.activate = nn.Tanh()
+        elif activation == "LeakyReLU":
+            self.activate = nn.LeakyReLU()
+        else:
+            raise ValueError("Invalid activation function")
+
+        # networks layers with no connections
+        self.layers = []
+        self.layers.append(nn.Conv2d(1, output_channels, kernel_size=kernel_size, padding='same'))
+        self.layers.append(self.activate)
+        for i in range(num_layers - 1):
+            self.layers.append(nn.MaxPool2d(kernel_size=2))
+            self.layers.append(nn.Conv2d(output_channels, output_channels, kernel_size=kernel_size, padding='same'))
+            self.layers.append(self.activate)
+        self.block = nn.Sequential(*self.layers)
 
     def forward(self, x):
-        out = self.conv_layers(x)
-        out = out.view(out.size(0), -1)
+        out = self.block(x)
+        return out
+
+
+# Define a CNN model that acts on a 2D input and produces the 1D phase output
+# use the same number of channels in each layer with "same" padding
+# computationally inefficient, but easy to implement and preserves edge information
+class WideCNN(nn.Module):
+    def __init__(self, input_size, num_conv_layers, num_fc_layers, kernel_size, output_size, hidden_size=None,
+                 activation="Tanh", norm=False):
+        super(WideCNN, self).__init__()
+        self.conv_block = ConvolutionBlock(output_channels=output_size, num_layers=num_conv_layers,
+                                           kernel_size=kernel_size, activation=activation)
+        self.fc_block = SequentialNN(input_size=output_size*input_size, num_layers=num_fc_layers,
+                                     output_size=output_size, hidden_size=hidden_size, activation=activation, norm=norm)
+    def forward(self, x):
+        out = self.conv_block(x)
         out = self.fc_layers(out)
         return out
