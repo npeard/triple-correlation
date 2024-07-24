@@ -34,7 +34,7 @@ if __name__ == '__main__':
         # runner.scan_linear_hyperparams()
         runner = train.TrainingRunner(train_file, valid_file, test_file)
         runner.scan_hyperparams()
-        #runner.load_model()
+        #runner.plot_predictions()
 
         # test_dataloader = runner.get_custom_dataloader(test_file, batch_size=1024)
         #

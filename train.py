@@ -121,7 +121,7 @@ class TrainingRunner:
                                             verbose=True,
                                             mode="min")
         checkpoint_callback = ModelCheckpoint(save_weights_only=True,
-                                              mode="max", monitor="val_acc")
+                                              mode="min", monitor="train_loss")
         # Save the best checkpoint based on the maximum val_acc recorded.
         # Saves only weights and not optimizer
 
@@ -180,7 +180,7 @@ class TrainingRunner:
                                             verbose=True,
                                             mode="min")
         checkpoint_callback = ModelCheckpoint(save_weights_only=True,
-                                              mode="max", monitor="val_acc")
+                                              mode="min", monitor="train_loss")
         # Save the best checkpoint based on the maximum val_acc recorded.
         # Saves only weights and not optimizer
 
@@ -216,11 +216,11 @@ class TrainingRunner:
         return model, result
 
     def scan_hyperparams(self):
-        for lr, num_layers, num_conv_layers, kernel_size, activation in product([1e-3, 1e-2, 3e-2],
+        for lr, num_layers, num_conv_layers, kernel_size, activation in product([1e-2, 3e-2],
                                                                 [1],
-                                                                [3, 5],
-                                                                [3, 5, 7],
-                                                                ["LeakyReLU", "Tanh"]):
+                                                                [5],
+                                                                [7],
+                                                                ["LeakyReLU"]):
 
             model_config = {"num_layers": num_layers,
                             "num_conv_layers": num_conv_layers,
@@ -263,7 +263,8 @@ class TrainingRunner:
 
     def load_model(self):
         # Check whether pretrained model exists. If yes, load it and skip training
-        pretrained_filename = os.path.join(self.checkpoint_dir, "triple_correlation", "f63rieqp",
+        print(self.checkpoint_dir)
+        pretrained_filename = os.path.join(self.checkpoint_dir,"WideCNN", "triple_correlation", "nws62xci",
                                            "checkpoints", "*" + ".ckpt")
         print(pretrained_filename)
         if os.path.isfile(glob.glob(pretrained_filename)[0]):
@@ -273,18 +274,19 @@ class TrainingRunner:
             # Automatically loads the model with the saved hyperparameters
             model = ClosurePhaseDecoder.load_from_checkpoint(pretrained_filename)
 
-            # Create a PyTorch Lightning trainer with the generation callback
-            trainer = L.Trainer(
-                accelerator="gpu",
-                devices=[0]
-            )
+            return model
 
-            # Test best model on validation and test set
-            val_result = trainer.test(model, dataloaders=self.valid_loader,
-                                      verbose=False)
-            test_result = trainer.test(model, dataloaders=self.test_loader,
-                                       verbose=False)
-            result = {"test": test_result[0]["test_acc"],
-                      "val": val_result[0]["test_acc"]}
+    def plot_predictions(self):
 
-            return model, result
+        model = self.load_model()
+        trainer = L.Trainer(
+            accelerator="gpu",
+            devices=[0]
+        )
+        y = trainer.predict(model, dataloaders=self.train_loader)
+
+        for i in range(len(y[0][0].numpy()[:,0])):
+            plt.plot(y[0][0].numpy()[i,:], label="Predictions")
+            plt.plot(y[0][1].numpy()[i,:], label="Targets")
+            plt.legend()
+            plt.show()

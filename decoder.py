@@ -144,7 +144,7 @@ class ClosurePhaseDecoder(L.LightningModule):
         acc = (preds == y).float().mean()
         self.log("test_acc", acc, on_step=False, on_epoch=True)
         self.log("test_loss", loss, prog_bar=True)
-        return loss
+        return y, preds, loss
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         x, y = batch
