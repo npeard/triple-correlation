@@ -110,9 +110,9 @@ class ClosurePhaseDecoder(L.LightningModule):
             x = x.view(-1, x.size(1)**2)
         preds = self.model(x)
         loss = self.loss_function(preds, y)
-        acc = (preds == y).float().mean()
-        self.log("train_acc", acc, on_step=False, on_epoch=True)
-        self.log("train_loss", loss, prog_bar=True)
+        # acc = (preds == y).float().mean()
+        # self.log("train_acc", acc, on_epoch=True)
+        self.log("train_loss", loss, prog_bar=True, on_epoch=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -124,15 +124,11 @@ class ClosurePhaseDecoder(L.LightningModule):
             x = x.view(-1, x.size(1) ** 2)
         preds = self.model(x)
         loss = self.loss_function(preds, y)
-        acc = (preds == y).float().mean()
-        self.log("val_acc", acc, on_step=False, on_epoch=True)
-        self.log("val_loss", loss, prog_bar=True)
+        # acc = (preds == y).float().mean()
+        # self.log("val_acc", acc, on_epoch=True)
+        self.log("val_loss", loss, prog_bar=True, on_epoch=True)
         return loss
 
-    # def configure_optimizers(self):
-    #     # optimizer = optim.AdamW(self.parameters(), lr=self.lr)
-    #     optimizer = optim.SGD(self.parameters(), lr=self.learning_rate, momentum=0.9)
-    #     return optimizer
     def test_step(self, batch, batch_idx):
         x, y = batch
         if self.model_name == "WideCNN":
@@ -141,9 +137,9 @@ class ClosurePhaseDecoder(L.LightningModule):
             x = x.view(-1, x.size(1) ** 2)
         preds = self.model(x)
         loss = self.loss_function(preds, y)
-        acc = (preds == y).float().mean()
-        self.log("test_acc", acc, on_step=False, on_epoch=True)
-        self.log("test_loss", loss, prog_bar=True)
+        # acc = (preds == y).float().mean()
+        # self.log("test_acc", acc, on_epoch=True)
+        self.log("test_loss", loss, prog_bar=True, on_epoch=True)
         return y, preds, loss
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):

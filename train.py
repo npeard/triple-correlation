@@ -21,6 +21,7 @@ class PhiDataset(Dataset):
         self.h5_file = h5_file
         with h5py.File(self.h5_file, 'r') as f:
             self.length = len(f['phase'])
+        self.opened_flag = False
 
     def open_hdf5(self):
         # solves issue where hdf5 file opened in __init__ prevents multiple
@@ -33,8 +34,10 @@ class PhiDataset(Dataset):
         return self.length
 
     def __getitem__(self, idx):
-        if not hasattr(self, self.h5_file):
+        if not self.opened_flag:  # not hasattr(self, 'h5_file'):
             self.open_hdf5()
+            self.opened_flag = True
+            # print("open_hdf5 finished")
         return FloatTensor(self.inputs[idx]), FloatTensor(self.targets[idx])
 
 
@@ -43,6 +46,7 @@ class cosPhiDataset(Dataset):
         self.h5_file = h5_file
         with h5py.File(self.h5_file, 'r') as f:
             self.length = len(f['phase'])
+        self.opened_flag = False
 
     def open_hdf5(self):
         # solves issue where hdf5 file opened in __init__ prevents multiple
@@ -55,8 +59,10 @@ class cosPhiDataset(Dataset):
         return self.length
 
     def __getitem__(self, idx):
-        if not hasattr(self, self.h5_file):
+        if not self.opened_flag:  # not hasattr(self, 'h5_file'):
             self.open_hdf5()
+            self.opened_flag = True
+            # print("open_hdf5 finished")
         return FloatTensor(self.inputs[idx]), FloatTensor(self.targets[idx])
 
 
@@ -121,7 +127,8 @@ class TrainingRunner:
                                             verbose=True,
                                             mode="min")
         checkpoint_callback = ModelCheckpoint(save_weights_only=True,
-                                              mode="min", monitor="train_loss")
+                                              mode="min", monitor="train_loss",
+                                              save_top_k=3)
         # Save the best checkpoint based on the maximum val_acc recorded.
         # Saves only weights and not optimizer
 
@@ -131,7 +138,7 @@ class TrainingRunner:
             accelerator="gpu",
             devices=[0],
             max_epochs=180,
-            callbacks=[early_stop_callback, checkpoint_callback],
+            callbacks= [checkpoint_callback],
             check_val_every_n_epoch=10,
             logger=logger
         )
@@ -149,8 +156,8 @@ class TrainingRunner:
                                   verbose=False)
         test_result = trainer.test(model, dataloaders=self.test_loader,
                                    verbose=False)
-        result = {"test": test_result[0]["test_acc"],
-                  "val": val_result[0]["test_acc"]}
+        result = {"test": test_result[0]["test_loss"],
+                  "val": val_result[0]["test_loss"]}
 
         logger.experiment.finish()
 
@@ -216,31 +223,30 @@ class TrainingRunner:
         return model, result
 
     def scan_hyperparams(self):
-        for lr, num_layers, num_conv_layers, kernel_size, activation in product([1e-2, 3e-2],
-                                                                [1],
-                                                                [5],
-                                                                [7],
+        for optimizer, num_layers, activation in product(["SGD", "Adam"],
+                                                                [2,3,4],
                                                                 ["LeakyReLU"]):
 
             model_config = {"num_layers": num_layers,
-                            "num_conv_layers": num_conv_layers,
                             "activation": activation,
                             "norm": False,
                             "input_size": self.input_size,
-                            "output_size": self.output_size,
-                            "kernel_size": kernel_size,}
-            optimizer_config = {"lr": lr,
+                            "hidden_size": self.input_size,
+                            "output_size": self.output_size}
+            optimizer_config = {"lr": 1e-2,
                                 "momentum": 0.9,}
+            if optimizer == "Adam":
+                optimizer_config = {"lr": 1e-2}
             misc_config = {"batch_size": self.batch_size}
 
-            self.train_model(model_name="WideCNN",
+            self.train_model(model_name="SequentialNN",
                              model_hparams=model_config,
-                             optimizer_name="SGD",
+                             optimizer_name=optimizer,
                              optimizer_hparams=optimizer_config,
                              misc_hparams=misc_config)
 
     def scan_linear_hyperparams(self):
-        for lr, num_layers, hidden_size, Phi_sign in product([1e-2, 3e-2],
+        for optimizer, num_layers, hidden_size, Phi_sign in product(["SGD", "Adam"],
                                                     [2, 3],
                                                     [self.input_size, 2*self.input_size, 3*self.input_size],
                                                     [True, False]):
@@ -251,20 +257,22 @@ class TrainingRunner:
                             "output_size": self.output_size,
                             "hidden_size": hidden_size,
                             "Phi_sign": Phi_sign,}
-            optimizer_config = {"lr": lr,
+            optimizer_config = {"lr": 1e-2,
                                 "momentum": 0.9,}
+            if optimizer == "Adam":
+                optimizer_config= {"lr": 1e-2}
             misc_config = {"batch_size": self.batch_size}
 
             self.train_linear_model(model_name="LinearNet",
                              model_hparams=model_config,
-                             optimizer_name="SGD",
+                             optimizer_name=optimizer,
                              optimizer_hparams=optimizer_config,
                              misc_hparams=misc_config)
 
-    def load_model(self):
+    def load_model(self, model_name="WideCNN", model_id="5nozki8z"):
         # Check whether pretrained model exists. If yes, load it and skip training
         print(self.checkpoint_dir)
-        pretrained_filename = os.path.join(self.checkpoint_dir,"WideCNN", "triple_correlation", "nws62xci",
+        pretrained_filename = os.path.join(self.checkpoint_dir, model_name, "triple_correlation", model_id,
                                            "checkpoints", "*" + ".ckpt")
         print(pretrained_filename)
         if os.path.isfile(glob.glob(pretrained_filename)[0]):
@@ -276,14 +284,17 @@ class TrainingRunner:
 
             return model
 
-    def plot_predictions(self):
+    def plot_predictions(self, model_name="WideCNN", model_id="5nozki8z"):
 
-        model = self.load_model()
+        model = self.load_model(model_name=model_name, model_id=model_id)
         trainer = L.Trainer(
             accelerator="gpu",
             devices=[0]
         )
-        y = trainer.predict(model, dataloaders=self.train_loader)
+        y = trainer.predict(model, dataloaders=self.test_loader)
+
+        print(y[0][0].numpy().shape)
+        print("MSE Loss: ", np.mean((y[0][0].numpy() - y[0][1].numpy())**2))
 
         for i in range(len(y[0][0].numpy()[:,0])):
             plt.plot(y[0][0].numpy()[i,:], label="Predictions")
