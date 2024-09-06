@@ -3,9 +3,9 @@
 from torch import optim, nn
 import torch
 import lightning as L
-from models import SequentialNN, LinearNet, WideCNN
+from models import MLP, LinearNet, BottleCNN
 
-model_dict = {"SequentialNN": SequentialNN, "LinearNet": LinearNet, "WideCNN": WideCNN}
+model_dict = {"MLP": MLP, "LinearNet": LinearNet, "BottleCNN": BottleCNN}
 
 
 class ClosurePhaseDecoder(L.LightningModule):
@@ -120,7 +120,7 @@ class ClosurePhaseDecoder(L.LightningModule):
         # training_step defines the train loop.
         # it is independent of forward
         x, y = batch
-        if self.model_name == "WideCNN":
+        if self.model_name == "BottleCNN":
             # batch dim, channel dim, height dim, width dim
             x_view = x.view(-1, 1, x.size(1), x.size(2))
         else:
@@ -143,7 +143,7 @@ class ClosurePhaseDecoder(L.LightningModule):
     def validation_step(self, batch, batch_idx):
         # validation_step defines the validation loop.
         x, y = batch
-        if self.model_name == "WideCNN":
+        if self.model_name == "BottleCNN":
             # batch dim, channel dim, height dim, width dim
             x_view = x.view(-1, 1, x.size(1), x.size(2))
         else:
@@ -165,7 +165,7 @@ class ClosurePhaseDecoder(L.LightningModule):
 
     def test_step(self, batch, batch_idx):
         x, y = batch
-        if self.model_name == "WideCNN":
+        if self.model_name == "BottleCNN":
             # batch dim, channel dim, height dim, width dim
             x_view = x.view(-1, 1, x.size(1), x.size(2))
         else:
@@ -187,7 +187,7 @@ class ClosurePhaseDecoder(L.LightningModule):
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         x, y = batch
-        if self.model_name == "WideCNN":
+        if self.model_name == "BottleCNN":
             x_view = x.view(-1, 1, x.size(1), x.size(2))
         else:
             x_view = x.view(-1, x.size(1) ** 2)

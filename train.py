@@ -138,7 +138,7 @@ class TrainingRunner:
             accelerator="gpu",
             devices=[0],
             max_epochs=200,
-            callbacks= [checkpoint_callback],
+            callbacks= [checkpoint_callback, early_stop_callback],
             check_val_every_n_epoch=5,
             logger=logger
         )
@@ -164,15 +164,16 @@ class TrainingRunner:
         return model, result
 
     def scan_hyperparams(self):
-        for num_layers, num_conv_layers, kernel_size, dropout_rate, momentum, lr, batch_size, zeta in product(
-                                                 [2,3,6],
-                                                 [2,3,5],
+        for num_layers, num_conv_layers, kernel_size, dropout_rate, momentum, lr, batch_size, zeta, norm in product(
+                                                 [3,6],
+                                                 [3,5],
                                                  [3,5,7],
                                                  [0.0, 0.1, 0.2],
                                                  [0.5, 0.8],
                                                  [1e-2, 1e-3],
-                                                 [512, 128],
-                                                [0.1, 1]):
+                                                 [128],
+                                                [0.5, 1],
+                                                [True, False]):
             optimizer = "SGD"
 
             # model_config = {"num_layers": num_layers,
@@ -186,7 +187,7 @@ class TrainingRunner:
                             "kernel_size": kernel_size,
                             "dropout_rate": dropout_rate,
                             "activation": "LeakyReLU",
-                            "norm": True,
+                            "norm": norm,
                             "input_size": self.input_size,
                             "hidden_size": self.output_size,
                             "output_size": self.output_size}
@@ -199,7 +200,7 @@ class TrainingRunner:
             misc_config = {"batch_size": batch_size}
             self.set_dataloaders(batch_size=batch_size)
 
-            self.train_model(model_name="WideCNN",
+            self.train_model(model_name="BottleCNN",
                              model_hparams=model_config,
                              optimizer_name=optimizer,
                              optimizer_hparams=optimizer_config,
@@ -289,22 +290,20 @@ class TrainingRunner:
                              optimizer_hparams=optimizer_config,
                              misc_hparams=misc_config)
 
-    def load_model(self, model_name="WideCNN", model_id="5nozki8z"):
+    def load_model(self, model_name="BottleCNN", model_id="5nozki8z"):
         # Check whether pretrained model exists. If yes, load it and skip training
         print(self.checkpoint_dir)
         pretrained_filename = os.path.join(self.checkpoint_dir, model_name, "triple_correlation", model_id,
                                            "checkpoints", "*" + ".ckpt")
-        print(pretrained_filename)
-        if os.path.isfile(glob.glob(pretrained_filename)[2]):
-            pretrained_filename = glob.glob(pretrained_filename)[2]
-            print(
-                f"Found pretrained model at {pretrained_filename}, loading...")
+        pretrained_filename = glob.glob(pretrained_filename)[0]
+        if os.path.isfile(pretrained_filename):
+            print(f"Found pretrained model at {pretrained_filename}, loading...")
             # Automatically loads the model with the saved hyperparameters
             model = ClosurePhaseDecoder.load_from_checkpoint(pretrained_filename)
 
             return model
 
-    def plot_predictions(self, model_name="WideCNN", model_id="5nozki8z"):
+    def plot_predictions(self, model_name="BottleCNN", model_id="i52c3rlz"):
 
         model = self.load_model(model_name=model_name, model_id=model_id)
         trainer = L.Trainer(

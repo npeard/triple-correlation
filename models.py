@@ -37,10 +37,10 @@ class LinearNet(nn.Module):
 
 
 # Define a sequential dense network
-class SequentialNN(nn.Module):
+class MLP(nn.Module):
     def __init__(self, input_size, num_layers, output_size, hidden_size=None,
                  activation="Tanh", norm=False):
-        super(SequentialNN, self).__init__()
+        super(MLP, self).__init__()
         self.layers = []
         # Don't modify inputs before a linear layer, absolute value of inputs
         # is important for learning
@@ -152,18 +152,19 @@ class ConvolutionBlock(nn.Module):
 # Define a CNN model that acts on a 2D input and produces the 1D phase output
 # use the same number of channels in each layer with "same" padding
 # computationally inefficient, but easy to implement and preserves edge information
-class WideCNN(nn.Module):
+class BottleCNN(nn.Module):
     def __init__(self, input_size, num_conv_layers, num_layers, kernel_size, output_size, hidden_size=None,
                  activation="Tanh", norm=False, dropout_rate=0):
-        super(WideCNN, self).__init__()
+        super(BottleCNN, self).__init__()
         self.conv_block = ConvolutionBlock(output_channels=output_size, num_layers=num_conv_layers,
                                            kernel_size=kernel_size, activation=activation, dropout_rate=dropout_rate)
-        self.fc_block = SequentialNN(input_size=input_size, num_layers=num_layers,
-                                     output_size=output_size, hidden_size=hidden_size, activation=activation, norm=norm)
+        self.fc_block = MLP(input_size=input_size, num_layers=num_layers,
+                            output_size=output_size, hidden_size=hidden_size, activation=activation, norm=norm)
     def forward(self, x):
         out = self.conv_block(x)
         # flatten the output of the convolutional block for the fully connected block
         # (batch_size, channels, dim1, dim2) -> (batch_size, channels*dim1*dim2)
         phase = self.fc_block(out.view(out.size(0), out.size(1)*out.size(2)*out.size(3)))
-        pred = torch.atan2(torch.sin(phase), torch.cos(phase))
-        return pred
+        # Don't need to do atan2 because it is done in the MLP block
+        # pred = torch.atan2(torch.sin(phase), torch.cos(phase))
+        return phase

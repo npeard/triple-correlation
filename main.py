@@ -35,9 +35,12 @@ if __name__ == '__main__':
         runner = train.TrainingRunner(train_file, valid_file, test_file)
         runner.scan_hyperparams()
 
+        # Narrow CNN
+        # runner.plot_predictions()
+
         #runner.plot_predictions(model_name="WideCNN", model_id="1nlw3uim") # trained, despite high validation loss
         #runner.plot_predictions(model_name="WideCNN", model_id="qh10ox39")
-        #runner.plot_predictions(model_name="SequentialNN", model_id="r5ttwgoi")
+        #runner.plot_predictions(model_name="MLP", model_id="r5ttwgoi")
 
         # runner.plot_predictions(model_name="WideCNN", model_id="06bjdt3u")
 
@@ -54,7 +57,7 @@ if __name__ == '__main__':
         # closure = []
         # phases = []
         #
-        # dec_obj = decoder.ClosurePhaseDecoder(model=models.SequentialNN(0,0,0))
+        # dec_obj = decoder.ClosurePhaseDecoder(model=models.MLP(0,0,0))
         #
         # for i, (inputs, labels) in enumerate(test_dataloader):
         #     if i == 1:  # We only need one batch
