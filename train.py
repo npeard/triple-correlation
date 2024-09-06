@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 import os, sys, glob
-import torch
+from torch import nn
 from torch.utils.data import Dataset, DataLoader
 import h5py
 from lightning.pytorch.callbacks.early_stopping import EarlyStopping
@@ -137,9 +137,9 @@ class TrainingRunner:
             default_root_dir=os.path.join(self.checkpoint_dir, save_name),
             accelerator="gpu",
             devices=[0],
-            max_epochs=180,
+            max_epochs=200,
             callbacks= [checkpoint_callback],
-            check_val_every_n_epoch=10,
+            check_val_every_n_epoch=5,
             logger=logger
         )
 
@@ -162,6 +162,49 @@ class TrainingRunner:
         logger.experiment.finish()
 
         return model, result
+
+    def scan_hyperparams(self):
+        for num_layers, num_conv_layers, kernel_size, dropout_rate, momentum, lr, batch_size, zeta in product(
+                                                 [2,3,6],
+                                                 [2,3,5],
+                                                 [3,5,7],
+                                                 [0.0, 0.1, 0.2],
+                                                 [0.5, 0.8],
+                                                 [1e-2, 1e-3],
+                                                 [512, 128],
+                                                [0.1, 1]):
+            optimizer = "SGD"
+
+            # model_config = {"num_layers": num_layers,
+            #                 "activation": activation,
+            #                 "norm": False,
+            #                 "input_size": self.input_size,
+            #                 "hidden_size": self.input_size,
+            #                 "output_size": self.output_size}
+            model_config = {"num_layers": num_layers,
+                            "num_conv_layers": num_conv_layers,
+                            "kernel_size": kernel_size,
+                            "dropout_rate": dropout_rate,
+                            "activation": "LeakyReLU",
+                            "norm": True,
+                            "input_size": self.input_size,
+                            "hidden_size": self.output_size,
+                            "output_size": self.output_size}
+            optimizer_config = {"lr": lr,
+                                "momentum": momentum,}
+            loss_config = {"loss_name": "mse",
+                            "zeta": zeta}
+            if optimizer == "Adam":
+                optimizer_config = {"lr": lr}
+            misc_config = {"batch_size": batch_size}
+            self.set_dataloaders(batch_size=batch_size)
+
+            self.train_model(model_name="WideCNN",
+                             model_hparams=model_config,
+                             optimizer_name=optimizer,
+                             optimizer_hparams=optimizer_config,
+                             misc_hparams=misc_config,
+                             loss_hparams=loss_config)
 
     def train_linear_model(self, model_name, save_name=None, **kwargs):
         """Train model.
@@ -222,29 +265,6 @@ class TrainingRunner:
 
         return model, result
 
-    def scan_hyperparams(self):
-        for optimizer, num_layers, activation in product(["SGD", "Adam"],
-                                                                [2,3,4],
-                                                                ["LeakyReLU"]):
-
-            model_config = {"num_layers": num_layers,
-                            "activation": activation,
-                            "norm": False,
-                            "input_size": self.input_size,
-                            "hidden_size": self.input_size,
-                            "output_size": self.output_size}
-            optimizer_config = {"lr": 1e-2,
-                                "momentum": 0.9,}
-            if optimizer == "Adam":
-                optimizer_config = {"lr": 1e-2}
-            misc_config = {"batch_size": self.batch_size}
-
-            self.train_model(model_name="SequentialNN",
-                             model_hparams=model_config,
-                             optimizer_name=optimizer,
-                             optimizer_hparams=optimizer_config,
-                             misc_hparams=misc_config)
-
     def scan_linear_hyperparams(self):
         for optimizer, num_layers, hidden_size, Phi_sign in product(["SGD", "Adam"],
                                                     [2, 3],
@@ -275,8 +295,8 @@ class TrainingRunner:
         pretrained_filename = os.path.join(self.checkpoint_dir, model_name, "triple_correlation", model_id,
                                            "checkpoints", "*" + ".ckpt")
         print(pretrained_filename)
-        if os.path.isfile(glob.glob(pretrained_filename)[0]):
-            pretrained_filename = glob.glob(pretrained_filename)[0]
+        if os.path.isfile(glob.glob(pretrained_filename)[2]):
+            pretrained_filename = glob.glob(pretrained_filename)[2]
             print(
                 f"Found pretrained model at {pretrained_filename}, loading...")
             # Automatically loads the model with the saved hyperparameters
@@ -294,10 +314,24 @@ class TrainingRunner:
         y = trainer.predict(model, dataloaders=self.test_loader)
 
         print(y[0][0].numpy().shape)
+        print(y[0][2].numpy().shape)
+        # y[batch_idx][return_idx], return_idx 0...3: 0: Predictions, 1: Targets, 2: inputs, 3: encoded
         print("MSE Loss: ", np.mean((y[0][0].numpy() - y[0][1].numpy())**2))
 
         for i in range(len(y[0][0].numpy()[:,0])):
-            plt.plot(y[0][0].numpy()[i,:], label="Predictions")
-            plt.plot(y[0][1].numpy()[i,:], label="Targets")
-            plt.legend()
+            fig = plt.figure(figsize=(15, 5))
+            ax1, ax2, ax3 = fig.subplots(1, 3)
+
+            ax1.imshow(y[0][2].numpy()[i,:,:], origin="lower", vmin=-1, vmax=1)
+            ax1.set_title("Inputs")
+
+            ax2.plot(y[0][0].numpy()[i,:], label="Predictions")
+            ax2.plot(y[0][1].numpy()[i,:], label="Targets")
+            ax2.set_title("MSE Loss: " + str(nn.MSELoss(reduction='sum')(y[0][0][i,:], y[0][1][i,:]).item()))
+            ax2.legend()
+
+            ax3.imshow(y[0][3].numpy()[i,:,:], origin="lower", vmin=-1, vmax=1)
+            ax3.set_title("Encoded Prediction, MSE Loss: " + str(nn.MSELoss(reduction='sum')(y[0][3][i,:], y[0][2][i,:]).item()))
+
+            plt.tight_layout()
             plt.show()

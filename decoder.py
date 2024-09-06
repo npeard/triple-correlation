@@ -10,7 +10,7 @@ model_dict = {"SequentialNN": SequentialNN, "LinearNet": LinearNet, "WideCNN": W
 
 class ClosurePhaseDecoder(L.LightningModule):
     def __init__(self, model_name, model_hparams, optimizer_name,
-                 optimizer_hparams, misc_hparams):
+                 optimizer_hparams, misc_hparams, loss_hparams=None):
         """Decoder for the closure phase
 
         Args:
@@ -25,9 +25,12 @@ class ClosurePhaseDecoder(L.LightningModule):
         # Create model
         self.model = self.create_model(model_name, model_hparams)
         # Create loss module
-        self.loss_function = nn.MSELoss()
+        if loss_hparams is None:
+            self.loss_function = nn.MSELoss(reduction='sum')
+        else:
+            self.loss_function = self.get_loss_function(loss_hparams)
 
-        torch.set_float32_matmul_precision('medium')
+        torch.set_float32_matmul_precision('high')
 
     def create_model(self, model_name, model_hparams):
         if model_name in model_dict:
@@ -52,20 +55,25 @@ class ClosurePhaseDecoder(L.LightningModule):
         else:
             assert False, f'Unknown optimizer: "{self.hparams.optimizer_name}"'
 
-        # We will reduce the learning rate by 0.1 after 100 and 150 epochs
+        # We will reduce the learning rate by factor gamma at each milestone (epoch number)
         scheduler = optim.lr_scheduler.MultiStepLR(optimizer,
-                                                   milestones=[100, 150],
+                                                   milestones=[100, 170],
                                                    gamma=0.1)
         return [optimizer], [scheduler]
 
     def get_loss_function(self, loss_hparams):
+        # Choose the loss function
         if loss_hparams["loss_name"] == "mse":
-            self.loss_function = nn.MSELoss()
+            self.loss_function = nn.MSELoss(reduction='mean')
         else:
             assert False, f'Unknown loss: "{loss_hparams["loss_name"]}"'
 
-        # if loss_hparams["kappa"] > 0:
-        #     self.loss_function += loss_hparams["kappa"] * self.antisymmetry_loss()
+        if loss_hparams["zeta"] > 0:
+            self.zeta = loss_hparams["zeta"]
+        else:
+            self.zeta = None
+
+        return self.loss_function
 
     def antisymmetry_loss(self, outputs):
         # Punish phases that are not antisymmetric about the origin
@@ -80,6 +88,13 @@ class ClosurePhaseDecoder(L.LightningModule):
     def encoding_loss(self, outputs, inputs):
         # Punish phases that cannot be used to reconstruct the input cosPhi
 
+        encoded = self.encode(outputs)
+
+        return self.loss_function(encoded, inputs)
+
+    def encode(self, outputs):
+        # compute the encoded version of the outputs
+
         phase = outputs[:, outputs.size(1) // 2:]
 
         # Assuming phase is a batch input of phases as a PyTorch tensor
@@ -93,23 +108,33 @@ class ClosurePhaseDecoder(L.LightningModule):
                 torch.roll(phase[:,:], -n, dims=-1) - phase - phase[:, n].unsqueeze(-1))
 
         Phi = Phi[:, :phase_length // 2 + 1, :phase_length // 2 + 1]
-        Phi = Phi.reshape(batch_size, Phi.size(1)**2)
+        # Phi = Phi.reshape(batch_size, Phi.size(1)**2)
 
-        if self.linear_only:
-            return nn.functional.mse_loss(Phi, inputs)
-        else:
-            return nn.functional.mse_loss(torch.cos(Phi), inputs)
+        # if self.linear_only:
+        #     return Phi
+        # else:
+        return torch.cos(Phi)
+
 
     def training_step(self, batch, batch_idx):
         # training_step defines the train loop.
         # it is independent of forward
         x, y = batch
         if self.model_name == "WideCNN":
-            x = x.view(-1, 1, x.size(1), x.size(2))
+            # batch dim, channel dim, height dim, width dim
+            x_view = x.view(-1, 1, x.size(1), x.size(2))
         else:
-            x = x.view(-1, x.size(1)**2)
-        preds = self.model(x)
-        loss = self.loss_function(preds, y)
+            x_view = x.view(-1, x.size(1)**2)
+        preds = self.model(x_view)
+
+        # compute encoding loss
+        if self.zeta is not None:
+            encoded = self.encode(preds)
+            # x = torch.squeeze(x)
+            loss = self.loss_function(preds, y) + self.zeta * self.loss_function(encoded, x)
+        else:
+            loss = self.loss_function(preds, y)
+
         # acc = (preds == y).float().mean()
         # self.log("train_acc", acc, on_epoch=True)
         self.log("train_loss", loss, prog_bar=True, on_epoch=True)
@@ -119,11 +144,20 @@ class ClosurePhaseDecoder(L.LightningModule):
         # validation_step defines the validation loop.
         x, y = batch
         if self.model_name == "WideCNN":
-            x = x.view(-1, 1, x.size(1), x.size(2))
+            # batch dim, channel dim, height dim, width dim
+            x_view = x.view(-1, 1, x.size(1), x.size(2))
         else:
-            x = x.view(-1, x.size(1) ** 2)
-        preds = self.model(x)
-        loss = self.loss_function(preds, y)
+            x_view = x.view(-1, x.size(1) ** 2)
+        preds = self.model(x_view)
+
+        # compute encoding loss
+        if self.zeta is not None:
+            encoded = self.encode(preds)
+            # x = torch.squeeze(x)
+            loss = self.loss_function(preds, y) + self.zeta * self.loss_function(encoded, x)
+        else:
+            loss = self.loss_function(preds, y)
+
         # acc = (preds == y).float().mean()
         # self.log("val_acc", acc, on_epoch=True)
         self.log("val_loss", loss, prog_bar=True, on_epoch=True)
@@ -132,11 +166,20 @@ class ClosurePhaseDecoder(L.LightningModule):
     def test_step(self, batch, batch_idx):
         x, y = batch
         if self.model_name == "WideCNN":
-            x = x.view(-1, 1, x.size(1), x.size(2))
+            # batch dim, channel dim, height dim, width dim
+            x_view = x.view(-1, 1, x.size(1), x.size(2))
         else:
-            x = x.view(-1, x.size(1) ** 2)
-        preds = self.model(x)
-        loss = self.loss_function(preds, y)
+            x_view = x.view(-1, x.size(1) ** 2)
+        preds = self.model(x_view)
+
+        # compute encoding loss
+        if self.zeta is not None:
+            encoded = self.encode(preds)
+            # x = torch.squeeze(x)
+            loss = self.loss_function(preds, y) + self.zeta * self.loss_function(encoded, x)
+        else:
+            loss = self.loss_function(preds, y)
+
         # acc = (preds == y).float().mean()
         # self.log("test_acc", acc, on_epoch=True)
         self.log("test_loss", loss, prog_bar=True, on_epoch=True)
@@ -145,8 +188,10 @@ class ClosurePhaseDecoder(L.LightningModule):
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         x, y = batch
         if self.model_name == "WideCNN":
-            x = x.view(-1, 1, x.size(1), x.size(2))
+            x_view = x.view(-1, 1, x.size(1), x.size(2))
         else:
-            x = x.view(-1, x.size(1) ** 2)
-        y_hat = self.model(x)
-        return y_hat, y
+            x_view = x.view(-1, x.size(1) ** 2)
+
+        y_hat = self.model(x_view)
+        encoded = self.encode(y_hat)
+        return y_hat, y, x, encoded

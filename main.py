@@ -28,7 +28,7 @@ if __name__ == '__main__':
         #                                    file='C:\\Users\\npeard\\PycharmProjects\\triple-correlation\\data\\Test1D-kmax3-pix51-ideal-1e3.h5')
 
         valid_file = 'C:\\Users\\npeard\\PycharmProjects\\triple-correlation\\data\\Valid1D-kmax3-pix51-ideal-2e4.h5'
-        train_file = 'C:\\Users\\npeard\\PycharmProjects\\triple-correlation\\data\\Train1D-kmax3-pix51-ideal-1e6.h5'
+        train_file = 'C:\\Users\\npeard\\PycharmProjects\\triple-correlation\\data\\Train1D-kmax3-pix51-ideal-1e5.h5'
         test_file = 'C:\\Users\\npeard\\PycharmProjects\\triple-correlation\\data\\Test1D-kmax3-pix51-ideal-1e3.h5'
         # runner = train.TrainingRunner(train_file, valid_file, test_file, linear_only=True)
         # runner.scan_linear_hyperparams()
@@ -38,6 +38,8 @@ if __name__ == '__main__':
         #runner.plot_predictions(model_name="WideCNN", model_id="1nlw3uim") # trained, despite high validation loss
         #runner.plot_predictions(model_name="WideCNN", model_id="qh10ox39")
         #runner.plot_predictions(model_name="SequentialNN", model_id="r5ttwgoi")
+
+        # runner.plot_predictions(model_name="WideCNN", model_id="06bjdt3u")
 
         # These models are identical and show classic signs of overtraining
         # However, visual inspection of the predictions on the test set shows that the later epoch model is better. Why?
