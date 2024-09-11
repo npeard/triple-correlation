@@ -98,7 +98,9 @@ class ClosurePhaseDecoder(L.LightningModule):
     def encode(self, outputs):
         # compute the encoded version of the outputs
 
-        phase = outputs[:, outputs.size(1) // 2:]
+        phase_positive = outputs[:, outputs.size(1) // 2:]
+        phase_negative = torch.flip(outputs[:, :outputs.size(1) // 2+1], [1])
+        phase = (phase_positive - phase_negative) / 2
 
         # Assuming phase is a batch input of phases as a PyTorch tensor
         # Shape of phase: (batch_size, phase_length)
