@@ -20,7 +20,8 @@ class ClosurePhaseDecoder(L.LightningModule):
             optimizer_hparams: Hyperparameters for the optimizer, as dictionary. This includes learning rate, weight decay, etc.
         """
         super().__init__()
-        # Exports the hyperparameters to a YAML file, and create "self.hparams" namespace
+        # Exports the hyperparameters to a YAML file, and create "self.hparams"
+        # namespace
         self.save_hyperparameters()
         # Create model
         self.model = self.create_model(model_name, model_hparams)
@@ -37,7 +38,8 @@ class ClosurePhaseDecoder(L.LightningModule):
             self.model_name = model_name
             return model_dict[model_name](**model_hparams)
         else:
-            assert False, f'Unknown model name "{model_name}". Available models are: {str(model_dict.keys())}'
+            assert False, f'Unknown model name "{
+                model_name}". Available models are: {str(model_dict.keys())}'
 
     def forward(self, x):
         return self.model(x)
@@ -55,7 +57,8 @@ class ClosurePhaseDecoder(L.LightningModule):
         else:
             assert False, f'Unknown optimizer: "{self.hparams.optimizer_name}"'
 
-        # We will reduce the learning rate by factor gamma at each milestone (epoch number)
+        # We will reduce the learning rate by factor gamma at each milestone
+        # (epoch number)
         scheduler = optim.lr_scheduler.MultiStepLR(optimizer,
                                                    milestones=[50, 100],
                                                    gamma=0.1)
@@ -102,10 +105,11 @@ class ClosurePhaseDecoder(L.LightningModule):
         batch_size, phase_length = phase.shape
 
         # Calculate the phase difference array for each batch element
-        Phi = torch.zeros((batch_size, phase_length, phase_length)).type_as(outputs)
+        Phi = torch.zeros(
+            (batch_size, phase_length, phase_length)).type_as(outputs)
         for n in range(phase_length):
-            Phi[:, n, :] = torch.abs(
-                torch.roll(phase[:,:], -n, dims=-1) - phase - phase[:, n].unsqueeze(-1))
+            Phi[:, n, :] = torch.abs(torch.roll(
+                phase[:, :], -n, dims=-1) - phase - phase[:, n].unsqueeze(-1))
 
         Phi = Phi[:, :phase_length // 2 + 1, :phase_length // 2 + 1]
         # Phi = Phi.reshape(batch_size, Phi.size(1)**2)
@@ -114,7 +118,6 @@ class ClosurePhaseDecoder(L.LightningModule):
         #     return Phi
         # else:
         return torch.cos(Phi)
-
 
     def training_step(self, batch, batch_idx):
         # training_step defines the train loop.
@@ -131,7 +134,8 @@ class ClosurePhaseDecoder(L.LightningModule):
         if self.zeta is not None:
             encoded = self.encode(preds)
             # x = torch.squeeze(x)
-            loss = self.loss_function(preds, y) + self.zeta * self.loss_function(encoded, x)
+            loss = self.loss_function(
+                preds, y) + self.zeta * self.loss_function(encoded, x)
         else:
             loss = self.loss_function(preds, y)
 
@@ -154,7 +158,8 @@ class ClosurePhaseDecoder(L.LightningModule):
         if self.zeta is not None:
             encoded = self.encode(preds)
             # x = torch.squeeze(x)
-            loss = self.loss_function(preds, y) + self.zeta * self.loss_function(encoded, x)
+            loss = self.loss_function(
+                preds, y) + self.zeta * self.loss_function(encoded, x)
         else:
             loss = self.loss_function(preds, y)
 
@@ -176,7 +181,8 @@ class ClosurePhaseDecoder(L.LightningModule):
         if self.zeta is not None:
             encoded = self.encode(preds)
             # x = torch.squeeze(x)
-            loss = self.loss_function(preds, y) + self.zeta * self.loss_function(encoded, x)
+            loss = self.loss_function(
+                preds, y) + self.zeta * self.loss_function(encoded, x)
         else:
             loss = self.loss_function(preds, y)
 

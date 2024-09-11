@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 
-import os, sys, glob
+import os
+import sys
+import glob
 from torch import nn
 from torch.utils.data import Dataset, DataLoader
 import h5py
@@ -92,17 +94,30 @@ class TrainingRunner:
             dataset = cosPhiDataset(h5_file)
 
         # We can use DataLoader to get batches of data
-        dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle,
-                                num_workers=16, persistent_workers=True,
-                                pin_memory=True)
+        dataloader = DataLoader(
+            dataset,
+            batch_size=batch_size,
+            shuffle=shuffle,
+            num_workers=16,
+            persistent_workers=True,
+            pin_memory=True)
 
         return dataloader
 
     def set_dataloaders(self, batch_size=128):
         self.batch_size = batch_size
-        self.train_loader = self.get_custom_dataloader(self.training_h5, linear_only=self.linear_only, batch_size=self.batch_size)
-        self.valid_loader = self.get_custom_dataloader(self.validation_h5, linear_only=self.linear_only, batch_size=self.batch_size, shuffle=False)
-        self.test_loader = self.get_custom_dataloader(self.testing_h5, linear_only=self.linear_only, batch_size=self.batch_size, shuffle=False)
+        self.train_loader = self.get_custom_dataloader(
+            self.training_h5, linear_only=self.linear_only, batch_size=self.batch_size)
+        self.valid_loader = self.get_custom_dataloader(
+            self.validation_h5,
+            linear_only=self.linear_only,
+            batch_size=self.batch_size,
+            shuffle=False)
+        self.test_loader = self.get_custom_dataloader(
+            self.testing_h5,
+            linear_only=self.linear_only,
+            batch_size=self.batch_size,
+            shuffle=False)
 
     def train_model(self, model_name, save_name=None, **kwargs):
         """Train model.
@@ -115,9 +130,13 @@ class TrainingRunner:
             save_name = model_name
 
         # logger
-        logger = WandbLogger(project='triple_correlation',
-                             group=model_name, log_model=True,
-                             save_dir=os.path.join(self.checkpoint_dir, save_name))
+        logger = WandbLogger(
+            project='triple_correlation',
+            group=model_name,
+            log_model=True,
+            save_dir=os.path.join(
+                self.checkpoint_dir,
+                save_name))
 
         # callbacks
         # early stopping
@@ -138,7 +157,7 @@ class TrainingRunner:
             accelerator="gpu",
             devices=[0],
             max_epochs=200,
-            callbacks= [checkpoint_callback, early_stop_callback],
+            callbacks=[checkpoint_callback, early_stop_callback],
             check_val_every_n_epoch=5,
             logger=logger
         )
@@ -165,15 +184,7 @@ class TrainingRunner:
 
     def scan_hyperparams(self):
         for num_layers, num_conv_layers, kernel_size, dropout_rate, momentum, lr, batch_size, zeta, norm in product(
-                                                 [6, 10, 20],
-                                                 [5, 7, 30],
-                                                 [3, 5, 7],
-                                                 [0.0],
-                                                 [0.7],
-                                                 [1e-2],
-                                                 [256],
-                                                [0.7],
-                                                [False]):
+                [6, 10, 20], [5, 7, 30], [3, 5, 7], [0.0], [0.7], [1e-2], [256], [0.7], [False]):
             optimizer = "SGD"
 
             # model_config = {"num_layers": num_layers,
@@ -192,9 +203,9 @@ class TrainingRunner:
                             "hidden_size": self.output_size,
                             "output_size": self.output_size}
             optimizer_config = {"lr": lr,
-                                "momentum": momentum,}
+                                "momentum": momentum, }
             loss_config = {"loss_name": "mse",
-                            "zeta": zeta}
+                           "zeta": zeta}
             if optimizer == "Adam":
                 optimizer_config = {"lr": lr}
             misc_config = {"batch_size": batch_size}
@@ -268,38 +279,46 @@ class TrainingRunner:
 
     def scan_linear_hyperparams(self):
         for optimizer, num_layers, hidden_size, Phi_sign in product(["SGD", "Adam"],
-                                                    [2, 3],
-                                                    [self.input_size, 2*self.input_size, 3*self.input_size],
-                                                    [True, False]):
+                                                                    [2, 3],
+                                                                    [self.input_size, 2 * self.input_size, 3 * self.input_size],
+                                                                    [True, False]):
 
             model_config = {"num_layers": num_layers,
                             "norm": False,
                             "input_size": self.input_size,
                             "output_size": self.output_size,
                             "hidden_size": hidden_size,
-                            "Phi_sign": Phi_sign,}
+                            "Phi_sign": Phi_sign, }
             optimizer_config = {"lr": 1e-2,
-                                "momentum": 0.9,}
+                                "momentum": 0.9, }
             if optimizer == "Adam":
-                optimizer_config= {"lr": 1e-2}
+                optimizer_config = {"lr": 1e-2}
             misc_config = {"batch_size": self.batch_size}
 
             self.train_linear_model(model_name="LinearNet",
-                             model_hparams=model_config,
-                             optimizer_name=optimizer,
-                             optimizer_hparams=optimizer_config,
-                             misc_hparams=misc_config)
+                                    model_hparams=model_config,
+                                    optimizer_name=optimizer,
+                                    optimizer_hparams=optimizer_config,
+                                    misc_hparams=misc_config)
 
     def load_model(self, model_name="BottleCNN", model_id="5nozki8z"):
-        # Check whether pretrained model exists. If yes, load it and skip training
+        # Check whether pretrained model exists. If yes, load it and skip
+        # training
         print(self.checkpoint_dir)
-        pretrained_filename = os.path.join(self.checkpoint_dir, model_name, "triple_correlation", model_id,
-                                           "checkpoints", "*" + ".ckpt")
+        pretrained_filename = os.path.join(
+            self.checkpoint_dir,
+            model_name,
+            "triple_correlation",
+            model_id,
+            "checkpoints",
+            "*" + ".ckpt")
         pretrained_filename = glob.glob(pretrained_filename)[0]
         if os.path.isfile(pretrained_filename):
-            print(f"Found pretrained model at {pretrained_filename}, loading...")
+            print(f"Found pretrained model at {
+                  pretrained_filename}, loading...")
             # Automatically loads the model with the saved hyperparameters
-            model = ClosurePhaseDecoder.load_from_checkpoint(pretrained_filename)
+            model = ClosurePhaseDecoder.load_from_checkpoint(
+                pretrained_filename)
 
             return model
 
@@ -314,23 +333,40 @@ class TrainingRunner:
 
         print(y[0][0].numpy().shape)
         print(y[0][2].numpy().shape)
-        # y[batch_idx][return_idx], return_idx 0...3: 0: Predictions, 1: Targets, 2: inputs, 3: encoded
+        # y[batch_idx][return_idx], return_idx 0...3: 0: Predictions, 1:
+        # Targets, 2: inputs, 3: encoded
         print("MSE Loss: ", np.mean((y[0][0].numpy() - y[0][1].numpy())**2))
 
-        for i in range(len(y[0][0].numpy()[:,0])):
+        for i in range(len(y[0][0].numpy()[:, 0])):
             fig = plt.figure(figsize=(15, 5))
             ax1, ax2, ax3 = fig.subplots(1, 3)
 
-            ax1.imshow(y[0][2].numpy()[i,:,:], origin="lower", vmin=-1, vmax=1)
+            ax1.imshow(
+                y[0][2].numpy()[
+                    i,
+                    :,
+                    :],
+                origin="lower",
+                vmin=-1,
+                vmax=1)
             ax1.set_title("Inputs")
 
-            ax2.plot(y[0][0].numpy()[i,:], label="Predictions")
-            ax2.plot(y[0][1].numpy()[i,:], label="Targets")
-            ax2.set_title("MSE Loss: " + str(nn.MSELoss(reduction='sum')(y[0][0][i,:], y[0][1][i,:]).item()))
+            ax2.plot(y[0][0].numpy()[i, :], label="Predictions")
+            ax2.plot(y[0][1].numpy()[i, :], label="Targets")
+            ax2.set_title("MSE Loss: " + str(nn.MSELoss(reduction='sum')
+                          (y[0][0][i, :], y[0][1][i, :]).item()))
             ax2.legend()
 
-            ax3.imshow(y[0][3].numpy()[i,:,:], origin="lower", vmin=-1, vmax=1)
-            ax3.set_title("Encoded Prediction, MSE Loss: " + str(nn.MSELoss(reduction='sum')(y[0][3][i,:], y[0][2][i,:]).item()))
+            ax3.imshow(
+                y[0][3].numpy()[
+                    i,
+                    :,
+                    :],
+                origin="lower",
+                vmin=-1,
+                vmax=1)
+            ax3.set_title("Encoded Prediction, MSE Loss: " +
+                          str(nn.MSELoss(reduction='sum')(y[0][3][i, :], y[0][2][i, :]).item()))
 
             plt.tight_layout()
             plt.show()
