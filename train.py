@@ -123,7 +123,7 @@ class TrainingRunner:
         # early stopping
         early_stop_callback = EarlyStopping(monitor="val_loss",
                                             min_delta=0.00,
-                                            patience=5,
+                                            patience=3,
                                             verbose=True,
                                             mode="min")
         checkpoint_callback = ModelCheckpoint(save_weights_only=True,
@@ -165,15 +165,15 @@ class TrainingRunner:
 
     def scan_hyperparams(self):
         for num_layers, num_conv_layers, kernel_size, dropout_rate, momentum, lr, batch_size, zeta, norm in product(
-                                                 [3,6],
-                                                 [3,5],
-                                                 [3,5,7],
-                                                 [0.0, 0.1, 0.2],
-                                                 [0.5, 0.8],
-                                                 [1e-2, 1e-3],
-                                                 [128],
-                                                [0.5, 1],
-                                                [True, False]):
+                                                 [6, 10, 20],
+                                                 [5, 7, 30],
+                                                 [3, 5, 7],
+                                                 [0.0],
+                                                 [0.7],
+                                                 [1e-2],
+                                                 [256],
+                                                [0.7],
+                                                [False]):
             optimizer = "SGD"
 
             # model_config = {"num_layers": num_layers,

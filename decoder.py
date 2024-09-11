@@ -57,7 +57,7 @@ class ClosurePhaseDecoder(L.LightningModule):
 
         # We will reduce the learning rate by factor gamma at each milestone (epoch number)
         scheduler = optim.lr_scheduler.MultiStepLR(optimizer,
-                                                   milestones=[100, 170],
+                                                   milestones=[50, 100],
                                                    gamma=0.1)
         return [optimizer], [scheduler]
 
