@@ -101,7 +101,7 @@ class TrainingRunner:
             dataset,
             batch_size=batch_size,
             shuffle=shuffle,
-            num_workers=16,
+            num_workers=1,
             persistent_workers=True,
             pin_memory=True)
 
@@ -252,10 +252,10 @@ class TrainingRunner:
         # Create a PyTorch Lightning trainer with the generation callback
         trainer = L.Trainer(
             default_root_dir=os.path.join(self.checkpoint_dir, save_name),
-            accelerator="gpu",
-            devices=[0],
-            max_epochs=180,
-            callbacks=[early_stop_callback, checkpoint_callback],
+            accelerator="cpu",
+            #devices=[0],
+            max_epochs=1000,
+            callbacks=[checkpoint_callback],
             check_val_every_n_epoch=10,
             logger=logger
         )
@@ -273,36 +273,39 @@ class TrainingRunner:
                                   verbose=False)
         test_result = trainer.test(model, dataloaders=self.test_loader,
                                    verbose=False)
-        result = {"test": test_result[0]["test_acc"],
-                  "val": val_result[0]["test_acc"]}
+        result = {"test": test_result[0]["test_loss"],
+                  "val": val_result[0]["test_loss"]}
 
         logger.experiment.finish()
 
         return model, result
 
     def scan_linear_hyperparams(self):
-        for optimizer, num_layers, hidden_size, Phi_sign in product(["SGD", "Adam"],
+        for optimizer, num_layers, hidden_size, Phi_signed in product(["Adam"],
                                                                     [2, 3],
                                                                     [self.input_size, 2 * self.input_size, 3 * self.input_size],
-                                                                    [True, False]):
+                                                                    [True]):
 
             model_config = {"num_layers": num_layers,
                             "norm": False,
                             "input_size": self.input_size,
                             "output_size": self.output_size,
                             "hidden_size": hidden_size,
-                            "Phi_sign": Phi_sign, }
+                            "Phi_signed": Phi_signed, }
             optimizer_config = {"lr": 1e-2,
                                 "momentum": 0.9, }
             if optimizer == "Adam":
-                optimizer_config = {"lr": 1e-2}
+                optimizer_config = {"lr": 1e-3}
+            loss_config = {"loss_name": "mse",
+                           "zeta": 0}
             misc_config = {"batch_size": self.batch_size}
 
             self.train_linear_model(model_name="LinearNet",
                                     model_hparams=model_config,
                                     optimizer_name=optimizer,
                                     optimizer_hparams=optimizer_config,
-                                    misc_hparams=misc_config)
+                                    misc_hparams=misc_config,
+                                    loss_hparams=loss_config)
 
     def load_model(self, model_name="BottleCNN", model_id="5nozki8z"):
         # Check whether pretrained model exists. If yes, load it and skip

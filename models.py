@@ -13,8 +13,6 @@ class AbsBlock(nn.Module):
     def forward(self, x):
         return torch.abs(x)
 
-# Define a linear network
-
 
 class LinearNet(nn.Module):
     def __init__(
@@ -24,10 +22,10 @@ class LinearNet(nn.Module):
             hidden_size,
             output_size,
             norm=False,
-            Phi_sign=False):
+            Phi_signed=False):
         super(LinearNet, self).__init__()
         self.layers = []
-        if not Phi_sign:
+        if not Phi_signed:
             self.layers.append(AbsBlock())
         if num_layers > 1:
             self.layers.append(nn.Linear(input_size, hidden_size))
@@ -46,7 +44,6 @@ class LinearNet(nn.Module):
         return pred
 
 
-# Define a sequential dense network
 class MLP(nn.Module):
     def __init__(self, input_size, num_layers, output_size, hidden_size=None,
                  activation="Tanh", norm=False):

@@ -24,12 +24,15 @@ if __name__ == '__main__':
         """Run functions in this scratch area. 
         """
 
-
-        #decoder = decoder.ClosurePhaseDecoder()
-        phase = decoder.ClosurePhaseDecoder.generate_pretraining_data(
-            num_pix=7, num_samples=1,
-                                             file_path="./data/test.h5")
-        print(phase)
+        # decoder.ClosurePhaseDecoder.generate_pretraining_data(
+        #     num_pix=7, num_samples=100,
+        #     file_path="./data/pretrain_numpix7_1e2_samples.h5")
+        
+        train_file = './data/pretrain_numpix7_1e2_samples.h5'
+        runner = train.TrainingRunner(train_file, train_file, train_file,
+                                      linear_only=True)
+        runner.scan_linear_hyperparams()
+        
 
 
         # triphase1d.generate_training_set_from_reverse(num_data=int(1e3),
