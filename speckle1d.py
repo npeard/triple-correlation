@@ -345,7 +345,7 @@ class Fluorescence1D:
         Computes the cosine of the phase difference array.
 
         Parameters:
-            phase (ndarray): The phase array.
+            phase (ndarray): The phase array, both sides of origin
 
         Returns:
             ndarray: The cosine of the phase difference array.

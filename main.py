@@ -24,16 +24,24 @@ if __name__ == '__main__':
         """Run functions in this scratch area. 
         """
 
+
+        #decoder = decoder.ClosurePhaseDecoder()
+        phase = decoder.ClosurePhaseDecoder.generate_pretraining_data(
+            num_pix=7, num_samples=1,
+                                             file_path="./data/test.h5")
+        print(phase)
+
+
         # triphase1d.generate_training_set_from_reverse(num_data=int(1e3),
         #                                    file='C:\\Users\\npeard\\PycharmProjects\\triple-correlation\\data\\Test1D-kmax3-pix51-ideal-1e3.h5')
 
-        valid_file = 'C:\\Users\\npeard\\PycharmProjects\\triple-correlation\\data\\Valid1D-kmax3-pix51-ideal-2e4.h5'
-        train_file = 'C:\\Users\\npeard\\PycharmProjects\\triple-correlation\\data\\Train1D-kmax3-pix51-ideal-1e5.h5'
-        test_file = 'C:\\Users\\npeard\\PycharmProjects\\triple-correlation\\data\\Test1D-kmax3-pix51-ideal-1e3.h5'
-        # runner = train.TrainingRunner(train_file, valid_file, test_file, linear_only=True)
-        # runner.scan_linear_hyperparams()
-        runner = train.TrainingRunner(train_file, valid_file, test_file)
-        runner.scan_hyperparams()
+        # valid_file = 'C:\\Users\\npeard\\PycharmProjects\\triple-correlation\\data\\Valid1D-kmax3-pix51-ideal-2e4.h5'
+        # train_file = 'C:\\Users\\npeard\\PycharmProjects\\triple-correlation\\data\\Train1D-kmax3-pix51-ideal-1e5.h5'
+        # test_file = 'C:\\Users\\npeard\\PycharmProjects\\triple-correlation\\data\\Test1D-kmax3-pix51-ideal-1e3.h5'
+        # # runner = train.TrainingRunner(train_file, valid_file, test_file, linear_only=True)
+        # # runner.scan_linear_hyperparams()
+        # runner = train.TrainingRunner(train_file, valid_file, test_file)
+        # runner.scan_hyperparams()
 
         # Narrow CNN
         # runner.plot_predictions()

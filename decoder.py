@@ -4,6 +4,10 @@ from torch import optim, nn
 import torch
 import lightning as L
 from models import MLP, LinearNet, BottleCNN
+from tqdm import tqdm
+import utils
+import numpy as np
+from speckle1d import Fluorescence1D
 
 model_dict = {"MLP": MLP, "LinearNet": LinearNet, "BottleCNN": BottleCNN}
 
@@ -47,8 +51,8 @@ class ClosurePhaseDecoder(L.LightningModule):
     def configure_optimizers(self):
         # We will support Adam or SGD as optimizers.
         if self.hparams.optimizer_name == "Adam":
-            # AdamW is Adam with a correct implementation of weight decay (see here
-            # for details: https://arxiv.org/pdf/1711.05101.pdf)
+            # AdamW is Adam with a correct implementation of weight decay
+            # (see here for details: https://arxiv.org/pdf/1711.05101.pdf)
             optimizer = optim.AdamW(self.parameters(),
                                     **self.hparams.optimizer_hparams)
         elif self.hparams.optimizer_name == "SGD":
@@ -58,10 +62,10 @@ class ClosurePhaseDecoder(L.LightningModule):
             assert False, f'Unknown optimizer: "{self.hparams.optimizer_name}"'
 
         # We will reduce the learning rate by factor gamma at each milestone
-        # (epoch number)
+        # (epoch number). Setting gamma to 1.0 has no effect on learning rate.
         scheduler = optim.lr_scheduler.MultiStepLR(optimizer,
                                                    milestones=[50, 100],
-                                                   gamma=0.1)
+                                                   gamma=1.)
         return [optimizer], [scheduler]
 
     def get_loss_function(self, loss_hparams):
@@ -91,15 +95,16 @@ class ClosurePhaseDecoder(L.LightningModule):
     def encoding_loss(self, outputs, inputs):
         # Punish phases that cannot be used to reconstruct the input cosPhi
 
-        encoded = self.encode(outputs)
+        encoded = torch.cos(self.encode(outputs))
 
         return self.loss_function(encoded, inputs)
 
-    def encode(self, outputs):
+    @staticmethod
+    def encode(outputs):
         # compute the encoded version of the outputs
 
         phase_positive = outputs[:, outputs.size(1) // 2:]
-        phase_negative = torch.flip(outputs[:, :outputs.size(1) // 2+1], [1])
+        phase_negative = torch.flip(outputs[:, :outputs.size(1) // 2 + 1], [1])
         phase = (phase_positive - phase_negative) / 2
 
         # Assuming phase is a batch input of phases as a PyTorch tensor
@@ -114,12 +119,27 @@ class ClosurePhaseDecoder(L.LightningModule):
                 phase[:, :], -n, dims=-1) - phase - phase[:, n].unsqueeze(-1))
 
         Phi = Phi[:, :phase_length // 2 + 1, :phase_length // 2 + 1]
-        # Phi = Phi.reshape(batch_size, Phi.size(1)**2)
 
-        # if self.linear_only:
-        #     return Phi
-        # else:
-        return torch.cos(Phi)
+        return Phi
+
+    @staticmethod
+    def generate_pretraining_data(num_pix, num_samples, file_path):
+        # Generate pretraining data
+        # num_pix: number of pixels in each sample
+
+        for _ in tqdm(range(num_samples)):
+            phase = np.random.uniform(-np.pi, np.pi, num_pix // 2)
+            phase = np.concatenate((-phase, np.zeros(1), np.flip(phase)))
+            
+            # These lines work in PyTorch
+            # phase = torch.FloatTensor(phase)
+            # Phi = ClosurePhaseDecoder.encode(phase.unsqueeze(0))
+            
+            # Use this Numpy module for JIT compilation speeds and compatibility
+            # with h5py concatenation
+            Phi = Fluorescence1D.compute_Phi_from_phase(phase[num_pix // 2:])
+
+            utils.append_to_h5file(np.cos(Phi), Phi, phase, file_path)
 
     def training_step(self, batch, batch_idx):
         # training_step defines the train loop.

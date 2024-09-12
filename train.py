@@ -29,7 +29,7 @@ class PhiDataset(Dataset):
         # solves issue where hdf5 file opened in __init__ prevents multiple
         # workers: https://github.com/pytorch/pytorch/issues/11929
         self.file = h5py.File(self.h5_file, 'r')
-        self.inputs = self.file["Phi_marginal"]
+        self.inputs = self.file["Phi"]
         self.targets = self.file["phase"]
 
     def __len__(self):
@@ -54,7 +54,11 @@ class cosPhiDataset(Dataset):
         # solves issue where hdf5 file opened in __init__ prevents multiple
         # workers: https://github.com/pytorch/pytorch/issues/11929
         self.file = h5py.File(self.h5_file, 'r')
-        self.inputs = self.file["cosPhi_marginal"]
+        if "cosPhi" in self.file.keys():
+            self.inputs = self.file["cosPhi"]
+        # else:
+        #     self.inputs = self.file["Phi"]
+        #     self.inputs = np.cos(self.inputs)
         self.targets = self.file["phase"]
 
     def __len__(self):
@@ -64,7 +68,6 @@ class cosPhiDataset(Dataset):
         if not self.opened_flag:  # not hasattr(self, 'h5_file'):
             self.open_hdf5()
             self.opened_flag = True
-            # print("open_hdf5 finished")
         return FloatTensor(self.inputs[idx]), FloatTensor(self.targets[idx])
 
 
