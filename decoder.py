@@ -64,8 +64,8 @@ class ClosurePhaseDecoder(L.LightningModule):
         # We will reduce the learning rate by factor gamma at each milestone
         # (epoch number). Setting gamma to 1.0 has no effect on learning rate.
         scheduler = optim.lr_scheduler.MultiStepLR(optimizer,
-                                                   milestones=[50, 100],
-                                                   gamma=1.)
+                                                   milestones=[250, 500],
+                                                   gamma=1)
         return [optimizer], [scheduler]
 
     def get_loss_function(self, loss_hparams):

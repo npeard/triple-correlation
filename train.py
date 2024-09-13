@@ -292,13 +292,15 @@ class TrainingRunner:
                             "output_size": self.output_size,
                             "hidden_size": hidden_size,
                             "Phi_signed": Phi_signed, }
-            optimizer_config = {"lr": 1e-2,
+            optimizer_config = {"lr": 1e-3,
                                 "momentum": 0.9, }
             if optimizer == "Adam":
                 optimizer_config = {"lr": 1e-3}
             loss_config = {"loss_name": "mse",
                            "zeta": 0}
-            misc_config = {"batch_size": self.batch_size}
+            batch_size = 16
+            misc_config = {"batch_size": batch_size}
+            self.set_dataloaders(batch_size=batch_size)
 
             self.train_linear_model(model_name="LinearNet",
                                     model_hparams=model_config,
