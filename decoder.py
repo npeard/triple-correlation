@@ -115,7 +115,7 @@ class ClosurePhaseDecoder(L.LightningModule):
         Phi = torch.zeros(
             (batch_size, phase_length, phase_length)).type_as(outputs)
         for n in range(phase_length):
-            Phi[:, n, :] = torch.abs(torch.roll(
+            Phi[:, n, :] = (torch.roll(
                 phase[:, :], -n, dims=-1) - phase - phase[:, n].unsqueeze(-1))
 
         Phi = Phi[:, :phase_length // 2 + 1, :phase_length // 2 + 1]

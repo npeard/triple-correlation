@@ -336,7 +336,7 @@ class Fluorescence1D:
         Phi = self.compute_Phi_from_phase(true_phase)
         cosPhi = np.cos(Phi)
 
-        return cosPhi, Phi
+        return cosPhi, np.abs(Phi)
 
     @staticmethod
     @jit(nopython=True, parallel=False)
@@ -348,12 +348,11 @@ class Fluorescence1D:
             phase (ndarray): The phase array, both sides of origin
 
         Returns:
-            ndarray: The cosine of the phase difference array.
+            ndarray: The signed phase difference array
         """
         Phi = np.zeros((phase.shape[0], phase.shape[0]))
         for n in range(phase.shape[0]):
-            Phi[n, :] = (
-                np.abs(np.roll(phase, -n) - phase - phase[n]))
+            Phi[n, :] = (np.roll(phase, -n) - phase - phase[n])
         Phi = Phi[:phase.shape[0] // 2 + 1, :phase.shape[0] // 2 + 1]
 
         return Phi

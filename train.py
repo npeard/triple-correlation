@@ -334,8 +334,8 @@ class TrainingRunner:
 
         model = self.load_model(model_name=model_name, model_id=model_id)
         trainer = L.Trainer(
-            accelerator="gpu",
-            devices=[0]
+            accelerator="cpu",
+            #devices=[0]
         )
         y = trainer.predict(model, dataloaders=self.test_loader)
 

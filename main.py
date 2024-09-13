@@ -25,13 +25,14 @@ if __name__ == '__main__':
         """
 
         # decoder.ClosurePhaseDecoder.generate_pretraining_data(
-        #     num_pix=11, num_samples=100,
-        #     file_path="./data/pretrain_numpix11_1e2_samples.h5")
+        #     num_pix=7, num_samples=100,
+        #     file_path="./data/pretrain_numpix7_1e2_samples.h5")
         
-        train_file = './data/pretrain_numpix11_1e2_samples.h5'
+        train_file = './data/pretrain_numpix7_1e2_samples.h5'
         runner = train.TrainingRunner(train_file, train_file, train_file,
                                       linear_only=True)
         runner.scan_linear_hyperparams()
+        # runner.plot_predictions(model_name="LinearNet", model_id="hln8hrke")
         
 
 
