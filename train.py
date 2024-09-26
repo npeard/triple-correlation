@@ -55,7 +55,8 @@ class SignPhiDataset(Dataset):
         # workers: https://github.com/pytorch/pytorch/issues/11929
         self.file = h5py.File(self.h5_file, 'r')
         self.inputs = self.file["Phi"]
-        self.targets = np.sign(self.inputs)
+        self.targets = (np.sign(self.inputs) + 1) / 2
+        # Map (-1, 1) to (0, 1) so that we can use BCELoss
 
     def __len__(self):
         return self.length
@@ -98,11 +99,12 @@ class cosPhiDataset(Dataset):
 
 class TrainingRunner:
     def __init__(self, training_h5, validation_h5, testing_h5,
-                 linear_only=False):
+                 linear_only=False, sign_only=False):
         self.training_h5 = training_h5
         self.validation_h5 = validation_h5
         self.testing_h5 = testing_h5
         self.linear_only = linear_only
+        self.sign_only = sign_only
 
         # get dataloaders
         self.set_dataloaders()
@@ -110,14 +112,18 @@ class TrainingRunner:
         # dimensions
         self.input_size = next(iter(self.train_loader))[0].size(-1) ** 2
         self.output_size = next(iter(self.train_loader))[1].size(-1)
+        if sign_only:
+            self.output_size = self.output_size**2
 
         # directories
         self.checkpoint_dir = "./checkpoints"
 
     def get_custom_dataloader(self, h5_file, batch_size=128, shuffle=True,
-                              linear_only=False):
+                              linear_only=False, sign_only=False):
         if linear_only:
             dataset = PhiDataset(h5_file)
+            if sign_only:
+                dataset = SignPhiDataset(h5_file)
         else:
             dataset = cosPhiDataset(h5_file)
 
@@ -135,16 +141,20 @@ class TrainingRunner:
     def set_dataloaders(self, batch_size=128):
         self.batch_size = batch_size
         self.train_loader = self.get_custom_dataloader(
-            self.training_h5, linear_only=self.linear_only, batch_size=self.batch_size)
+            self.training_h5, batch_size=self.batch_size,
+            linear_only=self.linear_only,
+            sign_only=self.sign_only)
         self.valid_loader = self.get_custom_dataloader(
             self.validation_h5,
-            linear_only=self.linear_only,
             batch_size=self.batch_size,
+            linear_only=self.linear_only,
+            sign_only=self.sign_only,
             shuffle=False)
         self.test_loader = self.get_custom_dataloader(
             self.testing_h5,
-            linear_only=self.linear_only,
             batch_size=self.batch_size,
+            linear_only=self.linear_only,
+            sign_only=self.sign_only,
             shuffle=False)
 
     def train_model(self, model_name, save_name=None, **kwargs):
@@ -183,9 +193,9 @@ class TrainingRunner:
         trainer = L.Trainer(
             default_root_dir=os.path.join(self.checkpoint_dir, save_name),
             accelerator="cpu",
-            #devices=[0],
+            # devices=[0],
             max_epochs=1000,
-            #callbacks=[checkpoint_callback, early_stop_callback],
+            # callbacks=[checkpoint_callback, early_stop_callback],
             callbacks=[checkpoint_callback],
             check_val_every_n_epoch=10,
             logger=logger
@@ -214,8 +224,8 @@ class TrainingRunner:
     def scan_hyperparams(self):
         for (num_layers, num_conv_layers, kernel_size, dropout_rate, momentum,
              lr, batch_size, zeta, norm, hidden_size) in product(
-                [2,3], [None], [None], [0.0], [0.9], [1e-3], [16],
-                [0.0], [False], [self.input_size, 2*self.input_size]):
+                [2, 3], [None], [None], [0.0], [0.9], [1e-3], [16],
+                [0.0], [False], [self.input_size, 2 * self.input_size]):
             optimizer = "Adam"
 
             model_config = {"num_layers": num_layers,
@@ -236,14 +246,14 @@ class TrainingRunner:
             #                 "output_size": self.output_size}
             optimizer_config = {"lr": lr,
                                 "momentum": momentum, }
-            loss_config = {"loss_name": "mse",
+            loss_config = {"loss_name": "bce_logits",
                            "zeta": zeta}
             if optimizer == "Adam":
                 optimizer_config = {"lr": lr}
             misc_config = {"batch_size": batch_size}
             self.set_dataloaders(batch_size=batch_size)
 
-            self.train_model(model_name="MLP",
+            self.train_model(model_name="SignMLP",
                              model_hparams=model_config,
                              optimizer_name=optimizer,
                              optimizer_hparams=optimizer_config,
@@ -282,7 +292,7 @@ class TrainingRunner:
         trainer = L.Trainer(
             default_root_dir=os.path.join(self.checkpoint_dir, save_name),
             accelerator="cpu",
-            #devices=[0],
+            # devices=[0],
             max_epochs=1000,
             callbacks=[checkpoint_callback],
             check_val_every_n_epoch=10,
@@ -310,10 +320,10 @@ class TrainingRunner:
         return model, result
 
     def scan_linear_hyperparams(self):
-        for optimizer, num_layers, hidden_size, Phi_signed in product(["SGD"],
-                                                                    [2, 3],
-                                                                    [self.input_size, 2 * self.input_size, 3 * self.input_size],
-                                                                    [False]):
+        for optimizer, num_layers, hidden_size, Phi_signed in product(
+            ["SGD"], [
+                2, 3], [
+                self.input_size, 2 * self.input_size, 3 * self.input_size], [False]):
 
             model_config = {"num_layers": num_layers,
                             "norm": False,
@@ -364,7 +374,7 @@ class TrainingRunner:
         model = self.load_model(model_name=model_name, model_id=model_id)
         trainer = L.Trainer(
             accelerator="cpu",
-            #devices=[0]
+            # devices=[0]
         )
         y = trainer.predict(model, dataloaders=self.test_loader)
 
@@ -394,9 +404,52 @@ class TrainingRunner:
                           (y[0][0][i, :], y[0][1][i, :]).item()))
             ax2.legend()
 
-            ax3.imshow(y[0][3].numpy()[i,:,:], origin="lower", vmin=-1, vmax=1)
+            ax3.imshow(
+                y[0][3].numpy()[
+                    i,
+                    :,
+                    :],
+                origin="lower",
+                vmin=-1,
+                vmax=1)
             ax3.set_title("Encoded Prediction, MSE Loss: " +
                           str(nn.MSELoss(reduction='sum')(y[0][3][i, :], y[0][2][i, :]).item()))
+
+            plt.tight_layout()
+            plt.show()
+
+    def plot_sign_predictions(self, model_name="SignMLP",
+                              model_id="i52c3rlz"):
+
+        model = self.load_model(model_name=model_name, model_id=model_id)
+        trainer = L.Trainer(
+            accelerator="cpu",
+            # devices=[0]
+        )
+        y = trainer.predict(model, dataloaders=self.test_loader)
+
+        print(y[0][0].numpy().shape)
+        print(y[0][2].numpy().shape)
+        # y[batch_idx][return_idx], return_idx 0...2: 0: Predictions, 1:
+        # Targets, 2: inputs
+        print("MSE Loss: ", np.mean((y[0][0].numpy() - y[0][1].numpy())**2))
+
+        for i in range(len(y[0][0].numpy()[:, 0])):
+            fig = plt.figure(figsize=(10, 5))
+            ax1, ax2, ax3 = fig.subplots(1, 3)
+
+            ax1.imshow(y[0][2].numpy()[i, :, :], origin="lower", vmin=-1,
+                       vmax=1)
+            ax1.set_title("Inputs")
+
+            ax2.imshow(y[0][1].numpy()[i, :, :], origin="lower", vmin=-1,
+                       vmax=1)
+            ax2.set_title("Targets")
+
+            ax3.imshow(y[0][0].numpy()[i, :, :], origin="lower", vmin=-1,
+                       vmax=1)
+            ax3.set_title("Predictions, MSE Loss: " + str(nn.MSELoss(
+                reduction='sum')(y[0][0][i, :], y[0][1][i, :]).item()))
 
             plt.tight_layout()
             plt.show()

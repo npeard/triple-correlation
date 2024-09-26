@@ -30,10 +30,11 @@ if __name__ == '__main__':
         
         train_file = './data/pretrain_numpix9_1e2_samples.h5'
         runner = train.TrainingRunner(train_file, train_file, train_file,
-                                      linear_only=True)
+                                      linear_only=True, sign_only=True)
         #runner.scan_linear_hyperparams()
         #runner.scan_hyperparams()
-        runner.plot_predictions(model_name="MLP", model_id="mwbrj699")
+        #runner.plot_predictions(model_name="MLP", model_id="mwbrj699")
+        runner.plot_sign_predictions(model_name="SignMLP", model_id="jrcgbn9a")
 
 
     else:

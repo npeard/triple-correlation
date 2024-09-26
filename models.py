@@ -70,6 +70,24 @@ class MLP(nn.Module):
         self.model = nn.Sequential(*self.layers)
 
     def forward(self, x):
+        output = self.model(x)
+        return output
+    
+
+class PhaseMLP(nn.Module):
+    def __init__(self, input_size, num_layers, output_size, hidden_size=None,
+                 activation="Tanh", norm=False, Phi_signed=False):
+        super(PhaseMLP, self).__init__()
+        self.model = MLP(
+            input_size=input_size,
+            num_layers=num_layers,
+            output_size=output_size,
+            hidden_size=hidden_size,
+            activation=activation,
+            norm=norm,
+            Phi_signed=Phi_signed)
+
+    def forward(self, x):
         phase = self.model(x)
         pred = torch.atan2(torch.sin(phase), torch.cos(phase))
         return pred

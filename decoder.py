@@ -3,13 +3,11 @@
 from torch import optim, nn
 import torch
 import lightning as L
-from models import MLP, LinearNet, BottleCNN
+from models import PhaseMLP, LinearNet, BottleCNN, MLP
 from tqdm import tqdm
 import utils
 import numpy as np
 from speckle1d import Fluorescence1D
-
-model_dict = {"MLP": MLP, "LinearNet": LinearNet, "BottleCNN": BottleCNN}
 
 
 class ClosurePhaseDecoder(L.LightningModule):
@@ -38,6 +36,9 @@ class ClosurePhaseDecoder(L.LightningModule):
         torch.set_float32_matmul_precision('high')
 
     def create_model(self, model_name, model_hparams):
+        model_dict = {"PhaseMLP": PhaseMLP, "LinearNet": LinearNet,
+                      "BottleCNN": BottleCNN, "SignMLP": MLP}
+        
         if model_name in model_dict:
             self.model_name = model_name
             return model_dict[model_name](**model_hparams)
@@ -72,6 +73,8 @@ class ClosurePhaseDecoder(L.LightningModule):
         # Choose the loss function
         if loss_hparams["loss_name"] == "mse":
             self.loss_function = nn.MSELoss(reduction='mean')
+        elif loss_hparams["loss_name"] == "bce_logits":
+            self.loss_function = nn.BCEWithLogitsLoss()
         else:
             assert False, f'Unknown loss: "{loss_hparams["loss_name"]}"'
 
@@ -152,13 +155,16 @@ class ClosurePhaseDecoder(L.LightningModule):
         else:
             x_view = x.view(-1, x.size(1)**2)
         preds = self.model(x_view)
-
+        
+        if self.model_name == "SignMLP":
+            y = y.view(-1, y.size(1) ** 2)
+        
         # compute encoding loss
         if self.zeta is not None:
             encoded = self.encode(preds)
             # x = torch.squeeze(x)
-            loss = self.loss_function(
-                preds, y) + self.zeta * self.loss_function(encoded, x)
+            loss = (self.loss_function(preds, y)
+                    + self.zeta * self.loss_function(encoded, x))
         else:
             loss = self.loss_function(preds, y)
 
@@ -176,13 +182,16 @@ class ClosurePhaseDecoder(L.LightningModule):
         else:
             x_view = x.view(-1, x.size(1) ** 2)
         preds = self.model(x_view)
-
+        
+        if self.model_name == "SignMLP":
+            y = y.view(-1, y.size(1) ** 2)
+        
         # compute encoding loss
         if self.zeta is not None:
             encoded = self.encode(preds)
             # x = torch.squeeze(x)
-            loss = self.loss_function(
-                preds, y) + self.zeta * self.loss_function(encoded, x)
+            loss = (self.loss_function(preds, y)
+                    + self.zeta * self.loss_function(encoded, x))
         else:
             loss = self.loss_function(preds, y)
 
@@ -199,13 +208,16 @@ class ClosurePhaseDecoder(L.LightningModule):
         else:
             x_view = x.view(-1, x.size(1) ** 2)
         preds = self.model(x_view)
+        
+        if self.model_name == "SignMLP":
+            y = y.view(-1, y.size(1) ** 2)
 
         # compute encoding loss
         if self.zeta is not None:
             encoded = self.encode(preds)
             # x = torch.squeeze(x)
-            loss = self.loss_function(
-                preds, y) + self.zeta * self.loss_function(encoded, x)
+            loss = (self.loss_function(preds, y)
+                    + self.zeta * self.loss_function(encoded, x))
         else:
             loss = self.loss_function(preds, y)
 
@@ -222,5 +234,11 @@ class ClosurePhaseDecoder(L.LightningModule):
             x_view = x.view(-1, x.size(1) ** 2)
 
         y_hat = self.model(x_view)
-        encoded = self.encode(y_hat)
-        return y_hat, y, x, encoded
+        
+        if self.model_name == "SignMLP":
+            print(y_hat.shape)
+            y_hat = nn.Sigmoid()(y_hat)
+            return y_hat.view(-1, x.size(1), x.size(2)), y.view(-1, x.size(1), x.size(2)), x
+        else:
+            encoded = self.encode(y_hat)
+            return y_hat, y, x, encoded
