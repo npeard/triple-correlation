@@ -43,6 +43,31 @@ class PhiDataset(Dataset):
         return FloatTensor(self.inputs[idx]), FloatTensor(self.targets[idx])
 
 
+class SignPhiDataset(Dataset):
+    def __init__(self, h5_file):
+        self.h5_file = h5_file
+        with h5py.File(self.h5_file, 'r') as f:
+            self.length = len(f['phase'])
+        self.opened_flag = False
+
+    def open_hdf5(self):
+        # solves issue where hdf5 file opened in __init__ prevents multiple
+        # workers: https://github.com/pytorch/pytorch/issues/11929
+        self.file = h5py.File(self.h5_file, 'r')
+        self.inputs = self.file["Phi"]
+        self.targets = np.sign(self.inputs)
+
+    def __len__(self):
+        return self.length
+
+    def __getitem__(self, idx):
+        if not self.opened_flag:  # not hasattr(self, 'h5_file'):
+            self.open_hdf5()
+            self.opened_flag = True
+            # print("open_hdf5 finished")
+        return FloatTensor(self.inputs[idx]), FloatTensor(self.targets[idx])
+
+
 class cosPhiDataset(Dataset):
     def __init__(self, h5_file):
         self.h5_file = h5_file
@@ -157,11 +182,12 @@ class TrainingRunner:
         # Create a PyTorch Lightning trainer with the generation callback
         trainer = L.Trainer(
             default_root_dir=os.path.join(self.checkpoint_dir, save_name),
-            accelerator="gpu",
-            devices=[0],
-            max_epochs=200,
-            callbacks=[checkpoint_callback, early_stop_callback],
-            check_val_every_n_epoch=5,
+            accelerator="cpu",
+            #devices=[0],
+            max_epochs=1000,
+            #callbacks=[checkpoint_callback, early_stop_callback],
+            callbacks=[checkpoint_callback],
+            check_val_every_n_epoch=10,
             logger=logger
         )
 
@@ -186,25 +212,28 @@ class TrainingRunner:
         return model, result
 
     def scan_hyperparams(self):
-        for num_layers, num_conv_layers, kernel_size, dropout_rate, momentum, lr, batch_size, zeta, norm in product(
-                [6, 10, 20], [5, 7, 30], [3, 5, 7], [0.0], [0.7], [1e-2], [256], [0.7], [False]):
-            optimizer = "SGD"
+        for (num_layers, num_conv_layers, kernel_size, dropout_rate, momentum,
+             lr, batch_size, zeta, norm, hidden_size) in product(
+                [2,3], [None], [None], [0.0], [0.9], [1e-3], [16],
+                [0.0], [False], [self.input_size, 2*self.input_size]):
+            optimizer = "Adam"
 
-            # model_config = {"num_layers": num_layers,
-            #                 "activation": activation,
-            #                 "norm": False,
-            #                 "input_size": self.input_size,
-            #                 "hidden_size": self.input_size,
-            #                 "output_size": self.output_size}
             model_config = {"num_layers": num_layers,
-                            "num_conv_layers": num_conv_layers,
-                            "kernel_size": kernel_size,
-                            "dropout_rate": dropout_rate,
                             "activation": "LeakyReLU",
-                            "norm": norm,
+                            "norm": True,
                             "input_size": self.input_size,
-                            "hidden_size": self.output_size,
-                            "output_size": self.output_size}
+                            "hidden_size": hidden_size,
+                            "output_size": self.output_size,
+                            "Phi_signed": False, }
+            # model_config = {"num_layers": num_layers,
+            #                 "num_conv_layers": num_conv_layers,
+            #                 "kernel_size": kernel_size,
+            #                 "dropout_rate": dropout_rate,
+            #                 "activation": "LeakyReLU",
+            #                 "norm": norm,
+            #                 "input_size": self.input_size,
+            #                 "hidden_size": self.output_size,
+            #                 "output_size": self.output_size}
             optimizer_config = {"lr": lr,
                                 "momentum": momentum, }
             loss_config = {"loss_name": "mse",
@@ -214,7 +243,7 @@ class TrainingRunner:
             misc_config = {"batch_size": batch_size}
             self.set_dataloaders(batch_size=batch_size)
 
-            self.train_model(model_name="BottleCNN",
+            self.train_model(model_name="MLP",
                              model_hparams=model_config,
                              optimizer_name=optimizer,
                              optimizer_hparams=optimizer_config,
@@ -281,10 +310,10 @@ class TrainingRunner:
         return model, result
 
     def scan_linear_hyperparams(self):
-        for optimizer, num_layers, hidden_size, Phi_signed in product(["Adam"],
+        for optimizer, num_layers, hidden_size, Phi_signed in product(["SGD"],
                                                                     [2, 3],
                                                                     [self.input_size, 2 * self.input_size, 3 * self.input_size],
-                                                                    [True]):
+                                                                    [False]):
 
             model_config = {"num_layers": num_layers,
                             "norm": False,
@@ -297,7 +326,7 @@ class TrainingRunner:
             if optimizer == "Adam":
                 optimizer_config = {"lr": 1e-3}
             loss_config = {"loss_name": "mse",
-                           "zeta": 0}
+                           "zeta": 1.}
             batch_size = 16
             misc_config = {"batch_size": batch_size}
             self.set_dataloaders(batch_size=batch_size)
@@ -320,7 +349,7 @@ class TrainingRunner:
             model_id,
             "checkpoints",
             "*" + ".ckpt")
-        pretrained_filename = glob.glob(pretrained_filename)[0]
+        pretrained_filename = glob.glob(pretrained_filename)[1]
         if os.path.isfile(pretrained_filename):
             print(f"Found pretrained model at {
                   pretrained_filename}, loading...")
@@ -359,20 +388,13 @@ class TrainingRunner:
                 vmax=1)
             ax1.set_title("Inputs")
 
-            ax2.plot(y[0][0].numpy()[i, :], label="Predictions")
             ax2.plot(y[0][1].numpy()[i, :], label="Targets")
+            ax2.plot(y[0][0].numpy()[i, :], label="Predictions")
             ax2.set_title("MSE Loss: " + str(nn.MSELoss(reduction='sum')
                           (y[0][0][i, :], y[0][1][i, :]).item()))
             ax2.legend()
 
-            ax3.imshow(
-                y[0][3].numpy()[
-                    i,
-                    :,
-                    :],
-                origin="lower",
-                vmin=-1,
-                vmax=1)
+            ax3.imshow(y[0][3].numpy()[i,:,:], origin="lower", vmin=-1, vmax=1)
             ax3.set_title("Encoded Prediction, MSE Loss: " +
                           str(nn.MSELoss(reduction='sum')(y[0][3][i, :], y[0][2][i, :]).item()))
 

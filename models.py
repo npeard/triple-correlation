@@ -46,11 +46,11 @@ class LinearNet(nn.Module):
 
 class MLP(nn.Module):
     def __init__(self, input_size, num_layers, output_size, hidden_size=None,
-                 activation="Tanh", norm=False):
+                 activation="Tanh", norm=False, Phi_signed=False):
         super(MLP, self).__init__()
         self.layers = []
-        # Don't modify inputs before a linear layer, absolute value of inputs
-        # is important for learning
+        if not Phi_signed:
+            self.layers.append(AbsBlock())
         if num_layers > 1:
             self.layers.append(nn.Linear(input_size, hidden_size))
             self.layers.append(act_fn_by_name[activation])

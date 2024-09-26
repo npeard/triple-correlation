@@ -64,7 +64,7 @@ class ClosurePhaseDecoder(L.LightningModule):
         # We will reduce the learning rate by factor gamma at each milestone
         # (epoch number). Setting gamma to 1.0 has no effect on learning rate.
         scheduler = optim.lr_scheduler.MultiStepLR(optimizer,
-                                                   milestones=[250, 500],
+                                                   milestones=[150, 500],
                                                    gamma=1)
         return [optimizer], [scheduler]
 
@@ -95,13 +95,14 @@ class ClosurePhaseDecoder(L.LightningModule):
     def encoding_loss(self, outputs, inputs):
         # Punish phases that cannot be used to reconstruct the input cosPhi
 
-        encoded = torch.cos(self.encode(outputs))
+        # encoded = torch.cos(self.encode(outputs))
+        encoded = self.encode(outputs)
 
         return self.loss_function(encoded, inputs)
 
     @staticmethod
     def encode(outputs):
-        # compute the encoded version of the outputs
+        # compute the encoded version of the outputs, the signed version of Phi
 
         phase_positive = outputs[:, outputs.size(1) // 2:]
         phase_negative = torch.flip(outputs[:, :outputs.size(1) // 2 + 1], [1])

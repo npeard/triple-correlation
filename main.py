@@ -25,91 +25,17 @@ if __name__ == '__main__':
         """
 
         # decoder.ClosurePhaseDecoder.generate_pretraining_data(
-        #     num_pix=7, num_samples=100,
-        #     file_path="./data/pretrain_numpix7_1e2_samples.h5")
+        #     num_pix=9, num_samples=100,
+        #     file_path="./data/pretrain_numpix9_1e2_samples.h5")
         
-        train_file = './data/pretrain_numpix7_1e2_samples.h5'
+        train_file = './data/pretrain_numpix9_1e2_samples.h5'
         runner = train.TrainingRunner(train_file, train_file, train_file,
                                       linear_only=True)
-        runner.scan_linear_hyperparams()
-        # runner.plot_predictions(model_name="LinearNet", model_id="hln8hrke")
-        
-
-
-        # triphase1d.generate_training_set_from_reverse(num_data=int(1e3),
-        #                                    file='C:\\Users\\npeard\\PycharmProjects\\triple-correlation\\data\\Test1D-kmax3-pix51-ideal-1e3.h5')
-
-        # valid_file = 'C:\\Users\\npeard\\PycharmProjects\\triple-correlation\\data\\Valid1D-kmax3-pix51-ideal-2e4.h5'
-        # train_file = 'C:\\Users\\npeard\\PycharmProjects\\triple-correlation\\data\\Train1D-kmax3-pix51-ideal-1e5.h5'
-        # test_file = 'C:\\Users\\npeard\\PycharmProjects\\triple-correlation\\data\\Test1D-kmax3-pix51-ideal-1e3.h5'
-        # # runner = train.TrainingRunner(train_file, valid_file, test_file, linear_only=True)
-        # # runner.scan_linear_hyperparams()
-        # runner = train.TrainingRunner(train_file, valid_file, test_file)
-        # runner.scan_hyperparams()
-
-        # Narrow CNN
-        # runner.plot_predictions()
-
-        #runner.plot_predictions(model_name="WideCNN", model_id="1nlw3uim") # trained, despite high validation loss
-        #runner.plot_predictions(model_name="WideCNN", model_id="qh10ox39")
-        #runner.plot_predictions(model_name="MLP", model_id="r5ttwgoi")
-
-        # runner.plot_predictions(model_name="WideCNN", model_id="06bjdt3u")
-
-        # These models are identical and show classic signs of overtraining
-        # However, visual inspection of the predictions on the test set shows that the later epoch model is better. Why?
-        #runner.plot_predictions(model_name="WideCNN", model_id="esuni96q")
-        #runner.plot_predictions(model_name="WideCNN", model_id="nws62xci")
-
-        # test_dataloader = runner.get_custom_dataloader(test_file, batch_size=1024)
-        #
-        # num_inputs = next(iter(test_dataloader))[0].size(-1) ** 2
-        # num_outputs = next(iter(test_dataloader))[1].size(-1)
-        #
-        # closure = []
-        # phases = []
-        #
-        # dec_obj = decoder.ClosurePhaseDecoder(model=models.MLP(0,0,0))
-        #
-        # for i, (inputs, labels) in enumerate(test_dataloader):
-        #     if i == 1:  # We only need one batch
-        #         break
-        #     #inputs = inputs.view(-1, num_inputs)  # Reshape the input data
-        #     closure.extend(inputs.numpy())
-        #     phases.extend(labels.numpy())
-        #     start = timeit.default_timer()
-        #     loss = dec_obj.encoding_loss2(outputs=labels, inputs=inputs)
-        #     print("The difference of time is :",
-        #           timeit.default_timer() - start)
-        #
-        # print(loss)
-        # closure_ex = np.asarray(closure)[:3, :, :]
-        # phases_ex = np.asarray(phases)[:3, num_outputs // 2:]
-        #
-        # print(closure_ex.shape, phases_ex.shape)
-
-        # def test_get_g2():
-        #     # Test case 1: g2 is already computed
-        #     obj = Speckle_1D.Fluorescence_1D()
-        #     obj.g2 = np.ones((10,))
-        #     assert np.array_equal(obj.get_g2(), np.ones((10,)))
-        #
-        #     # Test case 2: g2 is not computed
-        #     obj = Speckle_1D.Fluorescence_1D()
-        #     obj.get_incoh_intens = lambda: np.ones((10,))
-        #     obj.num_pix = 10
-        #     assert np.array_equal(obj.get_g2(), np.ones((10,10)))
-        #
-        #     # Test case 3: num_shots = 1000
-        #     obj = Speckle_1D.Fluorescence_1D()
-        #     obj.get_incoh_intens = lambda: np.ones((10,))
-        #     obj.num_pix = 10
-        #     result = obj.get_g2(num_shots=1000)
-        #     assert result.shape == (10,10)
-        #     assert np.allclose(result, np.ones((10,10)))
-        #     #assert np.allclose(result, np.zeros((10,10)))
-        #
+        #runner.scan_linear_hyperparams()
+        #runner.scan_hyperparams()
+        runner.plot_predictions(model_name="MLP", model_id="mwbrj699")
 
 
     else:
-        print("Error: Unsupported number of command-line arguments")
+        raise NotImplementedError("Unsupported number of command-line "
+                                  "arguments")
