@@ -1,103 +1,20 @@
 #!/usr/bin/env python
 
 import os
-import sys
 import glob
 from torch import nn
-from torch.utils.data import Dataset, DataLoader
-import h5py
 from lightning.pytorch.callbacks.early_stopping import EarlyStopping
 from lightning.pytorch.callbacks import ModelCheckpoint
 from decoder import ClosurePhaseDecoder
-from torch import FloatTensor, arccos
 import numpy as np
 import matplotlib.pyplot as plt
 import lightning as L
 from lightning.pytorch.loggers import WandbLogger
 from itertools import product
+from datasets import get_custom_dataloader
 
 
-# Define a custom Dataset class
-class PhiDataset(Dataset):
-    def __init__(self, h5_file):
-        self.h5_file = h5_file
-        with h5py.File(self.h5_file, 'r') as f:
-            self.length = len(f['phase'])
-        self.opened_flag = False
-
-    def open_hdf5(self):
-        # solves issue where hdf5 file opened in __init__ prevents multiple
-        # workers: https://github.com/pytorch/pytorch/issues/11929
-        self.file = h5py.File(self.h5_file, 'r')
-        self.inputs = self.file["Phi"]
-        self.targets = self.file["phase"]
-
-    def __len__(self):
-        return self.length
-
-    def __getitem__(self, idx):
-        if not self.opened_flag:  # not hasattr(self, 'h5_file'):
-            self.open_hdf5()
-            self.opened_flag = True
-            # print("open_hdf5 finished")
-        return FloatTensor(self.inputs[idx]), FloatTensor(self.targets[idx])
-
-
-class SignPhiDataset(Dataset):
-    def __init__(self, h5_file):
-        self.h5_file = h5_file
-        with h5py.File(self.h5_file, 'r') as f:
-            self.length = len(f['phase'])
-        self.opened_flag = False
-
-    def open_hdf5(self):
-        # solves issue where hdf5 file opened in __init__ prevents multiple
-        # workers: https://github.com/pytorch/pytorch/issues/11929
-        self.file = h5py.File(self.h5_file, 'r')
-        self.inputs = self.file["Phi"]
-        self.targets = (np.sign(self.inputs) + 1) / 2
-        # Map (-1, 1) to (0, 1) so that we can use BCELoss
-
-    def __len__(self):
-        return self.length
-
-    def __getitem__(self, idx):
-        if not self.opened_flag:  # not hasattr(self, 'h5_file'):
-            self.open_hdf5()
-            self.opened_flag = True
-            # print("open_hdf5 finished")
-        return FloatTensor(self.inputs[idx]), FloatTensor(self.targets[idx])
-
-
-class cosPhiDataset(Dataset):
-    def __init__(self, h5_file):
-        self.h5_file = h5_file
-        with h5py.File(self.h5_file, 'r') as f:
-            self.length = len(f['phase'])
-        self.opened_flag = False
-
-    def open_hdf5(self):
-        # solves issue where hdf5 file opened in __init__ prevents multiple
-        # workers: https://github.com/pytorch/pytorch/issues/11929
-        self.file = h5py.File(self.h5_file, 'r')
-        if "cosPhi" in self.file.keys():
-            self.inputs = self.file["cosPhi"]
-        # else:
-        #     self.inputs = self.file["Phi"]
-        #     self.inputs = np.cos(self.inputs)
-        self.targets = self.file["phase"]
-
-    def __len__(self):
-        return self.length
-
-    def __getitem__(self, idx):
-        if not self.opened_flag:  # not hasattr(self, 'h5_file'):
-            self.open_hdf5()
-            self.opened_flag = True
-        return FloatTensor(self.inputs[idx]), FloatTensor(self.targets[idx])
-
-
-class TrainingRunner:
+class Trainer:
     def __init__(self, training_h5, validation_h5, testing_h5,
                  linear_only=False, sign_only=False):
         self.training_h5 = training_h5
@@ -118,39 +35,19 @@ class TrainingRunner:
         # directories
         self.checkpoint_dir = "./checkpoints"
 
-    def get_custom_dataloader(self, h5_file, batch_size=128, shuffle=True,
-                              linear_only=False, sign_only=False):
-        if linear_only:
-            dataset = PhiDataset(h5_file)
-            if sign_only:
-                dataset = SignPhiDataset(h5_file)
-        else:
-            dataset = cosPhiDataset(h5_file)
-
-        # We can use DataLoader to get batches of data
-        dataloader = DataLoader(
-            dataset,
-            batch_size=batch_size,
-            shuffle=shuffle,
-            num_workers=1,
-            persistent_workers=True,
-            pin_memory=True)
-
-        return dataloader
-
     def set_dataloaders(self, batch_size=128):
         self.batch_size = batch_size
-        self.train_loader = self.get_custom_dataloader(
+        self.train_loader = get_custom_dataloader(
             self.training_h5, batch_size=self.batch_size,
             linear_only=self.linear_only,
             sign_only=self.sign_only)
-        self.valid_loader = self.get_custom_dataloader(
+        self.valid_loader = get_custom_dataloader(
             self.validation_h5,
             batch_size=self.batch_size,
             linear_only=self.linear_only,
             sign_only=self.sign_only,
             shuffle=False)
-        self.test_loader = self.get_custom_dataloader(
+        self.test_loader = get_custom_dataloader(
             self.testing_h5,
             batch_size=self.batch_size,
             linear_only=self.linear_only,
@@ -161,8 +58,10 @@ class TrainingRunner:
         """Train model.
 
         Args:
-            model_name: Name of the model you want to run. Is used to look up the class in "model_dict"
-            save_name (optional): If specified, this name will be used for creating the checkpoint and logging directory.
+            model_name: Name of the model you want to run. Is used to look up
+            the class in "model_dict"
+            save_name (optional): If specified, this name will be used for
+            creating the checkpoint and logging directory.
         """
         if save_name is None:
             save_name = model_name
@@ -224,8 +123,8 @@ class TrainingRunner:
     def scan_hyperparams(self):
         for (num_layers, num_conv_layers, kernel_size, dropout_rate, momentum,
              lr, batch_size, zeta, norm, hidden_size) in product(
-                [2, 3], [None], [None], [0.0], [0.9], [1e-3], [16],
-                [0.0], [False], [self.input_size, 2 * self.input_size]):
+                [3, 4], [None], [None], [0.0], [0.9], [5e-4, 1e-4],[16],
+                [0.0], [False], [2*self.input_size, 23]):
             optimizer = "Adam"
 
             model_config = {"num_layers": num_layers,
@@ -359,7 +258,7 @@ class TrainingRunner:
             model_id,
             "checkpoints",
             "*" + ".ckpt")
-        pretrained_filename = glob.glob(pretrained_filename)[1]
+        pretrained_filename = glob.glob(pretrained_filename)[0]
         if os.path.isfile(pretrained_filename):
             print(f"Found pretrained model at {
                   pretrained_filename}, loading...")
@@ -438,16 +337,15 @@ class TrainingRunner:
             fig = plt.figure(figsize=(10, 5))
             ax1, ax2, ax3 = fig.subplots(1, 3)
 
-            ax1.imshow(y[0][2].numpy()[i, :, :], origin="lower", vmin=-1,
-                       vmax=1)
+            ax1.imshow(y[0][2].numpy()[i, :, :], origin="lower")
             ax1.set_title("Inputs")
 
-            ax2.imshow(y[0][1].numpy()[i, :, :], origin="lower", vmin=-1,
-                       vmax=1)
+            ax2.imshow(2*y[0][1].numpy()[i, :, :]-1, origin="lower", vmin=-1,
+                       vmax=1, cmap="coolwarm")
             ax2.set_title("Targets")
 
-            ax3.imshow(y[0][0].numpy()[i, :, :], origin="lower", vmin=-1,
-                       vmax=1)
+            ax3.imshow(2*y[0][0].numpy()[i, :, :]-1, origin="lower", vmin=-1,
+                       vmax=1, cmap="coolwarm")
             ax3.set_title("Predictions, MSE Loss: " + str(nn.MSELoss(
                 reduction='sum')(y[0][0][i, :], y[0][1][i, :]).item()))
 

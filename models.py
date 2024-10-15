@@ -21,12 +21,10 @@ class LinearNet(nn.Module):
             num_layers,
             hidden_size,
             output_size,
-            norm=False,
-            Phi_signed=False):
+            norm=False
+    ):
         super(LinearNet, self).__init__()
         self.layers = []
-        if not Phi_signed:
-            self.layers.append(AbsBlock())
         if num_layers > 1:
             self.layers.append(nn.Linear(input_size, hidden_size))
             for i in range(num_layers - 2):
@@ -46,11 +44,9 @@ class LinearNet(nn.Module):
 
 class MLP(nn.Module):
     def __init__(self, input_size, num_layers, output_size, hidden_size=None,
-                 activation="Tanh", norm=False, Phi_signed=False):
+                 activation="Tanh", norm=False):
         super(MLP, self).__init__()
         self.layers = []
-        if not Phi_signed:
-            self.layers.append(AbsBlock())
         if num_layers > 1:
             self.layers.append(nn.Linear(input_size, hidden_size))
             self.layers.append(act_fn_by_name[activation])
@@ -76,7 +72,7 @@ class MLP(nn.Module):
 
 class PhaseMLP(nn.Module):
     def __init__(self, input_size, num_layers, output_size, hidden_size=None,
-                 activation="Tanh", norm=False, Phi_signed=False):
+                 activation="Tanh", norm=False):
         super(PhaseMLP, self).__init__()
         self.model = MLP(
             input_size=input_size,
@@ -84,8 +80,7 @@ class PhaseMLP(nn.Module):
             output_size=output_size,
             hidden_size=hidden_size,
             activation=activation,
-            norm=norm,
-            Phi_signed=Phi_signed)
+            norm=norm)
 
     def forward(self, x):
         phase = self.model(x)
@@ -97,12 +92,7 @@ class LateralBlock(nn.Module):
     def __init__(self, input_size, skip=0, activation="Tanh", norm=False):
         super(LateralBlock, self).__init__()
 
-        if activation == "Tanh":
-            self.activate = nn.Tanh()
-        elif activation == "LeakyReLU":
-            self.activate = nn.LeakyReLU()
-        else:
-            raise ValueError("Invalid activation function")
+        self.activate = act_fn_by_name[activation]
 
         if norm:
             self.activate = nn.Sequential(self.activate,
