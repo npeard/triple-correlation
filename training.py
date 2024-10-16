@@ -5,7 +5,7 @@ import glob
 from torch import nn
 from lightning.pytorch.callbacks.early_stopping import EarlyStopping
 from lightning.pytorch.callbacks import ModelCheckpoint
-from decoder import ClosurePhaseDecoder
+from decoder import BaseDecoder
 import numpy as np
 import matplotlib.pyplot as plt
 import lightning as L
@@ -101,11 +101,11 @@ class Trainer:
         )
 
         # L.seed_everything(42)  # To be reproducible
-        model = ClosurePhaseDecoder(model_name=model_name, **kwargs)
+        model = BaseDecoder(model_name=model_name, **kwargs)
         trainer.fit(model, self.train_loader, self.valid_loader)
 
         # Load best checkpoint after training
-        model = ClosurePhaseDecoder.load_from_checkpoint(
+        model = BaseDecoder.load_from_checkpoint(
             trainer.checkpoint_callback.best_model_path)
 
         # Test best model on validation and test set
@@ -199,11 +199,11 @@ class Trainer:
         )
 
         # L.seed_everything(42)  # To be reproducible
-        model = ClosurePhaseDecoder(model_name=model_name, **kwargs)
+        model = BaseDecoder(model_name=model_name, **kwargs)
         trainer.fit(model, self.train_loader, self.valid_loader)
 
         # Load best checkpoint after training
-        model = ClosurePhaseDecoder.load_from_checkpoint(
+        model = BaseDecoder.load_from_checkpoint(
             trainer.checkpoint_callback.best_model_path)
 
         # Test best model on validation and test set
@@ -263,7 +263,7 @@ class Trainer:
             print(f"Found pretrained model at {
                   pretrained_filename}, loading...")
             # Automatically loads the model with the saved hyperparameters
-            model = ClosurePhaseDecoder.load_from_checkpoint(
+            model = BaseDecoder.load_from_checkpoint(
                 pretrained_filename)
 
             return model

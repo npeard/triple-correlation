@@ -10,7 +10,7 @@ import numpy as np
 from speckle1d import Fluorescence1D
 
 
-class ClosurePhaseDecoder(L.LightningModule):
+class BaseDecoder(L.LightningModule):
     def __init__(self, model_name, model_hparams, optimizer_name,
                  optimizer_hparams, misc_hparams, loss_hparams=None):
         """Decoder for the closure phase
@@ -26,21 +26,18 @@ class ClosurePhaseDecoder(L.LightningModule):
         # namespace
         self.save_hyperparameters()
         # Create model
+        self.model_name = model_name
         self.model = self.create_model(model_name, model_hparams)
-        # Create loss module
-        if loss_hparams is None:
-            self.loss_function = nn.MSELoss(reduction='sum')
-        else:
-            self.loss_function = self.get_loss_function(loss_hparams)
+        self.loss_hparams = loss_hparams
 
         torch.set_float32_matmul_precision('high')
 
-    def create_model(self, model_name, model_hparams):
+    @staticmethod
+    def create_model(model_name, model_hparams):
         model_dict = {"PhaseMLP": PhaseMLP, "LinearNet": LinearNet,
                       "BottleCNN": BottleCNN, "SignMLP": MLP}
         
         if model_name in model_dict:
-            self.model_name = model_name
             return model_dict[model_name](**model_hparams)
         else:
             assert False, f'Unknown model name "{
@@ -69,23 +66,15 @@ class ClosurePhaseDecoder(L.LightningModule):
                                                    gamma=1)
         return [optimizer], [scheduler]
 
-    def get_loss_function(self, loss_hparams):
+    def loss_function(self, y_hat, y, x):
         # Choose the loss function
-        if loss_hparams["loss_name"] == "mse":
-            self.loss_function = nn.MSELoss(reduction='mean')
-        elif loss_hparams["loss_name"] == "bce_logits":
-            self.loss_function = nn.BCEWithLogitsLoss()
-        else:
-            assert False, f'Unknown loss: "{loss_hparams["loss_name"]}"'
+        #if self.loss_hparams["loss_name"] == "mse":
+        loss = nn.MSELoss(y_hat, y, reduction='mean')
+        
+        return loss
 
-        if loss_hparams["zeta"] > 0:
-            self.zeta = loss_hparams["zeta"]
-        else:
-            self.zeta = None
-
-        return self.loss_function
-
-    def antisymmetry_loss(self, outputs):
+    @staticmethod
+    def antisymmetry_loss(outputs):
         # Punish phases that are not antisymmetric about the origin
 
         positive_x = outputs[:, outputs.size(1) // 2 + 1:]
@@ -149,92 +138,37 @@ class ClosurePhaseDecoder(L.LightningModule):
         # training_step defines the train loop.
         # it is independent of forward
         x, y = batch
-        if self.model_name == "BottleCNN":
-            # batch dim, channel dim, height dim, width dim
-            x_view = x.view(-1, 1, x.size(1), x.size(2))
-        else:
-            x_view = x.view(-1, x.size(1)**2)
-        preds = self.model(x_view)
+        y_hat = self.model(x)
         
-        if self.model_name == "SignMLP":
-            y = y.view(-1, y.size(1) ** 2)
-        
-        # compute encoding loss
-        if self.zeta is not None:
-            encoded = self.encode(preds)
-            # x = torch.squeeze(x)
-            loss = (self.loss_function(preds, y)
-                    + self.zeta * self.loss_function(encoded, x))
-        else:
-            loss = self.loss_function(preds, y)
+        loss = self.loss_function(y_hat, y, x)
 
-        # acc = (preds == y).float().mean()
-        # self.log("train_acc", acc, on_epoch=True)
         self.log("train_loss", loss, prog_bar=True, on_epoch=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
         # validation_step defines the validation loop.
         x, y = batch
-        if self.model_name == "BottleCNN":
-            # batch dim, channel dim, height dim, width dim
-            x_view = x.view(-1, 1, x.size(1), x.size(2))
-        else:
-            x_view = x.view(-1, x.size(1) ** 2)
-        preds = self.model(x_view)
+        y_hat = self.model(x)
         
-        if self.model_name == "SignMLP":
-            y = y.view(-1, y.size(1) ** 2)
+        loss = self.loss_function(y_hat, y, x)
         
-        # compute encoding loss
-        if self.zeta is not None:
-            encoded = self.encode(preds)
-            # x = torch.squeeze(x)
-            loss = (self.loss_function(preds, y)
-                    + self.zeta * self.loss_function(encoded, x))
-        else:
-            loss = self.loss_function(preds, y)
-
-        # acc = (preds == y).float().mean()
-        # self.log("val_acc", acc, on_epoch=True)
         self.log("val_loss", loss, prog_bar=True, on_epoch=True)
         return loss
 
     def test_step(self, batch, batch_idx):
         x, y = batch
-        if self.model_name == "BottleCNN":
-            # batch dim, channel dim, height dim, width dim
-            x_view = x.view(-1, 1, x.size(1), x.size(2))
-        else:
-            x_view = x.view(-1, x.size(1) ** 2)
-        preds = self.model(x_view)
+        y_hat = self.model(x)
         
-        if self.model_name == "SignMLP":
-            y = y.view(-1, y.size(1) ** 2)
-
-        # compute encoding loss
-        if self.zeta is not None:
-            encoded = self.encode(preds)
-            # x = torch.squeeze(x)
-            loss = (self.loss_function(preds, y)
-                    + self.zeta * self.loss_function(encoded, x))
-        else:
-            loss = self.loss_function(preds, y)
-
-        # acc = (preds == y).float().mean()
-        # self.log("test_acc", acc, on_epoch=True)
+        loss = self.loss_function(y_hat, y, x)
+        
         self.log("test_loss", loss, prog_bar=True, on_epoch=True)
-        return y, preds, loss
+        return y_hat, y, loss
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         x, y = batch
-        if self.model_name == "BottleCNN":
-            x_view = x.view(-1, 1, x.size(1), x.size(2))
-        else:
-            x_view = x.view(-1, x.size(1) ** 2)
-
-        y_hat = self.model(x_view)
+        y_hat = self.model(x)
         
+        # TODO: change output shapes
         if self.model_name == "SignMLP":
             print(y_hat.shape)
             y_hat = nn.Sigmoid()(y_hat)
@@ -242,3 +176,103 @@ class ClosurePhaseDecoder(L.LightningModule):
         else:
             encoded = self.encode(y_hat)
             return y_hat, y, x, encoded
+        
+class SignClassifier(BaseDecoder):
+    def __init__(self, model_name, model_hparams, optimizer_name,
+                 optimizer_hparams, misc_hparams, loss_hparams=None):
+        super().__init__(model_name, model_hparams, optimizer_name,
+                         optimizer_hparams, misc_hparams, loss_hparams)
+    
+    def loss_function(self, y_hat, y, x):
+        # Choose the loss function
+        #if self.loss_hparams["loss_name"] == "bce_logits":
+        loss = nn.BCEWithLogitsLoss(y_hat, y)
+        
+        return loss
+    
+class PhaseRegressor(BaseDecoder):
+    def __init__(self, model_name,model_hparams, optimizer_name,
+                 optimizer_hparams, misc_hparams, loss_hparams=None):
+        super().__init__(model_name, model_hparams, optimizer_name,
+                         optimizer_hparams, misc_hparams, loss_hparams)
+    
+    def loss_function(self, y_hat, y, x):
+        # Choose the loss function
+        #if self.loss_hparams["loss_name"] == "mse":
+        loss = nn.MSELoss(y_hat, y, reduction='mean')
+            
+        if self.loss_hparams['zeta'] > 0:
+            zeta = self.loss_hparams['zeta']
+            loss += zeta * self.encoding_loss(y_hat, x)
+        
+        return loss
+        
+    def forward(self, x):
+        phase = self.model(x)
+        y_hat = torch.atan2(torch.sin(phase), torch.cos(phase))
+        return y_hat
+    
+    
+class HybridClassifier(L.LightningModule):
+    # This is a hybrid model that combines the sign classifier and a pretrained
+    # linear phase regressor in order to train the sign classifier on the
+    # phase regression results
+    def __init__(self, model_name, model_hparams, optimizer_name,
+                 optimizer_hparams, misc_hparams, loss_hparams=None):
+        super().__init__()
+        self.sign_classifier = SignClassifier(model_name, model_hparams, optimizer_name, optimizer_hparams, misc_hparams, loss_hparams)
+        self.phase_regressor = PhaseRegressor(model_name, model_hparams, optimizer_name, optimizer_hparams, misc_hparams, loss_hparams)
+        
+        # Exports the hyperparameters to a YAML file, and create "self.hparams"
+        # namespace
+        self.save_hyperparameters()
+        # Create model
+        self.model_name = model_name
+        self.loss_hparams = loss_hparams
+        
+        # Freeze the regressor parameters
+        for param in self.phase_regressor.parameters():
+            param.requires_grad = False
+        
+        torch.set_float32_matmul_precision('high')
+        
+    def loss_function(self, y_hat, y, x):
+        bce_loss = nn.BCEWithLogitsLoss(y_hat, y)
+    
+    def forward(self, x):
+        # forward defines the prediction/inference actions, not the training loop
+        # x should be abs(Phi), but don't put abs in forward(x)
+        pre_logit = self.sign_classifier(x)
+        sign_prob = nn.Sigmoid()(pre_logit)
+        return sign_prob
+    
+    def training_step(self, batch, batch_idx):
+        # training_step defines the train loop.
+        # it is independent of forward
+        x, y = batch
+        pre_logit = self.sign_classifier(x)
+        
+        loss = self.loss_function(y_hat, y, x)
+        
+        self.log("train_loss", loss, prog_bar=True, on_epoch=True)
+        return loss
+    
+    
+class MultiTaskRegressor(L.LightningModule):
+    # This is a multi-task model that combines the sign classifier and an
+    # untrained non-linear regressor to determine if end-to-end training gives
+    # better results than sign classification plus exact linear solver in hybrid
+    # model alone. Might deal with noise better?
+    def __init__(self, model_name, model_hparams, optimizer_name,
+                 optimizer_hparams, misc_hparams, loss_hparams=None):
+        super().__init__()
+        self.sign_classifier = SignClassifier(model_name, model_hparams, optimizer_name, optimizer_hparams, misc_hparams, loss_hparams)
+        
+    def forward(self, x):
+        # x should be abs(Phi), but don't put abs in forward(x)
+        sign_prob = self.sign_classifier(x)
+        sign = (sign_prob > 0.5).float() * 2 - 1  # Convert to {-1, 1}
+        Phi = torch.dot(sign, x) # signed version of Phi
+        phase = self.phase_regressor(Phi)
+        y_hat = torch.atan2(torch.sin(phase), torch.cos(phase))
+        return y_hat, sign_prob

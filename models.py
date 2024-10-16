@@ -38,7 +38,8 @@ class LinearNet(nn.Module):
         self.model = nn.Sequential(*self.layers)
 
     def forward(self, x):
-        pred = self.model(x)
+        x_view = x.view(-1, x.size(1)**2)
+        pred = self.model(x_view)
         return pred
 
 
@@ -66,7 +67,8 @@ class MLP(nn.Module):
         self.model = nn.Sequential(*self.layers)
 
     def forward(self, x):
-        output = self.model(x)
+        x_view = x.view(-1, x.size(1)**2)
+        output = self.model(x_view)
         return output
     
 
@@ -83,7 +85,8 @@ class PhaseMLP(nn.Module):
             norm=norm)
 
     def forward(self, x):
-        phase = self.model(x)
+        x_view = x.view(-1, x.size(1)**2)
+        phase = self.model(x_view)
         pred = torch.atan2(torch.sin(phase), torch.cos(phase))
         return pred
 
@@ -106,8 +109,9 @@ class LateralBlock(nn.Module):
         self.block = nn.Sequential(*self.layers)
 
     def forward(self, x):
-        out = self.block(x)
-        out = torch.add(out, x)
+        x_view = x.view(-1, x.size(1)**2)
+        out = self.block(x_view)
+        out = torch.add(out, x_view)
         return out
 
 
@@ -133,7 +137,8 @@ class LateralNoSkip(nn.Module):
         self.model = nn.Sequential(*self.layers)
 
     def forward(self, x):
-        out = torch.pi * self.model(x)
+        x_view = x.view(-1, x.size(1)**2)
+        out = torch.pi * self.model(x_view)
 
         return out
 
@@ -148,12 +153,7 @@ class ConvolutionBlock(nn.Module):
             dropout_rate=0):
         super(ConvolutionBlock, self).__init__()
 
-        if activation == "Tanh":
-            self.activate = nn.Tanh()
-        elif activation == "LeakyReLU":
-            self.activate = nn.LeakyReLU()
-        else:
-            raise ValueError("Invalid activation function")
+        self.activate = act_fn_by_name[activation]
 
         # network layers with no connections
         self.layers = []
@@ -182,8 +182,9 @@ class ConvolutionBlock(nn.Module):
         self.block = nn.Sequential(*self.layers)
 
     def forward(self, x):
+        x_view = x.view(-1, 1, x.size(1), x.size(2))
         # Applying global average pooling
-        out = torch.mean(self.block(x), dim=1, keepdim=True)
+        out = torch.mean(self.block(x_view), dim=1, keepdim=True)
         # Keeping dimensions to remain compatible with the fully connected
         # block
         return out
@@ -221,7 +222,8 @@ class BottleCNN(nn.Module):
             norm=norm)
 
     def forward(self, x):
-        out = self.conv_block(x)
+        x_view = x.view(-1, 1, x.size(1), x.size(2))
+        out = self.conv_block(x_view)
         # flatten the output of the convolutional block for the fully connected block
         # (batch_size, channels, dim1, dim2) -> (batch_size, channels*dim1*dim2)
         phase = self.fc_block(
