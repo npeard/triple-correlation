@@ -5,14 +5,12 @@ import h5py
 from tqdm import tqdm
 
 
-def append_to_h5file(cosPhi, Phi, phase, file_path="data.h5"):
+def append_to_h5file(Phi, phase, file_path="data.h5"):
     """Appends training data consisting of an image stack, the associated
     marginalized cosPhi, and the structure phase to a file.
 
     Parameters
     ----------
-    cosPhi : (N, M) array
-        The marginalized cosPhi data
     Phi : (N, M) array
         The marginalized Phi data
     phase : (M,) array
@@ -27,18 +25,6 @@ def append_to_h5file(cosPhi, Phi, phase, file_path="data.h5"):
     f = h5py.File(file_path, 'a')
     # Create datasets if they don't exist, otherwise append data
 
-    if cosPhi is not None:
-        if "cosPhi" in f.keys():
-            f["cosPhi"].resize(
-                (f["cosPhi"].shape[0] + 1), axis=0)
-            new_data = np.expand_dims(cosPhi, axis=0)
-            f["cosPhi"][-1:] = new_data
-        else:
-            f.create_dataset("cosPhi",
-                             data=np.expand_dims(cosPhi, axis=0),
-                             maxshape=(None, cosPhi.shape[0],
-                                       cosPhi.shape[1]),
-                             chunks=True)
     if Phi is not None:
         if "Phi" in f.keys():
             f["Phi"].resize(

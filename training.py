@@ -124,7 +124,7 @@ class Trainer:
     def scan_hyperparams(self):
         for (num_layers, num_conv_layers, kernel_size, dropout_rate, momentum,
              lr, batch_size, zeta, norm, hidden_size) in product(
-                [3], [None], [None], [0.0], [0.9], [1e-3],[16],
+                [1], [None], [None], [0.0], [0.9], [1e-3], [16],
                 [0], [False], [self.input_size]):
             optimizer = "Adam"
 

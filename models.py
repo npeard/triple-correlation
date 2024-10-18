@@ -39,9 +39,9 @@ class LinearNet(nn.Module):
 
     def forward(self, x):
         x_view = x.view(-1, x.size(1)**2)
-        pred = self.model(x_view)
+        phase = self.model(x_view)
         #pred = torch.atan2(torch.sin(phase), torch.cos(phase))
-        return pred
+        return phase
 
 
 class MLP(nn.Module):

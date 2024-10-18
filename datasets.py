@@ -4,7 +4,9 @@ import numpy as np
 from torch.utils.data import Dataset, DataLoader
 import h5py
 from torch import FloatTensor, abs
-
+from tqdm import tqdm
+from speckle1d import Fluorescence1D
+import utils
 
 class PhiDataset(Dataset):
     def __init__(self, h5_file, input_key="Phi", target_key="phase"):
@@ -89,3 +91,23 @@ def get_custom_dataloader(h5_file, batch_size=128, shuffle=True,
         pin_memory=True)
 
     return dataloader
+
+
+def generate_pretraining_data(num_pix, num_samples, file_path):
+    # Generate pretraining data
+    # num_pix: number of pixels in each sample
+    
+    for _ in tqdm(range(num_samples)):
+        phase = np.random.uniform(-np.pi, np.pi, num_pix // 2)
+        phase = np.concatenate((-phase, np.zeros(1), np.flip(phase)))
+        
+        # These lines work in PyTorch
+        # phase = torch.FloatTensor(phase)
+        # Phi = BaseDecoder.encode(phase.unsqueeze(0))
+        
+        # Use this Numpy module for JIT compilation speeds and compatibility
+        # with h5py concatenation
+        Phi = Fluorescence1D.compute_Phi_from_phase(phase[num_pix // 2:])
+        
+        # TODO: don't save cos(Phi)
+        utils.append_to_h5file(Phi, phase, file_path)

@@ -115,26 +115,6 @@ class BaseDecoder(L.LightningModule):
 
         return Phi
 
-    @staticmethod
-    def generate_pretraining_data(num_pix, num_samples, file_path):
-        # Generate pretraining data
-        # num_pix: number of pixels in each sample
-
-        for _ in tqdm(range(num_samples)):
-            phase = np.random.uniform(-np.pi, np.pi, num_pix // 2)
-            phase = np.concatenate((-phase, np.zeros(1), np.flip(phase)))
-            
-            # These lines work in PyTorch
-            # phase = torch.FloatTensor(phase)
-            # Phi = ClosurePhaseDecoder.encode(phase.unsqueeze(0))
-            
-            # Use this Numpy module for JIT compilation speeds and compatibility
-            # with h5py concatenation
-            Phi = Fluorescence1D.compute_Phi_from_phase(phase[num_pix // 2:])
-
-            # TODO: don't save cos(Phi)
-            utils.append_to_h5file(np.cos(Phi), Phi, phase, file_path)
-
     def training_step(self, batch, batch_idx):
         # training_step defines the train loop.
         # it is independent of forward
@@ -208,6 +188,7 @@ class PhaseRegressor(BaseDecoder):
             # Want x to be abs(Phi) here, so that all sign prediction is handled
             # by the sign classifier, and the PhaseRegressor is only concerned
             # with the magnitude of the phase
+            #print("computing zeta")
             loss += zeta * self.encoding_loss(y_hat, torch.abs(x))
         
         return loss
