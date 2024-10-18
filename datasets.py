@@ -39,6 +39,7 @@ class PhiDataset(Dataset):
         # inputs, targets == Phi (with sign), phase
         return FloatTensor(self.inputs[idx]), FloatTensor(self.targets[idx])
     
+    
 class AbsPhiDataset(PhiDataset):
     def __init__(self, h5_file, input_key="Phi", target_key="phase"):
         super().__init__(h5_file, input_key=input_key, target_key=target_key)
@@ -48,6 +49,7 @@ class AbsPhiDataset(PhiDataset):
         inputs, targets = super().__getitem__(idx)
         return abs(inputs), targets
     
+    
 class SignPhiDataset(PhiDataset):
     def __init__(self, h5_file, input_key="Phi", target_key="phase"):
         super().__init__(h5_file, input_key=input_key, target_key=target_key)
@@ -56,6 +58,7 @@ class SignPhiDataset(PhiDataset):
         # inputs, targets == abs(Phi), sign_to_binary(Phi)
         inputs, targets = super().__getitem__(idx)
         return abs(inputs), self.sign_to_binary(inputs)
+    
     
 class MultiTaskPhiDataset(PhiDataset):
     def __init__(self, h5_file, input_key="Phi", target_key="phase"):
@@ -68,14 +71,13 @@ class MultiTaskPhiDataset(PhiDataset):
 
     
 def get_custom_dataloader(h5_file, batch_size=128, shuffle=True,
-                          linear_only=False, sign_only=False):
-    if linear_only:
+                          absPhi=False, signPhi=False):
+    if not absPhi:
         dataset = PhiDataset(h5_file)
-        if sign_only:
-            dataset = PhiDataset(h5_file, target_key="Phi",
-                                 input_op="abs", target_op="sign_to_binary")
+        if signPhi:
+            dataset = SignPhiDataset(h5_file)
     else:
-        dataset = PhiDataset(h5_file, input_op="cos")
+        dataset = AbsPhiDataset(h5_file)
 
     # We can use DataLoader to get batches of data
     dataloader = DataLoader(

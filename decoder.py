@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import os, glob
 from torch import optim, nn
 import torch
 import lightning as L
@@ -35,7 +36,7 @@ class BaseDecoder(L.LightningModule):
     @staticmethod
     def create_model(model_name, model_hparams):
         model_dict = {"PhaseMLP": PhaseMLP, "LinearNet": LinearNet,
-                      "BottleCNN": BottleCNN, "SignMLP": MLP}
+                      "BottleCNN": BottleCNN, "MLP": MLP}
         
         if model_name in model_dict:
             return model_dict[model_name](**model_hparams)
@@ -69,7 +70,7 @@ class BaseDecoder(L.LightningModule):
     def loss_function(self, y_hat, y, x):
         # Choose the loss function
         #if self.loss_hparams["loss_name"] == "mse":
-        loss = nn.MSELoss(y_hat, y, reduction='mean')
+        loss = nn.MSELoss()(y_hat, y)
         
         return loss
 
@@ -84,13 +85,12 @@ class BaseDecoder(L.LightningModule):
             outputs[:, outputs.size(1) // 2]**2)
         return loss
 
-    def encoding_loss(self, outputs, inputs):
-        # Punish phases that cannot be used to reconstruct the input cosPhi
+    def encoding_loss(self, phase, absPhi):
+        # Punish phases that cannot be used to reconstruct the input abs(Phi)
 
-        # encoded = torch.cos(self.encode(outputs))
-        encoded = self.encode(outputs)
+        encoded = torch.abs(self.encode(phase))
 
-        return self.loss_function(encoded, inputs)
+        return nn.MSELoss()(encoded, torch.abs(absPhi))
 
     @staticmethod
     def encode(outputs):
@@ -132,6 +132,7 @@ class BaseDecoder(L.LightningModule):
             # with h5py concatenation
             Phi = Fluorescence1D.compute_Phi_from_phase(phase[num_pix // 2:])
 
+            # TODO: don't save cos(Phi)
             utils.append_to_h5file(np.cos(Phi), Phi, phase, file_path)
 
     def training_step(self, batch, batch_idx):
@@ -162,7 +163,8 @@ class BaseDecoder(L.LightningModule):
         loss = self.loss_function(y_hat, y, x)
         
         self.log("test_loss", loss, prog_bar=True, on_epoch=True)
-        return y_hat, y, loss
+        # TODO: Do we need to return y_hat, y, loss?
+        # return y_hat, y, loss
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         x, y = batch
@@ -186,7 +188,7 @@ class SignClassifier(BaseDecoder):
     def loss_function(self, y_hat, y, x):
         # Choose the loss function
         #if self.loss_hparams["loss_name"] == "bce_logits":
-        loss = nn.BCEWithLogitsLoss(y_hat, y)
+        loss = nn.BCEWithLogitsLoss()(y_hat, y)
         
         return loss
     
@@ -199,11 +201,14 @@ class PhaseRegressor(BaseDecoder):
     def loss_function(self, y_hat, y, x):
         # Choose the loss function
         #if self.loss_hparams["loss_name"] == "mse":
-        loss = nn.MSELoss(y_hat, y, reduction='mean')
+        loss = nn.MSELoss()(y_hat, y)
             
         if self.loss_hparams['zeta'] > 0:
             zeta = self.loss_hparams['zeta']
-            loss += zeta * self.encoding_loss(y_hat, x)
+            # Want x to be abs(Phi) here, so that all sign prediction is handled
+            # by the sign classifier, and the PhaseRegressor is only concerned
+            # with the magnitude of the phase
+            loss += zeta * self.encoding_loss(y_hat, torch.abs(x))
         
         return loss
         
@@ -220,8 +225,12 @@ class HybridClassifier(L.LightningModule):
     def __init__(self, model_name, model_hparams, optimizer_name,
                  optimizer_hparams, misc_hparams, loss_hparams=None):
         super().__init__()
-        self.sign_classifier = SignClassifier(model_name, model_hparams, optimizer_name, optimizer_hparams, misc_hparams, loss_hparams)
-        self.phase_regressor = PhaseRegressor(model_name, model_hparams, optimizer_name, optimizer_hparams, misc_hparams, loss_hparams)
+        self.sign_classifier = SignClassifier(model_name, model_hparams,
+                                              optimizer_name,
+                                              optimizer_hparams, misc_hparams,
+                                              loss_hparams)
+        self.phase_regressor = self.load_regressor(model_name=model_name,
+                                                   model_id="5nozki8z")
         
         # Exports the hyperparameters to a YAML file, and create "self.hparams"
         # namespace
@@ -236,26 +245,124 @@ class HybridClassifier(L.LightningModule):
         
         torch.set_float32_matmul_precision('high')
         
-    def loss_function(self, y_hat, y, x):
-        bce_loss = nn.BCEWithLogitsLoss(y_hat, y)
+    @staticmethod
+    def load_regressor(model_name, model_id):
+        # Check whether pretrained model exists. If yes, load it and skip
+        # training
+        checkpoint_dir = "./checkpoints"
+        pretrained_filename = os.path.join(
+            checkpoint_dir,
+            model_name,
+            "triple_correlation",
+            model_id,
+            "checkpoints",
+            "*" + ".ckpt")
+        pretrained_filename = glob.glob(pretrained_filename)[0]
+        if os.path.isfile(pretrained_filename):
+            print(f"Found pretrained model at {
+                  pretrained_filename}, loading...")
+            # Automatically loads the model with the saved hyperparameters
+            model = PhaseRegressor.load_from_checkpoint(
+                pretrained_filename)
+
+            return model
+        
+    def loss_function(self, phase, phase_hat, Phi_binary, Phi_binary_prelogit,
+                      abs_Phi):
+        bce_loss = nn.BCEWithLogitsLoss()(Phi_binary_prelogit, Phi_binary)
+        mse_loss = nn.MSELoss()(phase_hat, phase)
+        encoding_loss = self.encoding_loss(phase_hat, abs_Phi)
+        
+        loss = bce_loss
+        
+        if self.loss_hparams['zeta'] > 0:
+            zeta = self.loss_hparams['zeta']
+            loss += zeta * encoding_loss
+            
+        if self.loss_hparams['alpha'] > 0:
+            alpha = self.loss_hparams['alpha']
+            loss += alpha * mse_loss
+    
+        return loss, bce_loss, mse_loss, encoding_loss
     
     def forward(self, x):
-        # forward defines the prediction/inference actions, not the training loop
-        # x should be abs(Phi), but don't put abs in forward(x)
         pre_logit = self.sign_classifier(x)
         sign_prob = nn.Sigmoid()(pre_logit)
         return sign_prob
     
     def training_step(self, batch, batch_idx):
         # training_step defines the train loop.
-        # it is independent of forward
-        x, y = batch
-        pre_logit = self.sign_classifier(x)
+        # it is independent of forward, which is only for inference
+        abs_Phi, Phi_binary, phase = batch
+        prelogit = self.sign_classifier(abs_Phi)
+        sign_prob = nn.Sigmoid()(prelogit)
+        sign = (sign_prob > 0.5).float() * 2 - 1  # Convert to {-1, 1}
         
-        loss = self.loss_function(y_hat, y, x)
+        Phi = sign * abs_Phi
+        phase_hat = self.phase_regressor(Phi)
+        
+        loss, bce_loss, mse_loss, encoding_loss = self.loss_function(phase,
+                                                                     phase_hat,
+                                                                     Phi_binary,
+                                                                     prelogit,
+                                                                     abs_Phi)
         
         self.log("train_loss", loss, prog_bar=True, on_epoch=True)
+        self.log("train_bce_loss", bce_loss, prog_bar=False,
+                 on_epoch=True)
+        self.log("train_mse_loss", mse_loss, prog_bar=False,
+                 on_epoch=True)
+        self.log("train_encoding_loss", encoding_loss, prog_bar=False,
+                 on_epoch=True)
+        
         return loss
+    
+    def validation_step(self, batch, batch_idx):
+        abs_Phi, Phi_binary, phase = batch
+        prelogit = self.sign_classifier(abs_Phi)
+        sign_prob = nn.Sigmoid()(prelogit)
+        sign = (sign_prob > 0.5).float() * 2 - 1  # Convert to {-1, 1}
+        
+        Phi = sign * abs_Phi
+        phase_hat = self.phase_regressor(Phi)
+        
+        loss, bce_loss, mse_loss, encoding_loss = self.loss_function(phase,
+                                                                     phase_hat,
+                                                                     Phi_binary,
+                                                                     prelogit,
+                                                                     abs_Phi)
+        
+        self.log("val_loss", loss, prog_bar=True, on_epoch=True)
+        self.log("val_bce_loss", bce_loss, prog_bar=False, on_epoch=True)
+        self.log("val_mse_loss", mse_loss, prog_bar=False, on_epoch=True)
+        self.log("val_encoding_loss", encoding_loss, prog_bar=False,
+                 on_epoch=True)
+        
+        return loss
+    
+    def test_step(self, batch, batch_idx):
+        abs_Phi, Phi_binary, phase = batch
+        prelogit = self.sign_classifier(abs_Phi)
+        sign_prob = nn.Sigmoid()(prelogit)
+        sign = (sign_prob > 0.5).float() * 2 - 1  # Convert to {-1, 1}
+        
+        Phi = sign * abs_Phi
+        phase_hat = self.phase_regressor(Phi)
+        
+        loss, bce_loss, mse_loss, encoding_loss = self.loss_function(phase,
+                                                                     phase_hat,
+                                                                     Phi_binary,
+                                                                     prelogit,
+                                                                     abs_Phi)
+        
+        self.log("test_loss", loss, prog_bar=True, on_epoch=True)
+        self.log("test_bce_loss", bce_loss, prog_bar=False, on_epoch=True)
+        self.log("test_mse_loss", mse_loss, prog_bar=False, on_epoch=True)
+        self.log("test_encoding_loss", encoding_loss, prog_bar=False,
+                 on_epoch=True)
+    
+    def predict_step(self, batch, batch_idx, dataloader_idx=0):
+        pass
     
     
 class MultiTaskRegressor(L.LightningModule):

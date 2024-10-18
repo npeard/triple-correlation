@@ -5,7 +5,7 @@ import glob
 from torch import nn
 from lightning.pytorch.callbacks.early_stopping import EarlyStopping
 from lightning.pytorch.callbacks import ModelCheckpoint
-from decoder import BaseDecoder
+from decoder import BaseDecoder, SignClassifier, PhaseRegressor, HybridClassifier
 import numpy as np
 import matplotlib.pyplot as plt
 import lightning as L
@@ -16,12 +16,12 @@ from datasets import get_custom_dataloader
 
 class Trainer:
     def __init__(self, training_h5, validation_h5, testing_h5,
-                 linear_only=False, sign_only=False):
+                 absPhi=False, signPhi=False):
         self.training_h5 = training_h5
         self.validation_h5 = validation_h5
         self.testing_h5 = testing_h5
-        self.linear_only = linear_only
-        self.sign_only = sign_only
+        self.absPhi = absPhi
+        self.signPhi = signPhi
 
         # get dataloaders
         self.set_dataloaders()
@@ -29,7 +29,7 @@ class Trainer:
         # dimensions
         self.input_size = next(iter(self.train_loader))[0].size(-1) ** 2
         self.output_size = next(iter(self.train_loader))[1].size(-1)
-        if sign_only:
+        if signPhi:
             self.output_size = self.output_size**2
 
         # directories
@@ -39,22 +39,22 @@ class Trainer:
         self.batch_size = batch_size
         self.train_loader = get_custom_dataloader(
             self.training_h5, batch_size=self.batch_size,
-            linear_only=self.linear_only,
-            sign_only=self.sign_only)
+            absPhi=self.absPhi,
+            signPhi=self.signPhi)
         self.valid_loader = get_custom_dataloader(
             self.validation_h5,
             batch_size=self.batch_size,
-            linear_only=self.linear_only,
-            sign_only=self.sign_only,
+            absPhi=self.absPhi,
+            signPhi=self.signPhi,
             shuffle=False)
         self.test_loader = get_custom_dataloader(
             self.testing_h5,
             batch_size=self.batch_size,
-            linear_only=self.linear_only,
-            sign_only=self.sign_only,
+            absPhi=self.absPhi,
+            signPhi=self.signPhi,
             shuffle=False)
 
-    def train_model(self, model_name, save_name=None, **kwargs):
+    def train_model(self, model_name, task_name, save_name=None, **kwargs):
         """Train model.
 
         Args:
@@ -67,13 +67,14 @@ class Trainer:
             save_name = model_name
 
         # logger
-        logger = WandbLogger(
-            project='triple_correlation',
-            group=model_name,
-            log_model=True,
-            save_dir=os.path.join(
-                self.checkpoint_dir,
-                save_name))
+        logger = None
+        # logger = WandbLogger(
+        #     project='triple_correlation',
+        #     group=model_name,
+        #     log_model=True,
+        #     save_dir=os.path.join(
+        #         self.checkpoint_dir,
+        #         save_name))
 
         # callbacks
         # early stopping
@@ -99,41 +100,41 @@ class Trainer:
             check_val_every_n_epoch=10,
             logger=logger
         )
-
+        task_dict = {
+            "sign_classification": SignClassifier,
+            "phase_regression": PhaseRegressor,
+            "hybrid_classification": HybridClassifier
+        }
         # L.seed_everything(42)  # To be reproducible
-        model = BaseDecoder(model_name=model_name, **kwargs)
+        model = task_dict[task_name](model_name=model_name, **kwargs)
         trainer.fit(model, self.train_loader, self.valid_loader)
 
         # Load best checkpoint after training
-        model = BaseDecoder.load_from_checkpoint(
+        model = task_dict[task_name].load_from_checkpoint(
             trainer.checkpoint_callback.best_model_path)
 
-        # Test best model on validation and test set
-        val_result = trainer.test(model, dataloaders=self.valid_loader,
-                                  verbose=False)
-        test_result = trainer.test(model, dataloaders=self.test_loader,
+        # Run test set through best model and log metrics
+        trainer.test(model, dataloaders=self.test_loader,
                                    verbose=False)
-        result = {"test": test_result[0]["test_loss"],
-                  "val": val_result[0]["test_loss"]}
 
         logger.experiment.finish()
 
-        return model, result
+        return model
 
     def scan_hyperparams(self):
         for (num_layers, num_conv_layers, kernel_size, dropout_rate, momentum,
              lr, batch_size, zeta, norm, hidden_size) in product(
-                [3, 4], [None], [None], [0.0], [0.9], [5e-4, 1e-4],[16],
-                [0.0], [False], [2*self.input_size, 23]):
+                [3], [None], [None], [0.0], [0.9], [1e-3],[16],
+                [0], [False], [self.input_size]):
             optimizer = "Adam"
 
             model_config = {"num_layers": num_layers,
-                            "activation": "LeakyReLU",
-                            "norm": True,
+                            #"activation": "LeakyReLU",
+                            "norm": norm,
                             "input_size": self.input_size,
                             "hidden_size": hidden_size,
-                            "output_size": self.output_size,
-                            "Phi_signed": False, }
+                            "output_size": self.output_size
+                            }
             # model_config = {"num_layers": num_layers,
             #                 "num_conv_layers": num_conv_layers,
             #                 "kernel_size": kernel_size,
@@ -145,107 +146,20 @@ class Trainer:
             #                 "output_size": self.output_size}
             optimizer_config = {"lr": lr,
                                 "momentum": momentum, }
-            loss_config = {"loss_name": "bce_logits",
+            loss_config = {"loss_name": "mse",
                            "zeta": zeta}
             if optimizer == "Adam":
                 optimizer_config = {"lr": lr}
             misc_config = {"batch_size": batch_size}
             self.set_dataloaders(batch_size=batch_size)
 
-            self.train_model(model_name="SignMLP",
+            self.train_model(model_name="LinearNet",
+                             task_name="phase_regression",
                              model_hparams=model_config,
                              optimizer_name=optimizer,
                              optimizer_hparams=optimizer_config,
                              misc_hparams=misc_config,
                              loss_hparams=loss_config)
-
-    def train_linear_model(self, model_name, save_name=None, **kwargs):
-        """Train model.
-
-        Args:
-            model_name: Name of the model you want to run. Is used to look up the class in "model_dict"
-            save_name (optional): If specified, this name will be used for creating the checkpoint and logging directory.
-        """
-        if save_name is None:
-            save_name = model_name
-
-        # logger
-        logger = WandbLogger(project='triple_correlation',
-                             group=model_name, log_model=True,
-                             save_dir=os.path.join(self.checkpoint_dir,
-                                                   save_name))
-
-        # callbacks
-        # early stopping
-        early_stop_callback = EarlyStopping(monitor="val_loss",
-                                            min_delta=0.00,
-                                            patience=5,
-                                            verbose=True,
-                                            mode="min")
-        checkpoint_callback = ModelCheckpoint(save_weights_only=True,
-                                              mode="min", monitor="train_loss")
-        # Save the best checkpoint based on the maximum val_acc recorded.
-        # Saves only weights and not optimizer
-
-        # Create a PyTorch Lightning trainer with the generation callback
-        trainer = L.Trainer(
-            default_root_dir=os.path.join(self.checkpoint_dir, save_name),
-            accelerator="cpu",
-            # devices=[0],
-            max_epochs=1000,
-            callbacks=[checkpoint_callback],
-            check_val_every_n_epoch=10,
-            logger=logger
-        )
-
-        # L.seed_everything(42)  # To be reproducible
-        model = BaseDecoder(model_name=model_name, **kwargs)
-        trainer.fit(model, self.train_loader, self.valid_loader)
-
-        # Load best checkpoint after training
-        model = BaseDecoder.load_from_checkpoint(
-            trainer.checkpoint_callback.best_model_path)
-
-        # Test best model on validation and test set
-        val_result = trainer.test(model, dataloaders=self.valid_loader,
-                                  verbose=False)
-        test_result = trainer.test(model, dataloaders=self.test_loader,
-                                   verbose=False)
-        result = {"test": test_result[0]["test_loss"],
-                  "val": val_result[0]["test_loss"]}
-
-        logger.experiment.finish()
-
-        return model, result
-
-    def scan_linear_hyperparams(self):
-        for optimizer, num_layers, hidden_size, Phi_signed in product(
-            ["SGD"], [
-                2, 3], [
-                self.input_size, 2 * self.input_size, 3 * self.input_size], [False]):
-
-            model_config = {"num_layers": num_layers,
-                            "norm": False,
-                            "input_size": self.input_size,
-                            "output_size": self.output_size,
-                            "hidden_size": hidden_size,
-                            "Phi_signed": Phi_signed, }
-            optimizer_config = {"lr": 1e-3,
-                                "momentum": 0.9, }
-            if optimizer == "Adam":
-                optimizer_config = {"lr": 1e-3}
-            loss_config = {"loss_name": "mse",
-                           "zeta": 1.}
-            batch_size = 16
-            misc_config = {"batch_size": batch_size}
-            self.set_dataloaders(batch_size=batch_size)
-
-            self.train_linear_model(model_name="LinearNet",
-                                    model_hparams=model_config,
-                                    optimizer_name=optimizer,
-                                    optimizer_hparams=optimizer_config,
-                                    misc_hparams=misc_config,
-                                    loss_hparams=loss_config)
 
     def load_model(self, model_name="BottleCNN", model_id="5nozki8z"):
         # Check whether pretrained model exists. If yes, load it and skip
