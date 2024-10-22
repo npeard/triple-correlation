@@ -74,13 +74,15 @@ class MultiTaskPhiDataset(PhiDataset):
 
     
 def get_custom_dataloader(h5_file, batch_size=128, shuffle=True,
-                          absPhi=False, signPhi=False):
+                          absPhi=False, signPhi=False, multiTask=False):
     if not absPhi:
         dataset = PhiDataset(h5_file)
     else:
         dataset = AbsPhiDataset(h5_file)
         if signPhi:
             dataset = SignPhiDataset(h5_file)
+    if multiTask:
+        dataset = MultiTaskPhiDataset(h5_file)
 
     # We can use DataLoader to get batches of data
     dataloader = DataLoader(

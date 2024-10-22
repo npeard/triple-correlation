@@ -16,12 +16,13 @@ from datasets import get_custom_dataloader
 
 class Trainer:
     def __init__(self, training_h5, validation_h5, testing_h5,
-                 absPhi=False, signPhi=False):
+                 absPhi=False, signPhi=False, multiTask=False):
         self.training_h5 = training_h5
         self.validation_h5 = validation_h5
         self.testing_h5 = testing_h5
         self.absPhi = absPhi
         self.signPhi = signPhi
+        self.multiTask = multiTask
 
         # get dataloaders
         self.set_dataloaders()
@@ -40,18 +41,22 @@ class Trainer:
         self.train_loader = get_custom_dataloader(
             self.training_h5, batch_size=self.batch_size,
             absPhi=self.absPhi,
-            signPhi=self.signPhi)
+            signPhi=self.signPhi,
+            multiTask=self.multiTask,
+            shuffle=True)
         self.valid_loader = get_custom_dataloader(
             self.validation_h5,
             batch_size=self.batch_size,
             absPhi=self.absPhi,
             signPhi=self.signPhi,
+            multiTask=self.multiTask,
             shuffle=False)
         self.test_loader = get_custom_dataloader(
             self.testing_h5,
             batch_size=self.batch_size,
             absPhi=self.absPhi,
             signPhi=self.signPhi,
+            multiTask=self.multiTask,
             shuffle=False)
 
     def train_model(self, model_name, task_name, save_name=None, **kwargs):
