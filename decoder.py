@@ -143,15 +143,13 @@ class BaseDecoder(L.LightningModule):
         loss = self.loss_function(y_hat, y, x)
         
         self.log("test_loss", loss, prog_bar=True, on_epoch=True)
-        # TODO: Do we need to return y_hat, y, loss?
-        # return y_hat, y, loss
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         x, y = batch
         y_hat = self.model(x)
         
         # TODO: change output shapes
-        if self.model_name == "SignMLP":
+        if self.model_name == "MLP":
             print(y_hat.shape)
             y_hat = nn.Sigmoid()(y_hat)
             return y_hat.view(-1, x.size(1), x.size(2)), y.view(-1, x.size(1), x.size(2)), x
@@ -210,8 +208,8 @@ class HybridClassifier(L.LightningModule):
                                               optimizer_name,
                                               optimizer_hparams, misc_hparams,
                                               loss_hparams)
-        self.phase_regressor = self.load_regressor(model_name=model_name,
-                                                   model_id="5nozki8z")
+        self.phase_regressor = self.load_regressor(model_name="LinearNet",
+                                                   model_id="abqnogoh")
         
         # Exports the hyperparameters to a YAML file, and create "self.hparams"
         # namespace
@@ -243,6 +241,7 @@ class HybridClassifier(L.LightningModule):
             print(f"Found pretrained model at {
                   pretrained_filename}, loading...")
             # Automatically loads the model with the saved hyperparameters
+            # Loading a particular model here, so needs to be a class method?
             model = PhaseRegressor.load_from_checkpoint(
                 pretrained_filename)
 

@@ -67,14 +67,14 @@ class Trainer:
             save_name = model_name
 
         # logger
-        logger = None
-        # logger = WandbLogger(
-        #     project='triple_correlation',
-        #     group=model_name,
-        #     log_model=True,
-        #     save_dir=os.path.join(
-        #         self.checkpoint_dir,
-        #         save_name))
+        #logger = None
+        logger = WandbLogger(
+            project='triple_correlation',
+            group=model_name,
+            log_model=True,
+            save_dir=os.path.join(
+                self.checkpoint_dir,
+                save_name))
 
         # callbacks
         # early stopping
@@ -129,21 +129,12 @@ class Trainer:
             optimizer = "Adam"
 
             model_config = {"num_layers": num_layers,
-                            #"activation": "LeakyReLU",
+                            "activation": "LeakyReLU",
                             "norm": norm,
                             "input_size": self.input_size,
                             "hidden_size": hidden_size,
                             "output_size": self.output_size
                             }
-            # model_config = {"num_layers": num_layers,
-            #                 "num_conv_layers": num_conv_layers,
-            #                 "kernel_size": kernel_size,
-            #                 "dropout_rate": dropout_rate,
-            #                 "activation": "LeakyReLU",
-            #                 "norm": norm,
-            #                 "input_size": self.input_size,
-            #                 "hidden_size": self.output_size,
-            #                 "output_size": self.output_size}
             optimizer_config = {"lr": lr,
                                 "momentum": momentum, }
             loss_config = {"loss_name": "mse",
@@ -153,8 +144,8 @@ class Trainer:
             misc_config = {"batch_size": batch_size}
             self.set_dataloaders(batch_size=batch_size)
 
-            self.train_model(model_name="LinearNet",
-                             task_name="phase_regression",
+            self.train_model(model_name="MLP",
+                             task_name="sign_classification",
                              model_hparams=model_config,
                              optimizer_name=optimizer,
                              optimizer_hparams=optimizer_config,
@@ -231,7 +222,7 @@ class Trainer:
             plt.tight_layout()
             plt.show()
 
-    def plot_sign_predictions(self, model_name="SignMLP",
+    def plot_sign_predictions(self, model_name="MLP",
                               model_id="i52c3rlz"):
 
         model = self.load_model(model_name=model_name, model_id=model_id)

@@ -20,6 +20,7 @@ class PhiDataset(Dataset):
     @staticmethod
     def sign_to_binary(x):
         # Map (-1, 1) to (0, 1) so that we can use BCELoss
+        x = np.sign(x)
         return (x + 1) / 2
     
     def open_hdf5(self):
@@ -76,10 +77,10 @@ def get_custom_dataloader(h5_file, batch_size=128, shuffle=True,
                           absPhi=False, signPhi=False):
     if not absPhi:
         dataset = PhiDataset(h5_file)
-        if signPhi:
-            dataset = SignPhiDataset(h5_file)
     else:
         dataset = AbsPhiDataset(h5_file)
+        if signPhi:
+            dataset = SignPhiDataset(h5_file)
 
     # We can use DataLoader to get batches of data
     dataloader = DataLoader(

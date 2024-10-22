@@ -70,7 +70,8 @@ class MLP(nn.Module):
     def forward(self, x):
         x_view = x.view(-1, x.size(1)**2)
         output = self.model(x_view)
-        return output
+        output_view = output.view(-1, x.size(1), x.size(2))
+        return output_view
     
 
 class PhaseMLP(nn.Module):
