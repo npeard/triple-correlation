@@ -13,7 +13,8 @@ from speckle1d import Fluorescence1D
 
 class BaseDecoder(L.LightningModule):
     def __init__(self, model_name, model_hparams, optimizer_name,
-                 optimizer_hparams, misc_hparams, loss_hparams=None):
+                 optimizer_hparams, misc_hparams, loss_hparams=None,
+                 task_name=None):
         """Decoder for the closure phase
 
         Args:
@@ -27,9 +28,12 @@ class BaseDecoder(L.LightningModule):
         # namespace
         self.save_hyperparameters()
         # Create model
-        self.model_name = model_name
-        self.model = self.create_model(model_name, model_hparams)
+        if model_name is not None:
+            self.model_name = model_name
+            self.model = self.create_model(model_name, model_hparams)
         self.loss_hparams = loss_hparams
+        # This mainly controls selection of proper output shape on inference
+        self.task_name = task_name
 
         torch.set_float32_matmul_precision('high')
 
@@ -63,11 +67,11 @@ class BaseDecoder(L.LightningModule):
         # We will reduce the learning rate by factor gamma at each milestone
         # (epoch number). Setting gamma to 1.0 has no effect on learning rate.
         scheduler = optim.lr_scheduler.MultiStepLR(optimizer,
-                                                   milestones=[150, 500],
+                                                   milestones=[500],
                                                    gamma=1)
         return [optimizer], [scheduler]
 
-    def loss_function(self, y_hat, y, x):
+    def loss_function(self, y_hat, y, *args, **kwargs):
         # Choose the loss function
         #if self.loss_hparams["loss_name"] == "mse":
         loss = nn.MSELoss()(y_hat, y)
@@ -148,12 +152,11 @@ class BaseDecoder(L.LightningModule):
         x, y = batch
         y_hat = self.model(x)
         
-        # TODO: change output shapes
-        if self.model_name == "MLP":
+        if self.task_name == "sign_classification":
             print(y_hat.shape)
             y_hat = nn.Sigmoid()(y_hat)
             return y_hat.view(-1, x.size(1), x.size(2)), y.view(-1, x.size(1), x.size(2)), x
-        else:
+        elif self.task_name == "phase_regression":
             encoded = self.encode(y_hat)
             return y_hat, y, x, encoded
         
@@ -163,7 +166,7 @@ class SignClassifier(BaseDecoder):
         super().__init__(model_name, model_hparams, optimizer_name,
                          optimizer_hparams, misc_hparams, loss_hparams)
     
-    def loss_function(self, y_hat, y, x):
+    def loss_function(self, y_hat, y, *args, **kwargs):
         # Choose the loss function
         #if self.loss_hparams["loss_name"] == "bce_logits":
         loss = nn.BCEWithLogitsLoss()(y_hat, y)
@@ -176,7 +179,11 @@ class PhaseRegressor(BaseDecoder):
         super().__init__(model_name, model_hparams, optimizer_name,
                          optimizer_hparams, misc_hparams, loss_hparams)
     
-    def loss_function(self, y_hat, y, x):
+    def loss_function(self, y_hat, y, x=None, *args, **kwargs):
+        # Enabling override with additional arguments, needs None as default
+        # for new parameters
+        super(PhaseRegressor, self).loss_function(y_hat, y, x, *args, **kwargs)
+        
         # Choose the loss function
         #if self.loss_hparams["loss_name"] == "mse":
         loss = nn.MSELoss()(y_hat, y)
@@ -197,13 +204,18 @@ class PhaseRegressor(BaseDecoder):
         return y_hat
     
     
-class HybridClassifier(L.LightningModule):
+class HybridClassifier(BaseDecoder):
     # This is a hybrid model that combines the sign classifier and a pretrained
     # linear phase regressor in order to train the sign classifier on the
     # phase regression results
     def __init__(self, model_name, model_hparams, optimizer_name,
                  optimizer_hparams, misc_hparams, loss_hparams=None):
-        super().__init__()
+        # We want to inherit BaseDecoder methods, but not the model from the
+        # constructor. Passing None for the model name will not create the
+        # model.
+        super().__init__(None, model_hparams, optimizer_name,
+                         optimizer_hparams, misc_hparams, loss_hparams)
+        self.model = None
         self.sign_classifier = SignClassifier(model_name, model_hparams,
                                               optimizer_name,
                                               optimizer_hparams, misc_hparams,
@@ -218,9 +230,7 @@ class HybridClassifier(L.LightningModule):
         self.model_name = model_name
         self.loss_hparams = loss_hparams
         
-        # Freeze the regressor parameters
-        for param in self.phase_regressor.parameters():
-            param.requires_grad = False
+        self.automatic_optimization = False
         
         torch.set_float32_matmul_precision('high')
         
@@ -247,13 +257,24 @@ class HybridClassifier(L.LightningModule):
 
             return model
         
-    def loss_function(self, phase, phase_hat, Phi_binary, Phi_binary_prelogit,
-                      abs_Phi):
+    def loss_function(self, phase_hat, phase, Phi_binary_prelogit=None,
+                      Phi_binary=None, abs_Phi=None, *args, **kwargs):
+        # enabling override with additional arguments, needs None as default
+        # for new parameters
+        super(HybridClassifier, self).loss_function(phase_hat, phase,
+                                                    Phi_binary_prelogit,
+                                                    Phi_binary,
+                                                    abs_Phi,
+                                                    *args,
+                                                    **kwargs)
+        
         bce_loss = nn.BCEWithLogitsLoss()(Phi_binary_prelogit, Phi_binary)
         mse_loss = nn.MSELoss()(phase_hat, phase)
         encoding_loss = self.encoding_loss(phase_hat, abs_Phi)
         
-        loss = bce_loss
+        # Don't initialize loss = bce_loss, otherwise bce_loss is mutable
+        loss = 0
+        loss += bce_loss
         
         if self.loss_hparams['zeta'] > 0:
             zeta = self.loss_hparams['zeta']
@@ -281,10 +302,10 @@ class HybridClassifier(L.LightningModule):
         Phi = sign * abs_Phi
         phase_hat = self.phase_regressor(Phi)
         
-        loss, bce_loss, mse_loss, encoding_loss = self.loss_function(phase,
-                                                                     phase_hat,
-                                                                     Phi_binary,
+        loss, bce_loss, mse_loss, encoding_loss = self.loss_function(phase_hat,
+                                                                     phase,
                                                                      prelogit,
+                                                                     Phi_binary,
                                                                      abs_Phi)
         
         self.log("train_loss", loss, prog_bar=True, on_epoch=True)
@@ -295,7 +316,13 @@ class HybridClassifier(L.LightningModule):
         self.log("train_encoding_loss", encoding_loss, prog_bar=False,
                  on_epoch=True)
         
-        return loss
+        self.optimizers().zero_grad()
+        self.manual_backward(loss)
+        # Freeze the regressor parameters
+        for param in self.phase_regressor.parameters():
+            param.grad.data.zero_()
+        # Update the classifier parameters
+        self.optimizers().step()
     
     def validation_step(self, batch, batch_idx):
         abs_Phi, Phi_binary, phase = batch
@@ -306,10 +333,10 @@ class HybridClassifier(L.LightningModule):
         Phi = sign * abs_Phi
         phase_hat = self.phase_regressor(Phi)
         
-        loss, bce_loss, mse_loss, encoding_loss = self.loss_function(phase,
-                                                                     phase_hat,
-                                                                     Phi_binary,
+        loss, bce_loss, mse_loss, encoding_loss = self.loss_function(phase_hat,
+                                                                     phase,
                                                                      prelogit,
+                                                                     Phi_binary,
                                                                      abs_Phi)
         
         self.log("val_loss", loss, prog_bar=True, on_epoch=True)
@@ -329,10 +356,10 @@ class HybridClassifier(L.LightningModule):
         Phi = sign * abs_Phi
         phase_hat = self.phase_regressor(Phi)
         
-        loss, bce_loss, mse_loss, encoding_loss = self.loss_function(phase,
-                                                                     phase_hat,
-                                                                     Phi_binary,
+        loss, bce_loss, mse_loss, encoding_loss = self.loss_function(phase_hat,
+                                                                     phase,
                                                                      prelogit,
+                                                                     Phi_binary,
                                                                      abs_Phi)
         
         self.log("test_loss", loss, prog_bar=True, on_epoch=True)
@@ -342,7 +369,25 @@ class HybridClassifier(L.LightningModule):
                  on_epoch=True)
     
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
-        pass
+        abs_Phi, Phi_binary, phase = batch
+        logit = self.forward(abs_Phi)
+        
+        if self.task_name == "sign_classification":
+            return (logit.view(-1, abs_Phi.size(1), abs_Phi.size(2)),
+                    Phi_binary.view(-1, abs_Phi.size(1), abs_Phi.size(2)),
+                    abs_Phi)
+        elif self.task_name == "phase_regression":
+            sign = (logit > 0.5).float() * 2 - 1  # Convert to {-1, 1}
+            Phi = sign * abs_Phi
+            phase_hat = self.phase_regressor(Phi)
+            encoded = self.encode(phase_hat)
+            print(phase_hat.shape)
+            
+            return (phase_hat.view(-1, phase.size(1)),
+                    phase.view(-1, phase.size(1)),
+                    abs_Phi.view(-1, abs_Phi.size(1), abs_Phi.size(2)),
+                    encoded.view(-1, abs_Phi.size(1), abs_Phi.size(2)))
+        
     
     
 class MultiTaskRegressor(L.LightningModule):

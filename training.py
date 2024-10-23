@@ -72,7 +72,7 @@ class Trainer:
             save_name = model_name
 
         # logger
-        #logger = None
+        # logger = None
         logger = WandbLogger(
             project='triple_correlation',
             group=model_name,
@@ -129,8 +129,8 @@ class Trainer:
     def scan_hyperparams(self):
         for (num_layers, num_conv_layers, kernel_size, dropout_rate, momentum,
              lr, batch_size, zeta, norm, hidden_size) in product(
-                [1], [None], [None], [0.0], [0.9], [1e-3], [16],
-                [0], [False], [self.input_size]):
+                [5,6], [None], [None], [0.0], [0.9], [1e-3], [16],
+                [0], [True], [2*self.input_size]):
             optimizer = "Adam"
 
             model_config = {"num_layers": num_layers,
@@ -143,14 +143,15 @@ class Trainer:
             optimizer_config = {"lr": lr,
                                 "momentum": momentum, }
             loss_config = {"loss_name": "mse",
-                           "zeta": zeta}
+                           "zeta": zeta,
+                           "alpha": np.log(2)/np.pi}
             if optimizer == "Adam":
                 optimizer_config = {"lr": lr}
             misc_config = {"batch_size": batch_size}
             self.set_dataloaders(batch_size=batch_size)
 
             self.train_model(model_name="MLP",
-                             task_name="sign_classification",
+                             task_name="hybrid_classification",
                              model_hparams=model_config,
                              optimizer_name=optimizer,
                              optimizer_hparams=optimizer_config,
@@ -173,14 +174,16 @@ class Trainer:
             print(f"Found pretrained model at {
                   pretrained_filename}, loading...")
             # Automatically loads the model with the saved hyperparameters
-            model = BaseDecoder.load_from_checkpoint(
+            model = HybridClassifier.load_from_checkpoint(
                 pretrained_filename)
 
             return model
 
-    def plot_predictions(self, model_name="BottleCNN", model_id="i52c3rlz"):
+    def plot_phase_predictions(self, model_name="BottleCNN",
+                              model_id="i52c3rlz"):
 
         model = self.load_model(model_name=model_name, model_id=model_id)
+        model.task_name = "phase_regression"
         trainer = L.Trainer(
             accelerator="cpu",
             # devices=[0]
@@ -197,15 +200,9 @@ class Trainer:
             fig = plt.figure(figsize=(15, 5))
             ax1, ax2, ax3 = fig.subplots(1, 3)
 
-            ax1.imshow(
-                y[0][2].numpy()[
-                    i,
-                    :,
-                    :],
-                origin="lower",
-                vmin=-1,
-                vmax=1)
+            im1 = ax1.imshow(y[0][2].numpy()[i, :, :], origin="lower")
             ax1.set_title("Inputs")
+            plt.colorbar(im1, ax=ax1)
 
             ax2.plot(y[0][1].numpy()[i, :], label="Targets")
             ax2.plot(y[0][0].numpy()[i, :], label="Predictions")
@@ -213,16 +210,12 @@ class Trainer:
                           (y[0][0][i, :], y[0][1][i, :]).item()))
             ax2.legend()
 
-            ax3.imshow(
-                y[0][3].numpy()[
-                    i,
-                    :,
-                    :],
-                origin="lower",
-                vmin=-1,
-                vmax=1)
+            im3 = ax3.imshow(y[0][3].numpy()[i, :, :], origin="lower")
             ax3.set_title("Encoded Prediction, MSE Loss: " +
-                          str(nn.MSELoss(reduction='sum')(y[0][3][i, :], y[0][2][i, :]).item()))
+                          str(nn.MSELoss(reduction='sum')(y[0][3][i, :],
+                                                          y[0][2][i, :]).item())
+                          )
+            plt.colorbar(im3, ax=ax3)
 
             plt.tight_layout()
             plt.show()
@@ -231,6 +224,7 @@ class Trainer:
                               model_id="i52c3rlz"):
 
         model = self.load_model(model_name=model_name, model_id=model_id)
+        model.task_name = "sign_classification"
         trainer = L.Trainer(
             accelerator="cpu",
             # devices=[0]
@@ -247,17 +241,21 @@ class Trainer:
             fig = plt.figure(figsize=(10, 5))
             ax1, ax2, ax3 = fig.subplots(1, 3)
 
-            ax1.imshow(y[0][2].numpy()[i, :, :], origin="lower")
+            im1 = ax1.imshow(y[0][2].numpy()[i, :, :], origin="lower")
             ax1.set_title("Inputs")
+            plt.colorbar(im1, ax=ax1)
 
-            ax2.imshow(2*y[0][1].numpy()[i, :, :]-1, origin="lower", vmin=-1,
-                       vmax=1, cmap="coolwarm")
-            ax2.set_title("Targets")
+            im2 = ax2.imshow(2*y[0][1].numpy()[i, :, :]-1, origin="lower", vmin=-1,
+                             vmax=1, cmap="coolwarm")
+            ax2.set_title("Targets [-1, 1]")
+            cbar2 = plt.colorbar(im2, ax=ax2)
+            cbar2.set_ticks([-1, 0, 1])
 
-            ax3.imshow(2*y[0][0].numpy()[i, :, :]-1, origin="lower", vmin=-1,
-                       vmax=1, cmap="coolwarm")
-            ax3.set_title("Predictions, MSE Loss: " + str(nn.MSELoss(
-                reduction='sum')(y[0][0][i, :], y[0][1][i, :]).item()))
+            im3 = ax3.imshow(2*y[0][0].numpy()[i, :, :]-1, origin="lower", vmin=-1,
+                             vmax=1, cmap="coolwarm")
+            ax3.set_title("Predictions [-1, 1]")
+            cbar3 = plt.colorbar(im3, ax=ax3)
+            cbar3.set_ticks([-1, 0, 1])
 
             plt.tight_layout()
             plt.show()

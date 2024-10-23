@@ -32,10 +32,11 @@ if __name__ == '__main__':
         train_file = './data/pretrain_numpix11_1e3_samples.h5'
         test_file = train_file
         runner = training.Trainer(train_file, test_file, test_file,
-                                  absPhi=True, signPhi=True, multiTask=False)
+                                  absPhi=True, signPhi=True, multiTask=True)
         #runner.scan_hyperparams()
-        #runner.plot_predictions(model_name="LinearNet", model_id="abqnogoh")
-        runner.plot_sign_predictions(model_name="MLP", model_id="ovrbtf1c")
+        runner.plot_phase_predictions(model_name="MLP",
+                                     model_id="eojqvv3v")
+        #runner.plot_sign_predictions(model_name="MLP", model_id="eojqvv3v")
 
 
     else:
