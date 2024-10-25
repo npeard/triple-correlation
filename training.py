@@ -129,8 +129,8 @@ class Trainer:
     def scan_hyperparams(self):
         for (num_layers, num_conv_layers, kernel_size, dropout_rate, momentum,
              lr, batch_size, zeta, norm, hidden_size) in product(
-                [5,6], [None], [None], [0.0], [0.9], [1e-3], [16],
-                [0], [True], [2*self.input_size]):
+                [3, 4, 5], [None], [None], [0.0], [0.9], [1e-3], [16],
+                [0], [True, False], [2*self.input_size]):
             optimizer = "Adam"
 
             model_config = {"num_layers": num_layers,
@@ -143,15 +143,15 @@ class Trainer:
             optimizer_config = {"lr": lr,
                                 "momentum": momentum, }
             loss_config = {"loss_name": "mse",
-                           "zeta": zeta,
-                           "alpha": np.log(2)/np.pi}
+                           "zeta": zeta,}
+                           #"alpha": np.log(2)/np.pi}
             if optimizer == "Adam":
                 optimizer_config = {"lr": lr}
             misc_config = {"batch_size": batch_size}
             self.set_dataloaders(batch_size=batch_size)
 
-            self.train_model(model_name="MLP",
-                             task_name="hybrid_classification",
+            self.train_model(model_name="ImplicitMultiMLP",
+                             task_name="phase_regression",
                              model_hparams=model_config,
                              optimizer_name=optimizer,
                              optimizer_hparams=optimizer_config,
@@ -174,7 +174,8 @@ class Trainer:
             print(f"Found pretrained model at {
                   pretrained_filename}, loading...")
             # Automatically loads the model with the saved hyperparameters
-            model = HybridClassifier.load_from_checkpoint(
+            # TODO: add conditional loading based on task name here
+            model = PhaseRegressor.load_from_checkpoint(
                 pretrained_filename)
 
             return model

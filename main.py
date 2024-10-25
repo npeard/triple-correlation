@@ -32,10 +32,15 @@ if __name__ == '__main__':
         train_file = './data/pretrain_numpix11_1e3_samples.h5'
         test_file = train_file
         runner = training.Trainer(train_file, test_file, test_file,
-                                  absPhi=True, signPhi=True, multiTask=True)
+                                  absPhi=True, signPhi=False, multiTask=False)
         #runner.scan_hyperparams()
-        runner.plot_phase_predictions(model_name="MLP",
-                                     model_id="eojqvv3v")
+        
+        runner.plot_phase_predictions(model_name="ImplicitMultiMLP",
+                                     model_id="9uzn9wi7")
+        
+        # Best hybrid classifier so far
+        # runner.plot_phase_predictions(model_name="MLP",
+        #                              model_id="eojqvv3v")
         #runner.plot_sign_predictions(model_name="MLP", model_id="eojqvv3v")
 
 

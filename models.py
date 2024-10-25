@@ -70,9 +70,33 @@ class MLP(nn.Module):
     def forward(self, x):
         x_view = x.view(-1, x.size(1)**2)
         output = self.model(x_view)
+        # TODO: add conditional reshaping here
         output_view = output.view(-1, x.size(1), x.size(2))
         return output_view
     
+    
+class ImplicitMultiMLP(nn.Module):
+    def __init__(self, input_size, num_layers, output_size, hidden_size=None,
+                 activation="Tanh", norm=False):
+        super(ImplicitMultiMLP, self).__init__()
+        self.layers = []
+        self.mlp = MLP(input_size=input_size, num_layers=num_layers,
+                  output_size=input_size, hidden_size=hidden_size,
+                  activation=activation, norm=norm)
+        self.lin = LinearNet(input_size=input_size, num_layers=1,
+                        output_size=output_size, hidden_size=hidden_size,
+                        norm=norm)
+        
+    def forward(self, x):
+        #x_view = x.view(-1, x.size(1)**2)
+        sign_prob = self.mlp(x)
+        sign = nn.Tanh()(sign_prob)
+        #sign_view = sign.view(-1, x.size(1), x.size(2))
+        Phi = x * sign
+        phase = self.lin(Phi)
+        # This atan2 operation is very unhelpful for optimization, why?
+        #pred = torch.atan2(torch.sin(phase), torch.cos(phase))
+        return phase
 
 class PhaseMLP(nn.Module):
     def __init__(self, input_size, num_layers, output_size, hidden_size=None,

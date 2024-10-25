@@ -4,11 +4,7 @@ import os, glob
 from torch import optim, nn
 import torch
 import lightning as L
-from models import PhaseMLP, LinearNet, BottleCNN, MLP
-from tqdm import tqdm
-import utils
-import numpy as np
-from speckle1d import Fluorescence1D
+from models import PhaseMLP, LinearNet, BottleCNN, MLP, ImplicitMultiMLP
 
 
 class BaseDecoder(L.LightningModule):
@@ -40,7 +36,8 @@ class BaseDecoder(L.LightningModule):
     @staticmethod
     def create_model(model_name, model_hparams):
         model_dict = {"PhaseMLP": PhaseMLP, "LinearNet": LinearNet,
-                      "BottleCNN": BottleCNN, "MLP": MLP}
+                      "BottleCNN": BottleCNN, "MLP": MLP,
+                      "ImplicitMultiMLP": ImplicitMultiMLP}
         
         if model_name in model_dict:
             return model_dict[model_name](**model_hparams)

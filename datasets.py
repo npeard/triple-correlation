@@ -112,5 +112,4 @@ def generate_pretraining_data(num_pix, num_samples, file_path):
         # with h5py concatenation
         Phi = Fluorescence1D.compute_Phi_from_phase(phase[num_pix // 2:])
         
-        # TODO: don't save cos(Phi)
         utils.append_to_h5file(Phi, phase, file_path)
