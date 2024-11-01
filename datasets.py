@@ -89,7 +89,7 @@ def get_custom_dataloader(h5_file, batch_size=128, shuffle=True,
         dataset,
         batch_size=batch_size,
         shuffle=shuffle,
-        num_workers=1,
+        num_workers=7,
         persistent_workers=True,
         pin_memory=True)
 

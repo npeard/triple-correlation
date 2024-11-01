@@ -72,20 +72,20 @@ class Trainer:
             save_name = model_name
 
         # logger
-        # logger = None
-        logger = WandbLogger(
-            project='triple_correlation',
-            group=model_name,
-            log_model=True,
-            save_dir=os.path.join(
-                self.checkpoint_dir,
-                save_name))
+        logger = None
+        # logger = WandbLogger(
+        #     project='triple_correlation',
+        #     group=model_name,
+        #     log_model=True,
+        #     save_dir=os.path.join(
+        #         self.checkpoint_dir,
+        #         save_name))
 
         # callbacks
         # early stopping
         early_stop_callback = EarlyStopping(monitor="val_loss",
-                                            min_delta=0.00,
-                                            patience=3,
+                                            min_delta=0.005,
+                                            patience=4,
                                             verbose=True,
                                             mode="min")
         checkpoint_callback = ModelCheckpoint(save_weights_only=True,
@@ -97,11 +97,11 @@ class Trainer:
         # Create a PyTorch Lightning trainer with the generation callback
         trainer = L.Trainer(
             default_root_dir=os.path.join(self.checkpoint_dir, save_name),
-            accelerator="cpu",
-            # devices=[0],
+            accelerator="gpu",
+            devices=[0],
             max_epochs=1000,
-            # callbacks=[checkpoint_callback, early_stop_callback],
-            callbacks=[checkpoint_callback],
+            callbacks=[checkpoint_callback, early_stop_callback],
+            #callbacks=[checkpoint_callback],
             check_val_every_n_epoch=10,
             logger=logger
         )
@@ -129,8 +129,8 @@ class Trainer:
     def scan_hyperparams(self):
         for (num_layers, num_conv_layers, kernel_size, dropout_rate, momentum,
              lr, batch_size, zeta, norm, hidden_size) in product(
-                [3, 4, 5], [None], [None], [0.0], [0.9], [1e-3], [16],
-                [0], [True, False], [2*self.input_size]):
+                [3], [None], [None], [0.0], [0.9], [1e-3], [16],
+                [0], [True], [2*self.input_size]):
             optimizer = "Adam"
 
             model_config = {"num_layers": num_layers,
