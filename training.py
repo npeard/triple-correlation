@@ -69,9 +69,9 @@ class Trainer:
         valid_batch = next(iter(self.valid_loader))
         test_batch = next(iter(self.test_loader))
         # Check for independence of the data sets by checking for equality of the first batch (unshuffled)
-        assert (verify_batch[:] == valid_batch[:]).all(), "Training and validation sets are not independent"
-        assert (verify_batch[:] == test_batch[:]).all(), "Training and test sets are not independent"
-        assert (valid_batch[:] == test_batch[:]).all(), "Validation and test sets are not independent"
+        assert (verify_batch[0] != valid_batch[0]).any(), "Training and validation sets are not independent"
+        assert (verify_batch[0] != test_batch[0]).any(), "Training and test sets are not independent"
+        assert (valid_batch[0] != test_batch[0]).any(), "Validation and test sets are not independent"
 
     def train_model(self, model_name, task_name, save_name=None, **kwargs):
         """Train model.
@@ -86,20 +86,20 @@ class Trainer:
             save_name = model_name
 
         # logger
-        logger = None
-        # logger = WandbLogger(
-        #     project='triple_correlation',
-        #     group=model_name,
-        #     log_model=True,
-        #     save_dir=os.path.join(
-        #         self.checkpoint_dir,
-        #         save_name))
+        # logger = None
+        logger = WandbLogger(
+            project='triple_correlation',
+            group=model_name,
+            log_model=True,
+            save_dir=os.path.join(
+                self.checkpoint_dir,
+                save_name))
 
         # callbacks
         # early stopping
         early_stop_callback = EarlyStopping(monitor="val_loss",
                                             min_delta=0.005,
-                                            patience=7,
+                                            patience=10,
                                             verbose=True,
                                             mode="min")
         checkpoint_callback = ModelCheckpoint(save_weights_only=True,
@@ -143,8 +143,8 @@ class Trainer:
     def scan_hyperparams(self):
         for (num_layers, num_conv_layers, kernel_size, dropout_rate, momentum,
              lr, batch_size, zeta, norm, hidden_size) in product(
-                [3], [None], [None], [0.0], [0.9], [1e-3], [128],
-                [0], [True], [2*self.input_size]):
+                [3,5,7], [None], [None], [0.0], [0.9], [1e-3], [64, 512],
+                [0], [True, False], [self.output_size, self.input_size, 2*self.input_size]):
             optimizer = "Adam"
 
             model_config = {"num_layers": num_layers,

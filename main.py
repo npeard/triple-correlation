@@ -24,7 +24,7 @@ if __name__ == '__main__':
     if len(sys.argv) == 1:
         """Run functions in this scratch area. 
         """
-        num_pix = 11
+        num_pix = 15
         train_samples = int(1e4)
         valid_samples = int(1e3)
         train_file = f"./data/pretrain_numpix{num_pix}_{train_samples:.0e}_samples.h5"
