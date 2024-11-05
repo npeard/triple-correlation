@@ -44,6 +44,12 @@ class Trainer:
             signPhi=self.signPhi,
             multiTask=self.multiTask,
             shuffle=True)
+        verify_loader = get_custom_dataloader(
+            self.training_h5, batch_size=self.batch_size,
+            absPhi=self.absPhi,
+            signPhi=self.signPhi,
+            multiTask=self.multiTask,
+            shuffle=False)
         self.valid_loader = get_custom_dataloader(
             self.validation_h5,
             batch_size=self.batch_size,
@@ -58,6 +64,14 @@ class Trainer:
             signPhi=self.signPhi,
             multiTask=self.multiTask,
             shuffle=False)
+
+        verify_batch = next(iter(verify_loader))
+        valid_batch = next(iter(self.valid_loader))
+        test_batch = next(iter(self.test_loader))
+        # Check for independence of the data sets by checking for equality of the first batch (unshuffled)
+        assert (verify_batch[:] == valid_batch[:]).all(), "Training and validation sets are not independent"
+        assert (verify_batch[:] == test_batch[:]).all(), "Training and test sets are not independent"
+        assert (valid_batch[:] == test_batch[:]).all(), "Validation and test sets are not independent"
 
     def train_model(self, model_name, task_name, save_name=None, **kwargs):
         """Train model.
@@ -85,7 +99,7 @@ class Trainer:
         # early stopping
         early_stop_callback = EarlyStopping(monitor="val_loss",
                                             min_delta=0.005,
-                                            patience=4,
+                                            patience=7,
                                             verbose=True,
                                             mode="min")
         checkpoint_callback = ModelCheckpoint(save_weights_only=True,
@@ -129,7 +143,7 @@ class Trainer:
     def scan_hyperparams(self):
         for (num_layers, num_conv_layers, kernel_size, dropout_rate, momentum,
              lr, batch_size, zeta, norm, hidden_size) in product(
-                [3], [None], [None], [0.0], [0.9], [1e-3], [16],
+                [3], [None], [None], [0.0], [0.9], [1e-3], [128],
                 [0], [True], [2*self.input_size]):
             optimizer = "Adam"
 
@@ -150,8 +164,8 @@ class Trainer:
             misc_config = {"batch_size": batch_size}
             self.set_dataloaders(batch_size=batch_size)
 
-            self.train_model(model_name="ImplicitMultiMLP",
-                             task_name="phase_regression",
+            self.train_model(model_name="MLP",
+                             task_name="sign_classification",
                              model_hparams=model_config,
                              optimizer_name=optimizer,
                              optimizer_hparams=optimizer_config,

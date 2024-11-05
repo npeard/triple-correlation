@@ -20,12 +20,12 @@ import models
 import datasets
 
 if __name__ == '__main__':
-    np.random.seed(0x5EED+15)
+    np.random.seed()
     if len(sys.argv) == 1:
         """Run functions in this scratch area. 
         """
         num_pix = 11
-        train_samples = int(1e3)
+        train_samples = int(1e4)
         valid_samples = int(1e3)
         train_file = f"./data/pretrain_numpix{num_pix}_{train_samples:.0e}_samples.h5"
         valid_file = f"./data/prevalid_numpix{num_pix}_{valid_samples:.0e}_samples.h5"
@@ -43,7 +43,7 @@ if __name__ == '__main__':
             file_path=test_file)
 
         runner = training.Trainer(train_file, valid_file, test_file,
-                                  absPhi=True, signPhi=False, multiTask=False)
+                                  absPhi=True, signPhi=True, multiTask=False)
         runner.scan_hyperparams()
         
         # runner.plot_phase_predictions(model_name="ImplicitMultiMLP",
