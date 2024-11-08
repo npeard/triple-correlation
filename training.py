@@ -25,7 +25,8 @@ class Trainer:
         self.multiTask = multiTask
 
         # get dataloaders
-        self.set_dataloaders()
+        self.set_dataloaders_batch_size()
+        self.check_dataloaders()
 
         # dimensions
         self.input_size = next(iter(self.train_loader))[0].size(-1) ** 2
@@ -36,7 +37,7 @@ class Trainer:
         # directories
         self.checkpoint_dir = "./checkpoints"
 
-    def set_dataloaders(self, batch_size=128):
+    def set_dataloaders_batch_size(self, batch_size=128):
         self.batch_size = batch_size
         self.train_loader = get_custom_dataloader(
             self.training_h5, batch_size=self.batch_size,
@@ -44,12 +45,6 @@ class Trainer:
             signPhi=self.signPhi,
             multiTask=self.multiTask,
             shuffle=True)
-        verify_loader = get_custom_dataloader(
-            self.training_h5, batch_size=self.batch_size,
-            absPhi=self.absPhi,
-            signPhi=self.signPhi,
-            multiTask=self.multiTask,
-            shuffle=False)
         self.valid_loader = get_custom_dataloader(
             self.validation_h5,
             batch_size=self.batch_size,
@@ -65,12 +60,20 @@ class Trainer:
             multiTask=self.multiTask,
             shuffle=False)
 
-        verify_batch = next(iter(verify_loader))
+    def check_dataloaders(self):
+        train_noshuffle_loader = get_custom_dataloader(
+            self.training_h5, batch_size=self.batch_size,
+            absPhi=self.absPhi,
+            signPhi=self.signPhi,
+            multiTask=self.multiTask,
+            shuffle=False)
+
+        train_batch = next(iter(train_noshuffle_loader))
         valid_batch = next(iter(self.valid_loader))
         test_batch = next(iter(self.test_loader))
         # Check for independence of the data sets by checking for equality of the first batch (unshuffled)
-        assert (verify_batch[0] != valid_batch[0]).any(), "Training and validation sets are not independent"
-        assert (verify_batch[0] != test_batch[0]).any(), "Training and test sets are not independent"
+        assert (train_batch[0] != valid_batch[0]).any(), "Training and validation sets are not independent"
+        assert (train_batch[0] != test_batch[0]).any(), "Training and test sets are not independent"
         assert (valid_batch[0] != test_batch[0]).any(), "Validation and test sets are not independent"
 
     def train_model(self, model_name, task_name, save_name=None, **kwargs):
@@ -86,14 +89,14 @@ class Trainer:
             save_name = model_name
 
         # logger
-        # logger = None
-        logger = WandbLogger(
-            project='triple_correlation',
-            group=model_name,
-            log_model=True,
-            save_dir=os.path.join(
-                self.checkpoint_dir,
-                save_name))
+        logger = None
+        # logger = WandbLogger(
+        #     project='triple_correlation',
+        #     group=model_name,
+        #     log_model=True,
+        #     save_dir=os.path.join(
+        #         self.checkpoint_dir,
+        #         save_name))
 
         # callbacks
         # early stopping
@@ -162,7 +165,7 @@ class Trainer:
             if optimizer == "Adam":
                 optimizer_config = {"lr": lr}
             misc_config = {"batch_size": batch_size}
-            self.set_dataloaders(batch_size=batch_size)
+            self.set_dataloaders_batch_size(batch_size=batch_size)
 
             self.train_model(model_name="MLP",
                              task_name="sign_classification",
