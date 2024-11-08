@@ -115,7 +115,7 @@ class Trainer:
         trainer = L.Trainer(
             default_root_dir=os.path.join(self.checkpoint_dir, save_name),
             accelerator="gpu",
-            devices=[0],
+            devices=[1],
             max_epochs=1000,
             callbacks=[checkpoint_callback, early_stop_callback],
             #callbacks=[checkpoint_callback],
@@ -146,8 +146,8 @@ class Trainer:
     def scan_hyperparams(self):
         for (num_layers, num_conv_layers, kernel_size, dropout_rate, momentum,
              lr, batch_size, zeta, norm, hidden_size) in product(
-                [3,5,7], [None], [None], [0.0], [0.9], [1e-3], [64, 512],
-                [0], [True, False], [self.output_size, self.input_size, 2*self.input_size]):
+                [1], [None], [None], [0.0], [0.9], [1e-3], [512],
+                [0], [False], [self.input_size]):
             optimizer = "Adam"
 
             model_config = {"num_layers": num_layers,
@@ -167,8 +167,8 @@ class Trainer:
             misc_config = {"batch_size": batch_size}
             self.set_dataloaders_batch_size(batch_size=batch_size)
 
-            self.train_model(model_name="MLP",
-                             task_name="sign_classification",
+            self.train_model(model_name="LinearNet",
+                             task_name="phase_regression",
                              model_hparams=model_config,
                              optimizer_name=optimizer,
                              optimizer_hparams=optimizer_config,
