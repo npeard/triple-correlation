@@ -258,12 +258,12 @@ class HybridClassifier(BaseDecoder):
                       Phi_binary=None, abs_Phi=None, *args, **kwargs):
         # enabling override with additional arguments, needs None as default
         # for new parameters
-        super(HybridClassifier, self).loss_function(phase_hat, phase,
-                                                    Phi_binary_prelogit,
-                                                    Phi_binary,
-                                                    abs_Phi,
-                                                    *args,
-                                                    **kwargs)
+        # super(HybridClassifier, self).loss_function(phase_hat, phase,
+        #                                             Phi_binary_prelogit,
+        #                                             Phi_binary,
+        #                                             abs_Phi,
+        #                                             *args,
+        #                                             **kwargs)
         
         bce_loss = nn.BCEWithLogitsLoss()(Phi_binary_prelogit, Phi_binary)
         mse_loss = nn.MSELoss()(phase_hat, phase)
@@ -277,9 +277,11 @@ class HybridClassifier(BaseDecoder):
             zeta = self.loss_hparams['zeta']
             loss += zeta * encoding_loss
             
-        if self.loss_hparams['alpha'] > 0:
-            alpha = self.loss_hparams['alpha']
-            loss += alpha * mse_loss
+        #if self.loss_hparams['alpha'] > 0:
+        # loss must include mse_loss, even if alpha = 0, so that gradients
+        # are computed for the linear layer (so that they can then be zeroed)
+        alpha = self.loss_hparams['alpha']
+        loss += alpha * mse_loss
     
         return loss, bce_loss, mse_loss, encoding_loss
     
@@ -293,8 +295,9 @@ class HybridClassifier(BaseDecoder):
         # it is independent of forward, which is only for inference
         abs_Phi, Phi_binary, phase = batch
         prelogit = self.sign_classifier(abs_Phi)
-        sign_prob = nn.Sigmoid()(prelogit)
-        sign = (sign_prob > 0.5).float() * 2 - 1  # Convert to {-1, 1}
+        # sign_prob = nn.Sigmoid()(prelogit)
+        # sign = (sign_prob > 0.5).float() * 2 - 1  # Convert to {-1, 1}
+        sign = nn.Tanh()(prelogit)
         
         Phi = sign * abs_Phi
         phase_hat = self.phase_regressor(Phi)
@@ -324,8 +327,9 @@ class HybridClassifier(BaseDecoder):
     def validation_step(self, batch, batch_idx):
         abs_Phi, Phi_binary, phase = batch
         prelogit = self.sign_classifier(abs_Phi)
-        sign_prob = nn.Sigmoid()(prelogit)
-        sign = (sign_prob > 0.5).float() * 2 - 1  # Convert to {-1, 1}
+        # sign_prob = nn.Sigmoid()(prelogit)
+        # sign = (sign_prob > 0.5).float() * 2 - 1  # Convert to {-1, 1}
+        sign = nn.Tanh()(prelogit)
         
         Phi = sign * abs_Phi
         phase_hat = self.phase_regressor(Phi)

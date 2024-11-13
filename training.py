@@ -26,7 +26,7 @@ class Trainer:
 
         # get dataloaders
         self.set_dataloaders_batch_size()
-        self.check_dataloaders()
+        #self.check_dataloaders()
 
         # dimensions
         self.input_size = next(iter(self.train_loader))[0].size(-1) ** 2
@@ -37,7 +37,7 @@ class Trainer:
         # directories
         self.checkpoint_dir = "./checkpoints"
 
-    def set_dataloaders_batch_size(self, batch_size=128):
+    def set_dataloaders_batch_size(self, batch_size=64):
         self.batch_size = batch_size
         self.train_loader = get_custom_dataloader(
             self.training_h5, batch_size=self.batch_size,
@@ -90,13 +90,13 @@ class Trainer:
 
         # logger
         logger = None
-        # logger = WandbLogger(
-        #     project='triple_correlation',
-        #     group=model_name,
-        #     log_model=True,
-        #     save_dir=os.path.join(
-        #         self.checkpoint_dir,
-        #         save_name))
+        logger = WandbLogger(
+            project='triple_correlation',
+            group=model_name,
+            log_model=True,
+            save_dir=os.path.join(
+                self.checkpoint_dir,
+                save_name))
 
         # callbacks
         # early stopping
@@ -114,10 +114,10 @@ class Trainer:
         # Create a PyTorch Lightning trainer with the generation callback
         trainer = L.Trainer(
             default_root_dir=os.path.join(self.checkpoint_dir, save_name),
-            accelerator="gpu",
-            devices=[1],
+            accelerator="cpu",
+            #devices=[0],
             max_epochs=1000,
-            callbacks=[checkpoint_callback, early_stop_callback],
+            #callbacks=[checkpoint_callback, early_stop_callback],
             #callbacks=[checkpoint_callback],
             check_val_every_n_epoch=10,
             logger=logger
@@ -146,8 +146,8 @@ class Trainer:
     def scan_hyperparams(self):
         for (num_layers, num_conv_layers, kernel_size, dropout_rate, momentum,
              lr, batch_size, zeta, norm, hidden_size) in product(
-                [1], [None], [None], [0.0], [0.9], [1e-3], [512],
-                [0], [False], [self.input_size]):
+                [10], [None], [None], [0.0], [0.9], [1e-3], [32],
+                [0], [False], [self.output_size]):
             optimizer = "Adam"
 
             model_config = {"num_layers": num_layers,
@@ -160,15 +160,15 @@ class Trainer:
             optimizer_config = {"lr": lr,
                                 "momentum": momentum, }
             loss_config = {"loss_name": "mse",
-                           "zeta": zeta,}
-                           #"alpha": np.log(2)/np.pi}
+                           "zeta": zeta,
+                           "alpha": np.log(2)/np.pi}
             if optimizer == "Adam":
                 optimizer_config = {"lr": lr}
             misc_config = {"batch_size": batch_size}
             self.set_dataloaders_batch_size(batch_size=batch_size)
 
-            self.train_model(model_name="LinearNet",
-                             task_name="phase_regression",
+            self.train_model(model_name="MLP",
+                             task_name="hybrid_classification",
                              model_hparams=model_config,
                              optimizer_name=optimizer,
                              optimizer_hparams=optimizer_config,
