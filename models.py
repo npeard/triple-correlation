@@ -117,6 +117,61 @@ class PhaseMLP(nn.Module):
         return pred
 
 
+class SelfAttention(nn.Module):
+    def __init__(self, input_size, hidden_size=64, num_heads=4):
+        super().__init__()
+        
+        # Initial embedding of individual features
+        self.feature_embedding = nn.Linear(1, hidden_size)
+        
+        # Multi-head self attention layer
+        self.self_attention = nn.MultiheadAttention(
+            embed_dim=hidden_size,
+            num_heads=num_heads,
+            batch_first=True
+        )
+        
+        # Process attention output
+        self.post_attention = nn.Sequential(
+            nn.Linear(hidden_size, hidden_size),
+            nn.ReLU(),
+            nn.LayerNorm(hidden_size)
+        )
+        
+        # Global pooling and classification
+        self.classifier = nn.Sequential(
+            nn.Linear(hidden_size, hidden_size),
+            nn.ReLU(),
+            nn.Linear(hidden_size, input_size),
+            #nn.Tanh()  # Output in [-1, 1] for sign classification
+        )
+    
+    def forward(self, x):
+        x_view = x.view(-1, x.size(1)**2)
+        batch_size, num_features = x_view.shape
+        
+        # Reshape and embed each feature
+        x_view = x_view.view(batch_size, num_features, 1)
+        embeddings = self.feature_embedding(x_view)
+        
+        # Self attention to capture correlations
+        attention_out, _ = self.self_attention(
+            embeddings, embeddings, embeddings
+        )
+        
+        # Process attention outputs
+        processed = self.post_attention(attention_out)
+        
+        # Global mean pooling across features
+        pooled = torch.mean(processed, dim=1)
+        
+        # Final classification
+        output = self.classifier(pooled)
+        output_view = output.view(-1, x.size(1), x.size(2))
+        
+        return output_view
+
+
 class LateralBlock(nn.Module):
     def __init__(self, input_size, skip=0, activation="Tanh", norm=False):
         super(LateralBlock, self).__init__()

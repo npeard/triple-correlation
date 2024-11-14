@@ -90,13 +90,13 @@ class Trainer:
 
         # logger
         logger = None
-        logger = WandbLogger(
-            project='triple_correlation',
-            group=model_name,
-            log_model=True,
-            save_dir=os.path.join(
-                self.checkpoint_dir,
-                save_name))
+        # logger = WandbLogger(
+        #     project='triple_correlation',
+        #     group=model_name,
+        #     log_model=True,
+        #     save_dir=os.path.join(
+        #         self.checkpoint_dir,
+        #         save_name))
 
         # callbacks
         # early stopping
@@ -146,29 +146,29 @@ class Trainer:
     def scan_hyperparams(self):
         for (num_layers, num_conv_layers, kernel_size, dropout_rate, momentum,
              lr, batch_size, zeta, norm, hidden_size) in product(
-                [10], [None], [None], [0.0], [0.9], [1e-3], [32],
-                [0], [False], [self.output_size]):
+                [10], [None], [None], [0.0], [0.9], [1e-3], [256],
+                [0], [False], [64]):
             optimizer = "Adam"
 
-            model_config = {"num_layers": num_layers,
-                            "activation": "LeakyReLU",
-                            "norm": norm,
+            model_config = {#"num_layers": num_layers,
+                            #"activation": "LeakyReLU",
+                            #"norm": norm,
                             "input_size": self.input_size,
                             "hidden_size": hidden_size,
-                            "output_size": self.output_size
+                            #"output_size": self.output_size
                             }
             optimizer_config = {"lr": lr,
                                 "momentum": momentum, }
             loss_config = {"loss_name": "mse",
                            "zeta": zeta,
-                           "alpha": np.log(2)/np.pi}
+                           "alpha": 0*np.log(2)/np.pi}
             if optimizer == "Adam":
                 optimizer_config = {"lr": lr}
             misc_config = {"batch_size": batch_size}
             self.set_dataloaders_batch_size(batch_size=batch_size)
 
-            self.train_model(model_name="MLP",
-                             task_name="hybrid_classification",
+            self.train_model(model_name="SelfAttention",
+                             task_name="sign_classification",
                              model_hparams=model_config,
                              optimizer_name=optimizer,
                              optimizer_hparams=optimizer_config,

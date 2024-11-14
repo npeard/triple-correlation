@@ -43,7 +43,7 @@ if __name__ == '__main__':
         #     file_path=test_file)
 
         runner = training.Trainer(train_file, valid_file, test_file,
-                                  absPhi=True, signPhi=True, multiTask=True)
+                                  absPhi=True, signPhi=True, multiTask=False)
         runner.scan_hyperparams()
         
         # runner.plot_phase_predictions(model_name="ImplicitMultiMLP",

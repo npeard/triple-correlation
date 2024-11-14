@@ -5,6 +5,7 @@ from torch import optim, nn
 import torch
 import lightning as L
 from models import PhaseMLP, LinearNet, BottleCNN, MLP, ImplicitMultiMLP
+from models import SelfAttention
 
 
 class BaseDecoder(L.LightningModule):
@@ -37,7 +38,8 @@ class BaseDecoder(L.LightningModule):
     def create_model(model_name, model_hparams):
         model_dict = {"PhaseMLP": PhaseMLP, "LinearNet": LinearNet,
                       "BottleCNN": BottleCNN, "MLP": MLP,
-                      "ImplicitMultiMLP": ImplicitMultiMLP}
+                      "ImplicitMultiMLP": ImplicitMultiMLP,
+                      "SelfAttention": SelfAttention}
         
         if model_name in model_dict:
             return model_dict[model_name](**model_hparams)
