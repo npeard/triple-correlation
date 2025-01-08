@@ -133,3 +133,6 @@ dmypy.json
 data/*
 checkpoints/*
 lightning_logs/*
+
+# MacOS
+.DS_Store
