@@ -2,22 +2,7 @@
 
 import numpy as np
 import sys
-import torch
-
-import models
-import plot1d
-#import plot2d
-#import PaperFigures
-import timeit
-
-import speckle1d
-#import speckle2d
-import triphase1d
-#import triphase2d
 import training
-import decoder
-import models
-import datasets
 
 if __name__ == '__main__':
     np.random.seed()
@@ -33,21 +18,20 @@ if __name__ == '__main__':
         # datasets.generate_pretraining_data(
         #     num_pix=num_pix, num_samples=int(train_samples),
         #     file_path=train_file)
-        #
+        
         # datasets.generate_pretraining_data(
         #     num_pix=num_pix, num_samples=int(valid_samples),
         #     file_path=valid_file)
-        #
+        
         # datasets.generate_pretraining_data(
         #     num_pix=num_pix, num_samples=int(valid_samples),
         #     file_path=test_file)
 
         runner = training.Trainer(train_file, valid_file, test_file,
-                                  absPhi=True, signPhi=True, multiTask=False)
+                                  absPhi=True, signPhi=False, multiTask=False)
         runner.scan_hyperparams()
         
-        # runner.plot_phase_predictions(model_name="ImplicitMultiMLP",
-        #                             model_id="9uzn9wi7")
+        #runner.plot_phase_predictions(model_name="GPT", model_id="pa6o4nb6")
         
         # Best hybrid classifier so far
         # runner.plot_phase_predictions(model_name="MLP",

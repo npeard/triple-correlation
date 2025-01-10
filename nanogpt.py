@@ -109,35 +109,40 @@ class Block(nn.Module):
 
 @dataclass
 class GPTConfig:
-    block_size: int = 1024
-    vocab_size: int = 50304 # GPT-2 vocab_size of 50257, padded up to nearest multiple of 64 for efficiency
-    n_layer: int = 12
-    n_head: int = 12
-    n_embd: int = 768
-    dropout: float = 0.0
-    bias: bool = True # True: bias in Linears and LayerNorms, like GPT-2. False: a bit better and faster
+    block_size: int = 4*4      # input sequence length
+    output_block_size: int = 6  # output sequence length
+    input_dim: int = 1         # dimension of input features
+    output_dim: int = 1        # dimension of output (target) features
+    n_layer: int = 1           # number of transformer layers
+    n_head: int = 2            # number of attention heads
+    n_embd: int = 32          # embedding dimension
+    dropout: float = 0.1       # dropout rate
+    bias: bool = False         # use bias in linear layers
 
 class GPT(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        assert config.vocab_size is not None
+        assert config.input_dim is not None
         assert config.block_size is not None
+        assert config.output_block_size is not None
         self.config = config
 
         self.transformer = nn.ModuleDict(dict(
-            wte = nn.Embedding(config.vocab_size, config.n_embd),
+            # Replace embedding with linear projection for continuous inputs
+            wte = nn.Linear(config.input_dim, config.n_embd),
+            # Keep positional embeddings for sequence structure
             wpe = nn.Embedding(config.block_size, config.n_embd),
+            # Add output position embeddings
+            wpe_out = nn.Embedding(config.output_block_size, config.n_embd),
             drop = nn.Dropout(config.dropout),
             h = nn.ModuleList([Block(config) for _ in range(config.n_layer)]),
             ln_f = LayerNorm(config.n_embd, bias=config.bias),
         ))
-        self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
-        # with weight tying when using torch.compile() some warnings get generated:
-        # "UserWarning: functional_call was passed multiple values for tied weights.
-        # This behavior is deprecated and will be an error in future versions"
-        # not 100% sure what this is, so far seems to be harmless. TODO investigate
-        self.transformer.wte.weight = self.lm_head.weight # https://paperswithcode.com/method/weight-tying
+        # Add sequence length reduction layer
+        self.seq_reduction = nn.Linear(config.block_size, config.output_block_size)
+        # Replace language model head with regression head
+        self.regression_head = nn.Linear(config.n_embd, config.output_dim)
 
         # init all weights
         self.apply(self._init_weights)
@@ -169,27 +174,44 @@ class GPT(nn.Module):
         elif isinstance(module, nn.Embedding):
             torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
-    def forward(self, idx, targets=None):
-        device = idx.device
-        b, t = idx.size()
+    def forward(self, x, targets=None):
+        device = x.device
+        x = x.squeeze(1)
+        x = x.unsqueeze(-1)
+        b, t, f = x.size()  # batch, sequence length, features
         assert t <= self.config.block_size, f"Cannot forward sequence of length {t}, block size is only {self.config.block_size}"
-        pos = torch.arange(0, t, dtype=torch.long, device=device) # shape (t)
-
-        # forward the GPT model itself
-        tok_emb = self.transformer.wte(idx) # token embeddings of shape (b, t, n_embd)
-        pos_emb = self.transformer.wpe(pos) # position embeddings of shape (t, n_embd)
+        
+        # Input sequence processing
+        pos = torch.arange(0, t, dtype=torch.long, device=device)
+        tok_emb = self.transformer.wte(x)  # project inputs to embedding dimension (b, t, n_embd)
+        pos_emb = self.transformer.wpe(pos)  # position embeddings of shape (t, n_embd)
         x = self.transformer.drop(tok_emb + pos_emb)
+        
+        # Process through transformer blocks
         for block in self.transformer.h:
             x = block(x)
         x = self.transformer.ln_f(x)
+        
+        # Reduce sequence length
+        x = x.transpose(1, 2)  # (b, n_embd, t)
+        x = self.seq_reduction(x)  # (b, n_embd, output_block_size)
+        x = x.transpose(1, 2)  # (b, output_block_size, n_embd)
+        
+        # Add output positional embeddings
+        out_pos = torch.arange(0, self.config.output_block_size, dtype=torch.long, device=device)
+        out_pos_emb = self.transformer.wpe_out(out_pos)
+        x = x + out_pos_emb
+        
+        # Output continuous predictions
+        predictions = self.regression_head(x)
 
-        if targets is not None:
-            # if we are given some desired targets also calculate the loss
-            logits = self.lm_head(x)
-            loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1), ignore_index=-1)
-        else:
-            # inference-time mini-optimization: only forward the lm_head on the very last position
-            logits = self.lm_head(x[:, [-1], :]) # note: using list [-1] to preserve the time dim
-            loss = None
-
-        return logits, loss
+        # if targets is not None:
+        #     # if we are given some desired targets also calculate the loss
+        #     logits = self.lm_head(x)
+        #     loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1), ignore_index=-1)
+        # else:
+        #     # inference-time mini-optimization: only forward the lm_head on the very last position
+        #     logits = self.lm_head(x[:, [-1], :]) # note: using list [-1] to preserve the time dim
+        #     loss = None
+        
+        return predictions

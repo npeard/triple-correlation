@@ -40,7 +40,9 @@ class PhiDataset(Dataset):
             self.opened_flag = True
             # print("open_hdf5 finished")
         # inputs, targets == Phi (with sign), phase
-        return FloatTensor(self.inputs[idx]), FloatTensor(self.targets[idx])
+        input_tensor = FloatTensor(self.inputs[idx])
+        input_tensor = input_tensor.view(-1, input_tensor.size(1)**2)
+        return input_tensor, FloatTensor(self.targets[idx])
     
     
 class AbsPhiDataset(PhiDataset):

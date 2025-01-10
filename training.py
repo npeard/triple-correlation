@@ -5,7 +5,7 @@ import glob
 from torch import nn
 from lightning.pytorch.callbacks.early_stopping import EarlyStopping
 from lightning.pytorch.callbacks import ModelCheckpoint
-from decoder import BaseDecoder, SignClassifier, PhaseRegressor, HybridClassifier
+from lightning_config import SignClassifier, PhaseRegressor, HybridClassifier, AutoDecoder
 import numpy as np
 import matplotlib.pyplot as plt
 import lightning as L
@@ -89,14 +89,14 @@ class Trainer:
             save_name = model_name
 
         # logger
-        logger = None
-        # logger = WandbLogger(
-        #     project='triple_correlation',
-        #     group=model_name,
-        #     log_model=True,
-        #     save_dir=os.path.join(
-        #         self.checkpoint_dir,
-        #         save_name))
+        #logger = None
+        logger = WandbLogger(
+            project='triple_correlation',
+            group=model_name,
+            log_model=True,
+            save_dir=os.path.join(
+                self.checkpoint_dir,
+                save_name))
 
         # callbacks
         # early stopping
@@ -118,13 +118,14 @@ class Trainer:
             #devices=[0],
             max_epochs=1000,
             #callbacks=[checkpoint_callback, early_stop_callback],
-            #callbacks=[checkpoint_callback],
+            callbacks=[checkpoint_callback],
             check_val_every_n_epoch=10,
             logger=logger
         )
         task_dict = {
             "sign_classification": SignClassifier,
             "phase_regression": PhaseRegressor,
+            "auto_decoder": AutoDecoder,
             "hybrid_classification": HybridClassifier
         }
         # L.seed_everything(42)  # To be reproducible
@@ -167,8 +168,8 @@ class Trainer:
             misc_config = {"batch_size": batch_size}
             self.set_dataloaders_batch_size(batch_size=batch_size)
 
-            self.train_model(model_name="SelfAttention",
-                             task_name="sign_classification",
+            self.train_model(model_name="GPT",
+                             task_name="auto_decoder",
                              model_hparams=model_config,
                              optimizer_name=optimizer,
                              optimizer_hparams=optimizer_config,
@@ -192,7 +193,7 @@ class Trainer:
                   pretrained_filename}, loading...")
             # Automatically loads the model with the saved hyperparameters
             # TODO: add conditional loading based on task name here
-            model = PhaseRegressor.load_from_checkpoint(
+            model = AutoDecoder.load_from_checkpoint(
                 pretrained_filename)
 
             return model
@@ -201,7 +202,7 @@ class Trainer:
                               model_id="i52c3rlz"):
 
         model = self.load_model(model_name=model_name, model_id=model_id)
-        model.task_name = "phase_regression"
+        model.task_name = "auto_decoder"
         trainer = L.Trainer(
             accelerator="cpu",
             # devices=[0]

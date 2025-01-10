@@ -2,10 +2,13 @@
 
 import os, glob
 from torch import optim, nn
+import numpy as np
 import torch
+from torch.nn import functional as F
 import lightning as L
 from models import PhaseMLP, LinearNet, BottleCNN, MLP, ImplicitMultiMLP
 from models import SelfAttention
+from nanogpt import GPT, GPTConfig
 
 
 class BaseDecoder(L.LightningModule):
@@ -43,6 +46,8 @@ class BaseDecoder(L.LightningModule):
         
         if model_name in model_dict:
             return model_dict[model_name](**model_hparams)
+        elif model_name == "GPT":
+            return GPT(GPTConfig)
         else:
             assert False, f'Unknown model name "{
                 model_name}". Available models are: {str(model_dict.keys())}'
@@ -147,17 +152,17 @@ class BaseDecoder(L.LightningModule):
         
         self.log("test_loss", loss, prog_bar=True, on_epoch=True)
 
-    def predict_step(self, batch, batch_idx, dataloader_idx=0):
-        x, y = batch
-        y_hat = self.model(x)
+    # def predict_step(self, batch, batch_idx, dataloader_idx=0):
+    #     x, y = batch
+    #     y_hat = self.model(x)
         
-        if self.task_name == "sign_classification":
-            print(y_hat.shape)
-            y_hat = nn.Sigmoid()(y_hat)
-            return y_hat.view(-1, x.size(1), x.size(2)), y.view(-1, x.size(1), x.size(2)), x
-        elif self.task_name == "phase_regression":
-            encoded = self.encode(y_hat)
-            return y_hat, y, x, encoded
+    #     if self.task_name == "sign_classification":
+    #         print(y_hat.shape)
+    #         y_hat = nn.Sigmoid()(y_hat)
+    #         return y_hat.view(-1, x.size(1), x.size(2)), y.view(-1, x.size(1), x.size(2)), x
+    #     elif self.task_name == "phase_regression":
+    #         encoded = self.encode(y_hat)
+    #         return y_hat, y, x, encoded
         
 class SignClassifier(BaseDecoder):
     def __init__(self, model_name, model_hparams, optimizer_name,
@@ -201,6 +206,100 @@ class PhaseRegressor(BaseDecoder):
         phase = self.model(x)
         y_hat = torch.atan2(torch.sin(phase), torch.cos(phase))
         return y_hat
+
+class AutoDecoder(BaseDecoder):
+    def __init__(self, model_name,model_hparams, optimizer_name,
+                 optimizer_hparams, misc_hparams, loss_hparams=None):
+        super().__init__(model_name, model_hparams, optimizer_name,
+                         optimizer_hparams, misc_hparams, loss_hparams)
+    
+    def loss_function(self, y_hat, targets, x=None, *args, **kwargs):
+        """Override parent's loss_function with a different signature and implementation.
+        
+        Args:
+            y_hat: Model predictions
+            targets: Ground truth targets
+            x: Additional input tensor for encoding loss
+            *args, **kwargs: Additional arguments for future compatibility
+        """
+        # Compute MSE loss
+        loss = nn.MSELoss()(y_hat, targets)
+            
+        # Add encoding loss if zeta > 0
+        if self.loss_hparams['zeta'] > 0:
+            zeta = self.loss_hparams['zeta']
+            # Want x to be abs(Phi) here, so that all sign prediction is handled
+            # by the sign classifier, and the PhaseRegressor is only concerned
+            # with the magnitude of the phase
+            x = x.squeeze(1)
+            loss += zeta * self.encoding_loss(y_hat, torch.abs(x.view(-1, int(np.sqrt(x.size(1))), int(np.sqrt(x.size(1))))))
+        
+        return loss
+        
+    def forward(self, x):
+        phase = self.model(x)
+        #y_hat = torch.atan2(torch.sin(phase), torch.cos(phase))
+        return phase
+
+    def training_step(self, batch, batch_idx):
+        # training_step defines the train loop.
+        # it is independent of forward
+        x, y = batch
+        y_hat = self.model(x)
+        y_hat = y_hat.squeeze(-1)
+
+        # Create antisymmetric sequence: [-flipped_tail, original]
+        flipped = torch.flip(y_hat[:, 1:], dims=[1])  # Flip all but first element
+        y_hat = torch.cat((-flipped, y_hat), dim=1)  # Concatenate negative flipped part with original
+
+        loss = self.loss_function(y_hat, y, x)
+
+        self.log("train_loss", loss, prog_bar=True, on_epoch=True)
+        return loss
+
+    def validation_step(self, batch, batch_idx):
+        # validation_step defines the validation loop.
+        x, y = batch
+        y_hat = self.model(x)
+        y_hat = y_hat.squeeze(-1)
+
+        # Create antisymmetric sequence: [-flipped_tail, original]
+        flipped = torch.flip(y_hat[:, 1:], dims=[1])  # Flip all but first element
+        y_hat = torch.cat((-flipped, y_hat), dim=1)  # Concatenate negative flipped part with original
+
+        loss = self.loss_function(y_hat, y, x)
+
+        self.log("val_loss", loss, prog_bar=True, on_epoch=True)
+        return loss
+
+    def test_step(self, batch, batch_idx):
+        x, y = batch
+        y_hat = self.model(x)
+        y_hat = y_hat.squeeze(-1)
+
+        # Create antisymmetric sequence: [-flipped_tail, original]
+        flipped = torch.flip(y_hat[:, 1:], dims=[1])  # Flip all but first element
+        y_hat = torch.cat((-flipped, y_hat), dim=1)  # Concatenate negative flipped part with original
+
+        loss = self.loss_function(y_hat, y, x)
+
+        self.log("test_loss", loss, prog_bar=True, on_epoch=True)
+
+    def predict_step(self, batch, batch_idx, dataloader_idx=0):
+        x, y = batch
+        y_hat = self.model(x)
+        y_hat = y_hat.squeeze(-1)
+        
+        # Create antisymmetric sequence: [-flipped_tail, original]
+        flipped = torch.flip(y_hat[:, 1:], dims=[1])  # Flip all but first element
+        y_hat = torch.cat((-flipped, y_hat), dim=1)  # Concatenate negative flipped part with original
+        print("y_hat shape: ", y_hat.shape)
+        print("y shape: ", y.shape)
+        print("x shape: ", x.shape)
+        encoded = self.encode(y_hat)
+        print("encoded shape: ", encoded.shape)
+        x = x.squeeze(1)
+        return y_hat, y, x.view(-1, int(np.sqrt(x.size(1))), int(np.sqrt(x.size(1)))), encoded
     
     
 class HybridClassifier(BaseDecoder):
