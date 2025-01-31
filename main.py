@@ -29,9 +29,9 @@ if __name__ == '__main__':
 
         runner = training.Trainer(train_file, valid_file, test_file,
                                   absPhi=True, signPhi=False, multiTask=False)
-        runner.scan_hyperparams()
+        #runner.scan_hyperparams()
         
-        #runner.plot_phase_predictions(model_name="GPT", model_id="pa6o4nb6")
+        runner.plot_phase_predictions(model_name="GPT", model_id="oge7vr5s")
         
         # Best hybrid classifier so far
         # runner.plot_phase_predictions(model_name="MLP",

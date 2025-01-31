@@ -116,7 +116,7 @@ class GPTConfig:
     n_layer: int = 1           # number of transformer layers
     n_head: int = 2            # number of attention heads
     n_embd: int = 32          # embedding dimension
-    dropout: float = 0.1       # dropout rate
+    dropout: float = 0.2       # dropout rate
     bias: bool = False         # use bias in linear layers
 
 class GPT(nn.Module):
