@@ -31,9 +31,9 @@ if __name__ == '__main__':
 
         runner = training.Trainer(train_file, valid_file, test_file,
                                   absPhi=True, signPhi=False, multiTask=False, log=True)
-        runner.scan_hyperparams(num_samples=16)
+        # runner.scan_hyperparams(num_samples=16)
         
-        # runner.plot_phase_predictions(model_name="GPT", model_id="apvlrfv3")
+        runner.plot_phase_predictions(model_name="GPT", model_id="7fk30n4c")
         
         # Best hybrid classifier so far
         # runner.plot_phase_predictions(model_name="MLP",

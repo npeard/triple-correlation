@@ -257,8 +257,11 @@ class AutoDecoder(BaseDecoder):
         y_hat = torch.cat((-flipped, y_hat), dim=1)  # Concatenate negative flipped part with original
 
         loss = self.loss_function(y_hat, y, x)
+        loss_flipped = self.loss_function(-1*y_hat, y, x)
+        smallest_loss = min(loss, loss_flipped)
 
         self.log("train_loss", loss, prog_bar=True, on_epoch=True)
+        self.log("train_smallest_loss", smallest_loss, prog_bar=False, on_epoch=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
@@ -272,6 +275,8 @@ class AutoDecoder(BaseDecoder):
         y_hat = torch.cat((-flipped, y_hat), dim=1)  # Concatenate negative flipped part with original
 
         loss = self.loss_function(y_hat, y, x)
+        loss_flipped = self.loss_function(-1*y_hat, y, x)
+        smallest_loss = min(loss, loss_flipped)
 
         # Log attention and position encoding metrics if using GPT model
         if isinstance(self.model, GPT):
@@ -287,6 +292,7 @@ class AutoDecoder(BaseDecoder):
             self.log("val_pos_encoding_std", pos_encoding_std, prog_bar=False, on_epoch=True)
 
         self.log("val_loss", loss, prog_bar=True, on_epoch=True)
+        self.log("val_smallest_loss", smallest_loss, prog_bar=False, on_epoch=True)
         return loss
 
     def test_step(self, batch, batch_idx):
@@ -299,8 +305,11 @@ class AutoDecoder(BaseDecoder):
         y_hat = torch.cat((-flipped, y_hat), dim=1)  # Concatenate negative flipped part with original
 
         loss = self.loss_function(y_hat, y, x)
+        loss_flipped = self.loss_function(-1*y_hat, y, x)
+        smallest_loss = min(loss, loss_flipped)
 
         self.log("test_loss", loss, prog_bar=True, on_epoch=True)
+        self.log("test_smallest_loss", smallest_loss, prog_bar=False, on_epoch=True)
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         x, y = batch
