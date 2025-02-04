@@ -2,6 +2,7 @@
 
 import os
 import glob
+import torch
 from torch import nn
 from lightning.pytorch.callbacks.early_stopping import EarlyStopping
 from lightning.pytorch.callbacks import ModelCheckpoint
@@ -12,17 +13,19 @@ import lightning as L
 from lightning.pytorch.loggers import WandbLogger
 from itertools import product
 from datasets import get_custom_dataloader
-
+from nanogpt import GPTConfig
+from dataclasses import asdict
 
 class Trainer:
     def __init__(self, training_h5, validation_h5, testing_h5,
-                 absPhi=False, signPhi=False, multiTask=False):
+                 absPhi=False, signPhi=False, multiTask=False, log=False):
         self.training_h5 = training_h5
         self.validation_h5 = validation_h5
         self.testing_h5 = testing_h5
         self.absPhi = absPhi
         self.signPhi = signPhi
         self.multiTask = multiTask
+        self.log = log
 
         # get dataloaders
         self.set_dataloaders_batch_size()
@@ -36,6 +39,19 @@ class Trainer:
 
         # directories
         self.checkpoint_dir = "./checkpoints"
+
+        # print CUDA info
+        # Check what version of PyTorch is installed
+        print(torch.__version__)
+
+        # Check the current CUDA version being used
+        print("CUDA Version: ", torch.version.cuda)
+
+        # Check if CUDA is available and if so, print the device name
+        print("Device name:", torch.cuda.get_device_properties("cuda").name)
+
+        # Check if FlashAttention is available
+        print("FlashAttention available:", torch.backends.cuda.flash_sdp_enabled())
 
     def set_dataloaders_batch_size(self, batch_size=64):
         self.batch_size = batch_size
@@ -89,14 +105,16 @@ class Trainer:
             save_name = model_name
 
         # logger
-        #logger = None
-        logger = WandbLogger(
-            project='triple_correlation',
-            group=model_name,
-            log_model=True,
-            save_dir=os.path.join(
-                self.checkpoint_dir,
-                save_name))
+        if self.log:
+            logger = WandbLogger(
+                project='triple_correlation',
+                group=model_name,
+                log_model=True,
+                save_dir=os.path.join(
+                    self.checkpoint_dir,
+                    save_name))
+        else:
+            logger = None
 
         # callbacks
         # early stopping
@@ -114,8 +132,8 @@ class Trainer:
         # Create a PyTorch Lightning trainer with the generation callback
         trainer = L.Trainer(
             default_root_dir=os.path.join(self.checkpoint_dir, save_name),
-            accelerator="cpu",
-            #devices=[0],
+            accelerator="gpu",
+            devices=[0],
             max_epochs=1000,
             #callbacks=[checkpoint_callback, early_stop_callback],
             callbacks=[checkpoint_callback],
@@ -144,34 +162,43 @@ class Trainer:
 
         return model
 
-    def scan_hyperparams(self):
-        for (num_layers, num_conv_layers, kernel_size, dropout_rate, momentum,
-             lr, batch_size, zeta, norm, hidden_size) in product(
-                [10], [None], [None], [0.0], [0.9], [1e-3], [256],
-                [0], [False], [64]):
-            optimizer = "Adam"
+    def scan_hyperparams(self, num_samples: int = 16):
 
-            model_config = {#"num_layers": num_layers,
-                            #"activation": "LeakyReLU",
-                            #"norm": norm,
-                            "input_size": self.input_size,
-                            "hidden_size": hidden_size,
-                            #"output_size": self.output_size
-                            }
-            optimizer_config = {"lr": lr,
-                                "momentum": momentum, }
+        for _ in range(num_samples):
+        # for (num_layers, num_conv_layers, kernel_size, dropout_rate, momentum,
+        #      lr, batch_size, zeta, norm, hidden_size) in product(
+        #         [10], [None], [None], [0.0], [0.9], [1e-4], [512],
+        #         [1], [False], [64]):
+
+            model_name = "GPT"
+            model_config = GPTConfig()
+            model_config.n_layer = int(np.random.choice([1, 2, 4, 8, 16]))
+            model_config.n_head = int(np.random.choice([1, 2, 4, 8, 16]))
+            model_config.n_embd = int(np.random.choice([16, 32, 64, 128, 256]))
+            model_config.bias = np.random.choice([True, False])
+            lr = np.random.uniform(1e-5, 1e-3)
+            zeta = np.random.uniform(0, 1)
+            batch_size = int(np.random.choice([16, 32, 64, 128, 256, 512, 1024]))
+            # model_config = {#"num_layers": num_layers,
+            #                 #"activation": "LeakyReLU",
+            #                 #"norm": norm,
+            #                 "input_size": self.input_size,
+            #                 "hidden_size": hidden_size,
+            #                 #"output_size": self.output_size
+            #                 }
+            model_config = asdict(model_config)  # Convert dataclass to dict
             loss_config = {"loss_name": "mse",
                            "zeta": zeta,
                            "alpha": 0*np.log(2)/np.pi}
-            if optimizer == "Adam":
-                optimizer_config = {"lr": lr}
+            optimizer_name = "Adam"
+            optimizer_config = {"lr": lr}
             misc_config = {"batch_size": batch_size}
             self.set_dataloaders_batch_size(batch_size=batch_size)
 
             self.train_model(model_name="GPT",
                              task_name="auto_decoder",
                              model_hparams=model_config,
-                             optimizer_name=optimizer,
+                             optimizer_name=optimizer_name,
                              optimizer_hparams=optimizer_config,
                              misc_hparams=misc_config,
                              loss_hparams=loss_config)

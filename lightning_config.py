@@ -12,8 +12,8 @@ from nanogpt import GPT, GPTConfig
 
 
 class BaseDecoder(L.LightningModule):
-    def __init__(self, model_name, model_hparams, optimizer_name,
-                 optimizer_hparams, misc_hparams, loss_hparams=None,
+    def __init__(self, model_name: str, model_hparams: dict, optimizer_name: str,
+                 optimizer_hparams: dict, misc_hparams: dict, loss_hparams=None,
                  task_name=None):
         """Decoder for the closure phase
 
@@ -38,16 +38,20 @@ class BaseDecoder(L.LightningModule):
         torch.set_float32_matmul_precision('high')
 
     @staticmethod
-    def create_model(model_name, model_hparams):
+    def create_model(model_name: str, model_hparams: dict):
         model_dict = {"PhaseMLP": PhaseMLP, "LinearNet": LinearNet,
                       "BottleCNN": BottleCNN, "MLP": MLP,
                       "ImplicitMultiMLP": ImplicitMultiMLP,
-                      "SelfAttention": SelfAttention}
+                      "SelfAttention": SelfAttention,
+                      "GPT": GPT}
         
         if model_name in model_dict:
-            return model_dict[model_name](**model_hparams)
-        elif model_name == "GPT":
-            return GPT(GPTConfig)
+            # Convert dict back to GPTConfig if it's the GPT model
+            if model_name == "GPT":
+                model_hparams = GPTConfig(**model_hparams)
+                return GPT(model_hparams)
+            else:
+                return model_dict[model_name](**model_hparams)
         else:
             assert False, f'Unknown model name "{
                 model_name}". Available models are: {str(model_dict.keys())}'
@@ -71,8 +75,8 @@ class BaseDecoder(L.LightningModule):
         # We will reduce the learning rate by factor gamma at each milestone
         # (epoch number). Setting gamma to 1.0 has no effect on learning rate.
         scheduler = optim.lr_scheduler.MultiStepLR(optimizer,
-                                                   milestones=[500],
-                                                   gamma=1)
+                                                   milestones=[200, 400, 600],
+                                                   gamma=0.5)
         return [optimizer], [scheduler]
 
     def loss_function(self, y_hat, y, *args, **kwargs):
@@ -268,6 +272,19 @@ class AutoDecoder(BaseDecoder):
         y_hat = torch.cat((-flipped, y_hat), dim=1)  # Concatenate negative flipped part with original
 
         loss = self.loss_function(y_hat, y, x)
+
+        # Log attention and position encoding metrics if using GPT model
+        if isinstance(self.model, GPT):
+            att_abs_mean, att_std, q_std, k_std, v_std, uniformity, sparsity = self.model.get_attention_metrics()
+            pos_encoding_std = self.model.get_position_encoding_std()
+            self.log("val_att_abs_mean", att_abs_mean, prog_bar=False, on_epoch=True)
+            self.log("val_att_std", att_std, prog_bar=False, on_epoch=True)
+            self.log("val_q_std", q_std, prog_bar=False, on_epoch=True)
+            self.log("val_k_std", k_std, prog_bar=False, on_epoch=True)
+            self.log("val_v_std", v_std, prog_bar=False, on_epoch=True)
+            self.log("val_uniformity", uniformity, prog_bar=False, on_epoch=True)
+            self.log("val_sparsity", sparsity, prog_bar=False, on_epoch=True)
+            self.log("val_pos_encoding_std", pos_encoding_std, prog_bar=False, on_epoch=True)
 
         self.log("val_loss", loss, prog_bar=True, on_epoch=True)
         return loss

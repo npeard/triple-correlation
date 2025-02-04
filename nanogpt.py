@@ -10,6 +10,7 @@ https://github.com/huggingface/transformers/blob/main/src/transformers/models/gp
 import math
 import inspect
 from dataclasses import dataclass
+import numpy as np
 
 import torch
 import torch.nn as nn
@@ -60,12 +61,18 @@ class CausalSelfAttention(nn.Module):
         q = q.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
         v = v.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
 
+        # print("k std: ", torch.std(k))
+        # print("q std: ", torch.std(q))
+        # print("v std: ", torch.std(v))
+
         # causal self-attention; Self-attend: (B, nh, T, hs) x (B, nh, hs, T) -> (B, nh, T, T)
         if self.flash:
             # efficient attention using Flash Attention CUDA kernels
+            # print("using flash attention")
             y = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=None, dropout_p=self.dropout if self.training else 0, is_causal=True)
         else:
             # manual implementation of attention
+            # print("using manual attention")
             att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
             att = att.masked_fill(self.bias[:,:,:T,:T] == 0, float('-inf'))
             att = F.softmax(att, dim=-1)
@@ -84,6 +91,38 @@ class MLP(nn.Module):
         self.c_fc    = nn.Linear(config.n_embd, 4 * config.n_embd, bias=config.bias)
         self.gelu    = nn.GELU()
         self.c_proj  = nn.Linear(4 * config.n_embd, config.n_embd, bias=config.bias)
+        self.dropout = nn.Dropout(config.dropout)
+
+    def forward(self, x):
+        x = self.c_fc(x)
+        x = self.gelu(x)
+        x = self.c_proj(x)
+        x = self.dropout(x)
+        return x
+
+class ReductionMLP(nn.Module):
+    """MLP for sequence length reduction, replacing the simple linear layer."""
+    def __init__(self, config):
+        super().__init__()
+        self.c_fc    = nn.Linear(config.block_size, 4 * config.output_block_size, bias=config.bias)
+        self.gelu    = nn.GELU()
+        self.c_proj  = nn.Linear(4 * config.output_block_size, config.output_block_size, bias=config.bias)
+        self.dropout = nn.Dropout(config.dropout)
+
+    def forward(self, x):
+        x = self.c_fc(x)
+        x = self.gelu(x)
+        x = self.c_proj(x)
+        x = self.dropout(x)
+        return x
+
+class RegressionMLP(nn.Module):
+    """MLP for regression head, replacing the simple linear layer."""
+    def __init__(self, config):
+        super().__init__()
+        self.c_fc    = nn.Linear(config.n_embd, 4 * config.n_embd, bias=config.bias)
+        self.gelu    = nn.GELU()
+        self.c_proj  = nn.Linear(4 * config.n_embd, config.output_dim, bias=config.bias)
         self.dropout = nn.Dropout(config.dropout)
 
     def forward(self, x):
@@ -113,10 +152,10 @@ class GPTConfig:
     output_block_size: int = 6  # output sequence length
     input_dim: int = 1         # dimension of input features
     output_dim: int = 1        # dimension of output (target) features
-    n_layer: int = 1           # number of transformer layers
-    n_head: int = 2            # number of attention heads
+    n_layer: int = 8           # number of transformer layers
+    n_head: int = 4            # number of attention heads
     n_embd: int = 32          # embedding dimension
-    dropout: float = 0.2       # dropout rate
+    dropout: float = 0.1       # dropout rate
     bias: bool = False         # use bias in linear layers
 
 class GPT(nn.Module):
@@ -140,10 +179,16 @@ class GPT(nn.Module):
             ln_f = LayerNorm(config.n_embd, bias=config.bias),
         ))
         # Add sequence length reduction layer
-        self.seq_reduction = nn.Linear(config.block_size, config.output_block_size)
-        # Replace language model head with regression head
-        self.regression_head = nn.Linear(config.n_embd, config.output_dim)
+        # Option 1: Simple linear reduction (current)
+        # self.seq_reduction = nn.Linear(config.block_size, config.output_block_size)
+        # Option 2: MLP reduction (uncomment to use)
+        self.seq_reduction = ReductionMLP(config)
 
+        # Replace language model head with regression head
+        # Option 1: Simple linear regression (current)
+        # self.regression_head = nn.Linear(config.n_embd, config.output_dim)
+        # Option 2: MLP regression (uncomment to use)
+        self.regression_head = RegressionMLP(config)
         # init all weights
         self.apply(self._init_weights)
         # apply special scaled init to the residual projections, per GPT-2 paper
@@ -215,3 +260,67 @@ class GPT(nn.Module):
         #     loss = None
         
         return predictions
+
+    def get_attention_metrics(self):
+        """
+        Calculate the standard deviation of attention weights across all heads and layers.
+        This helps monitor if the attention patterns are becoming too uniform (low std) 
+        or maintaining meaningful distinctions (higher std).
+        """
+        attention_stds = []
+        for block in self.transformer.h:
+            # For each attention block, get the attention weights
+            # Shape: [batch_size, n_head, sequence_length, sequence_length]
+            with torch.no_grad():
+                if block.attn.flash:
+                    # For flash attention, we need to compute attention weights explicitly
+                    q, k, v = block.attn.c_attn(torch.ones(1, self.config.block_size, self.config.n_embd).to(next(self.parameters()).device)).split(self.config.n_embd, dim=-1)
+                    q = q.view(1, self.config.block_size, self.config.n_head, self.config.n_embd // self.config.n_head).transpose(1, 2)
+                    k = k.view(1, self.config.block_size, self.config.n_head, self.config.n_embd // self.config.n_head).transpose(1, 2)
+                    v = v.view(1, self.config.block_size, self.config.n_head, self.config.n_embd // self.config.n_head).transpose(1, 2)
+                    att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
+                    # print("att abs mean: ", torch.abs(att).mean())
+                    att_abs_mean = torch.abs(att).mean().item()
+                    att_std = torch.std(att, dim=-1).mean().item()
+                    q_std = torch.std(q, dim=-1).mean().item()
+                    k_std = torch.std(k, dim=-1).mean().item()
+                    v_std = torch.std(v, dim=-1).mean().item()
+                    att = F.softmax(att, dim=-1)
+                    # print("att uniformity: ", torch.abs(att - 1/att.size(-1)).mean())
+                    # print("att sparsity: ", (att.max(dim=-1).values > -.9).float().mean())
+                    uniformity = torch.abs(att - 1/att.size(-1)).mean().item()
+                    sparsity = (att.max(dim=-1).values > -.9).float().mean().item()
+                else:
+                    # For regular attention, we can access the attention weights directly
+                    att = block.attn.att if hasattr(block.attn, 'att') else None
+                
+                if att is not None:
+                    # Calculate std across the attention dimension
+                    std = torch.std(att, dim=-1).mean()  # Mean across heads and sequence positions
+                    attention_stds.append(std.item())
+        
+        return att_abs_mean, att_std, q_std, k_std, v_std, uniformity, sparsity 
+
+    def get_position_encoding_std(self):
+        """
+        Calculate the standard deviation of position encodings.
+        This helps monitor if the position encodings maintain meaningful positional information.
+        """
+        with torch.no_grad():
+            # Get position embeddings for input sequence
+            pos = torch.arange(0, self.config.block_size, dtype=torch.long, 
+                             device=next(self.parameters()).device)
+            pos_emb = self.transformer.wpe(pos)  # [block_size, n_embd]
+            
+            # Calculate std across the embedding dimension for each position
+            pos_std = torch.std(pos_emb, dim=-1).mean().item()
+            
+            # Get position embeddings for output sequence
+            out_pos = torch.arange(0, self.config.output_block_size, dtype=torch.long, 
+                                 device=next(self.parameters()).device)
+            out_pos_emb = self.transformer.wpe_out(out_pos)  # [output_block_size, n_embd]
+            
+            # Calculate std across the embedding dimension for each output position
+            out_pos_std = torch.std(out_pos_emb, dim=-1).mean().item()
+            
+            return (pos_std + out_pos_std) / 2.0  # Average of input and output position encoding stds
