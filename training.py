@@ -134,7 +134,7 @@ class Trainer:
             default_root_dir=os.path.join(self.checkpoint_dir, save_name),
             accelerator="gpu",
             devices=[0],
-            max_epochs=1000,
+            max_epochs=200,
             #callbacks=[checkpoint_callback, early_stop_callback],
             callbacks=[checkpoint_callback],
             check_val_every_n_epoch=10,
@@ -172,13 +172,13 @@ class Trainer:
 
             model_name = "GPT"
             model_config = GPTConfig()
-            model_config.n_layer = int(np.random.choice([1, 2, 4, 8, 16]))
-            model_config.n_head = int(np.random.choice([1, 2, 4, 8, 16]))
-            model_config.n_embd = int(np.random.choice([16, 32, 64, 128, 256]))
-            model_config.bias = np.random.choice([True, False])
-            lr = np.random.uniform(1e-5, 1e-3)
-            zeta = np.random.uniform(0, 1)
-            batch_size = int(np.random.choice([16, 32, 64, 128, 256, 512, 1024]))
+            model_config.n_layer = 4#int(np.random.choice([1, 2, 4, 8, 16]))
+            model_config.n_head = 2#int(np.random.choice([1, 2, 4, 8, 16]))
+            model_config.n_embd = 32#int(np.random.choice([16, 32, 64, 128, 256]))
+            model_config.bias = False#np.random.choice([True, False])
+            lr = 0.0009313800909922529#np.random.uniform(1e-5, 1e-3)
+            zeta = 1
+            batch_size = 32#int(np.random.choice([16, 32, 64, 128, 256, 512, 1024]))
             # model_config = {#"num_layers": num_layers,
             #                 #"activation": "LeakyReLU",
             #                 #"norm": norm,

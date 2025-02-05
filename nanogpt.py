@@ -148,8 +148,8 @@ class Block(nn.Module):
 
 @dataclass
 class GPTConfig:
-    block_size: int = 4*4      # input sequence length
-    output_block_size: int = 6  # output sequence length
+    block_size: int = 6*6      # input sequence length
+    output_block_size: int = 11  # output sequence length
     input_dim: int = 1         # dimension of input features
     output_dim: int = 1        # dimension of output (target) features
     n_layer: int = 8           # number of transformer layers
