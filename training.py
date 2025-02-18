@@ -53,28 +53,31 @@ class Trainer:
         # Check if FlashAttention is available
         print("FlashAttention available:", torch.backends.cuda.flash_sdp_enabled())
 
-    def set_dataloaders_batch_size(self, batch_size=64):
+    def set_dataloaders_batch_size(self, batch_size=64, unpack_diagonals=False):
         self.batch_size = batch_size
         self.train_loader = get_custom_dataloader(
             self.training_h5, batch_size=self.batch_size,
             absPhi=self.absPhi,
             signPhi=self.signPhi,
             multiTask=self.multiTask,
-            shuffle=True)
+            shuffle=True,
+            unpack_diagonals=unpack_diagonals)
         self.valid_loader = get_custom_dataloader(
             self.validation_h5,
             batch_size=self.batch_size,
             absPhi=self.absPhi,
             signPhi=self.signPhi,
             multiTask=self.multiTask,
-            shuffle=False)
+            shuffle=False,
+            unpack_diagonals=unpack_diagonals)
         self.test_loader = get_custom_dataloader(
             self.testing_h5,
             batch_size=self.batch_size,
             absPhi=self.absPhi,
             signPhi=self.signPhi,
             multiTask=self.multiTask,
-            shuffle=False)
+            shuffle=False,
+            unpack_diagonals=unpack_diagonals)
 
     def check_dataloaders(self):
         train_noshuffle_loader = get_custom_dataloader(
@@ -125,7 +128,7 @@ class Trainer:
                                             mode="min")
         checkpoint_callback = ModelCheckpoint(save_weights_only=True,
                                               mode="min", monitor="train_loss",
-                                              save_top_k=3)
+                                              save_top_k=1)
         # Save the best checkpoint based on the maximum val_acc recorded.
         # Saves only weights and not optimizer
 
@@ -134,7 +137,7 @@ class Trainer:
             default_root_dir=os.path.join(self.checkpoint_dir, save_name),
             accelerator="gpu",
             devices=[0],
-            max_epochs=200,
+            max_epochs=500,
             #callbacks=[checkpoint_callback, early_stop_callback],
             callbacks=[checkpoint_callback],
             check_val_every_n_epoch=10,
@@ -172,13 +175,14 @@ class Trainer:
 
             model_name = "GPT"
             model_config = GPTConfig()
-            model_config.n_layer = 4#int(np.random.choice([1, 2, 4, 8, 16]))
-            model_config.n_head = 2#int(np.random.choice([1, 2, 4, 8, 16]))
-            model_config.n_embd = 32#int(np.random.choice([16, 32, 64, 128, 256]))
-            model_config.bias = False#np.random.choice([True, False])
-            lr = 0.0009313800909922529#np.random.uniform(1e-5, 1e-3)
+            model_config.n_layer = 2#int(np.random.choice([2]))
+            model_config.n_head = 16#int(np.random.choice([16]))
+            model_config.n_embd = 128#int(np.random.choice([128]))
+            model_config.bias = True#np.random.choice([True])
+            lr = 5e-4#float(np.random.choice([5e-4]))  # np.random.uniform(5e-5, 1e-3)
             zeta = 1
-            batch_size = 32#int(np.random.choice([16, 32, 64, 128, 256, 512, 1024]))
+            batch_size = 1024#int(np.random.choice([1024]))
+            unpack_diagonals = False
             # model_config = {#"num_layers": num_layers,
             #                 #"activation": "LeakyReLU",
             #                 #"norm": norm,
@@ -192,8 +196,9 @@ class Trainer:
                            "alpha": 0*np.log(2)/np.pi}
             optimizer_name = "Adam"
             optimizer_config = {"lr": lr}
-            misc_config = {"batch_size": batch_size}
-            self.set_dataloaders_batch_size(batch_size=batch_size)
+            misc_config = {"batch_size": batch_size,
+                           "unpack_diagonals": unpack_diagonals}
+            self.set_dataloaders_batch_size(batch_size=batch_size, unpack_diagonals=unpack_diagonals)
 
             self.train_model(model_name="GPT",
                              task_name="auto_decoder",
@@ -252,15 +257,15 @@ class Trainer:
 
             ax2.plot(y[0][1].numpy()[i, :], label="Targets")
             ax2.plot(y[0][0].numpy()[i, :], label="Predictions")
-            ax2.set_title("MSE Loss: " + str(nn.MSELoss(reduction='sum')
-                          (y[0][0][i, :], y[0][1][i, :]).item()))
+            # ax2.set_title("MSE Loss: " + str(nn.MSELoss(reduction='sum')
+            #               (y[0][0][i, :], y[0][1][i, :]).item()))
             ax2.legend()
 
             im3 = ax3.imshow(y[0][3].numpy()[i, :, :], origin="lower")
-            ax3.set_title("Encoded Prediction, MSE Loss: " +
-                          str(nn.MSELoss(reduction='sum')(y[0][3][i, :],
-                                                          y[0][2][i, :]).item())
-                          )
+            # ax3.set_title("Encoded Prediction, MSE Loss: " +
+            #               str(nn.MSELoss(reduction='sum')(y[0][3][i, :],
+            #                                               y[0][2][i, :]).item())
+            #               )
             plt.colorbar(im3, ax=ax3)
 
             plt.tight_layout()

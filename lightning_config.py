@@ -75,8 +75,8 @@ class BaseDecoder(L.LightningModule):
         # We will reduce the learning rate by factor gamma at each milestone
         # (epoch number). Setting gamma to 1.0 has no effect on learning rate.
         scheduler = optim.lr_scheduler.MultiStepLR(optimizer,
-                                                   milestones=[50, 100, 150],
-                                                   gamma=0.5)
+                                                   milestones=[250, 450],
+                                                   gamma=0.1)
         return [optimizer], [scheduler]
 
     def loss_function(self, y_hat, y, *args, **kwargs):
@@ -101,7 +101,8 @@ class BaseDecoder(L.LightningModule):
         # Punish phases that cannot be used to reconstruct the input abs(Phi)
 
         encoded = torch.abs(self.encode(phase))
-
+        # cut off zero element edges
+        encoded = encoded[:, 1:, 1:]
         return nn.MSELoss()(encoded, torch.abs(absPhi))
 
     @staticmethod
@@ -227,7 +228,7 @@ class AutoDecoder(BaseDecoder):
             *args, **kwargs: Additional arguments for future compatibility
         """
         # Compute MSE loss
-        loss = nn.MSELoss()(y_hat, targets)
+        loss = nn.MSELoss()(torch.abs(y_hat), torch.abs(targets))
             
         # Add encoding loss if zeta > 0
         if self.loss_hparams['zeta'] > 0:

@@ -34,8 +34,9 @@ class PhiDataset(Dataset):
         Returns:
             torch.Tensor: Flattened tensor containing all diagonals concatenated
         """
-        import torch
-        
+        # # cut off zero element edges
+        # x = x[1:, 1:]
+
         # First flip left-right
         x = torch.fliplr(x)
         
@@ -72,9 +73,13 @@ class PhiDataset(Dataset):
             # print("open_hdf5 finished")
         # inputs, targets == Phi (with sign), phase
         input_tensor = torch.FloatTensor(self.inputs[idx])
+        # cut off zero element edges
+        input_tensor = input_tensor[1:, 1:]
+
         if self.unpack_diagonals:
             input_tensor = self.unpack_by_diagonals(input_tensor)
-        #input_tensor = input_tensor.view(-1, input_tensor.size(1)**2)
+        else:
+            input_tensor = input_tensor.reshape(input_tensor.size(0)**2)
         return input_tensor, torch.FloatTensor(self.targets[idx])
     
     
@@ -109,15 +114,15 @@ class MultiTaskPhiDataset(PhiDataset):
 
     
 def get_custom_dataloader(h5_file, batch_size=128, shuffle=True,
-                          absPhi=False, signPhi=False, multiTask=False):
+                          absPhi=False, signPhi=False, multiTask=False, unpack_diagonals=False):
     if not absPhi:
-        dataset = PhiDataset(h5_file, unpack_diagonals=True)
+        dataset = PhiDataset(h5_file, unpack_diagonals=unpack_diagonals)
     else:
-        dataset = AbsPhiDataset(h5_file, unpack_diagonals=True)
+        dataset = AbsPhiDataset(h5_file, unpack_diagonals=unpack_diagonals)
         if signPhi:
-            dataset = SignPhiDataset(h5_file, unpack_diagonals=True)
+            dataset = SignPhiDataset(h5_file, unpack_diagonals=unpack_diagonals)
     if multiTask:
-        dataset = MultiTaskPhiDataset(h5_file, unpack_diagonals=True)
+        dataset = MultiTaskPhiDataset(h5_file, unpack_diagonals=unpack_diagonals)
 
     # We can use DataLoader to get batches of data
     dataloader = DataLoader(

@@ -11,7 +11,7 @@ if __name__ == '__main__':
         """Run functions in this scratch area. 
         """
         num_pix = 21
-        train_samples = int(1e5)
+        train_samples = int(1e6)
         valid_samples = int(1e4)
         train_file = f"./data/pretrain_numpix{num_pix}_{train_samples:.0e}_samples.h5"
         valid_file = f"./data/prevalid_numpix{num_pix}_{valid_samples:.0e}_samples.h5"
@@ -31,9 +31,10 @@ if __name__ == '__main__':
 
         runner = training.Trainer(train_file, valid_file, test_file,
                                   absPhi=True, signPhi=False, multiTask=False, log=True)
-        runner.scan_hyperparams(num_samples=1)
+        #runner.check_dataloaders()
+        #runner.scan_hyperparams(num_samples=1)
         
-        #runner.plot_phase_predictions(model_name="GPT", model_id="5j6772kg")
+        runner.plot_phase_predictions(model_name="GPT", model_id="e1z6bc3c")
         
         # Best hybrid classifier so far
         # runner.plot_phase_predictions(model_name="MLP",

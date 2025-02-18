@@ -69,7 +69,7 @@ class CausalSelfAttention(nn.Module):
         if self.flash:
             # efficient attention using Flash Attention CUDA kernels
             # print("using flash attention")
-            y = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=None, dropout_p=self.dropout if self.training else 0, is_causal=True)
+            y = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=None, dropout_p=self.dropout if self.training else 0, is_causal=False)
         else:
             # manual implementation of attention
             # print("using manual attention")
@@ -148,7 +148,7 @@ class Block(nn.Module):
 
 @dataclass
 class GPTConfig:
-    block_size: int = 6*6      # input sequence length
+    block_size: int = 5*5      # input sequence length
     output_block_size: int = 11  # output sequence length
     input_dim: int = 1         # dimension of input features
     output_dim: int = 1        # dimension of output (target) features
@@ -180,15 +180,15 @@ class GPT(nn.Module):
         ))
         # Add sequence length reduction layer
         # Option 1: Simple linear reduction (current)
-        # self.seq_reduction = nn.Linear(config.block_size, config.output_block_size)
+        self.seq_reduction = nn.Linear(config.block_size, config.output_block_size)
         # Option 2: MLP reduction (uncomment to use)
-        self.seq_reduction = ReductionMLP(config)
+        # self.seq_reduction = ReductionMLP(config)
 
         # Replace language model head with regression head
         # Option 1: Simple linear regression (current)
-        # self.regression_head = nn.Linear(config.n_embd, config.output_dim)
+        self.regression_head = nn.Linear(config.n_embd, config.output_dim)
         # Option 2: MLP regression (uncomment to use)
-        self.regression_head = RegressionMLP(config)
+        # self.regression_head = RegressionMLP(config)
         # init all weights
         self.apply(self._init_weights)
         # apply special scaled init to the residual projections, per GPT-2 paper
@@ -241,7 +241,7 @@ class GPT(nn.Module):
         x = x.transpose(1, 2)  # (b, n_embd, t)
         x = self.seq_reduction(x)  # (b, n_embd, output_block_size)
         x = x.transpose(1, 2)  # (b, output_block_size, n_embd)
-        
+        # TODO: try removing output positional embeddings, and one of the reduction steps.
         # Add output positional embeddings
         out_pos = torch.arange(0, self.config.output_block_size, dtype=torch.long, device=device)
         out_pos_emb = self.transformer.wpe_out(out_pos)
