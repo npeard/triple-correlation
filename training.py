@@ -1,46 +1,173 @@
 #!/usr/bin/env python
 
+from typing import Optional, Dict, Any, Union, List, Tuple
 import os
-import glob
+from pathlib import Path
+import yaml
 import torch
-from torch import nn
-from lightning.pytorch.callbacks.early_stopping import EarlyStopping
-from lightning.pytorch.callbacks import ModelCheckpoint
-from lightning_config import SignClassifier, PhaseRegressor, HybridClassifier, AutoDecoder
-import numpy as np
-import matplotlib.pyplot as plt
+from torch.utils.data import DataLoader
 import lightning as L
+from lightning.pytorch.callbacks import (
+    ModelCheckpoint,
+    EarlyStopping,
+    LearningRateMonitor
+)
 from lightning.pytorch.loggers import WandbLogger
+from dataclasses import dataclass, field
+import random
 from itertools import product
-from datasets import get_custom_dataloader
+
+from lightning_config import BaseLightningModule, GPTDecoder
+from datasets import create_data_loaders
 from nanogpt import GPTConfig
-from dataclasses import asdict
 
-class Trainer:
-    def __init__(self, training_h5, validation_h5, testing_h5,
-                 absPhi=False, signPhi=False, multiTask=False, log=False):
-        self.training_h5 = training_h5
-        self.validation_h5 = validation_h5
-        self.testing_h5 = testing_h5
-        self.absPhi = absPhi
-        self.signPhi = signPhi
-        self.multiTask = multiTask
-        self.log = log
 
-        # get dataloaders
-        self.set_dataloaders_batch_size()
-        #self.check_dataloaders()
+@dataclass
+class TrainingConfig:
+    """Configuration class for training parameters"""
+    model_config: Dict[str, Any]
+    training_config: Dict[str, Any]
+    data_config: Dict[str, Any]
+    is_hyperparameter_search: bool = False
+    search_space: Optional[Dict[str, List[Any]]] = None
+    
+    def __post_init__(self):
+        """Set default values and handle GPT config if present"""
+        self._set_defaults()
+        if self.model_config.get("type") == "GPT":
+            self.gpt_config = self._create_gpt_config()
+    
+    def _set_defaults(self):
+        """Set default values for configs if not provided"""
+        # Model defaults
+        self.model_config.setdefault("type", "CNNAutoencoder")
+        self.model_config.setdefault("in_channels", 3)
+        self.model_config.setdefault("latent_dim", 128)
+        
+        # Training defaults
+        self.training_config.setdefault("max_epochs", 100)
+        self.training_config.setdefault("batch_size", 32)
+        self.training_config.setdefault("learning_rate", 1e-3)
+        self.training_config.setdefault("weight_decay", 1e-4)
+        self.training_config.setdefault("accelerator", "auto")  # Options: 'cpu', 'gpu', 'auto'
+        self.training_config.setdefault("devices", 1)  # Can be int or str
+        
+        # Data defaults
+        self.data_config.setdefault("num_workers", 4)
+    
+    def _create_gpt_config(self) -> GPTConfig:
+        """Create GPTConfig from model configuration"""
+        return GPTConfig(
+            n_layer=self.model_config.get("n_layer", 4),
+            n_head=self.model_config.get("n_head", 4),
+            n_embd=self.model_config.get("n_embd", 128),
+            dropout=self.model_config.get("dropout", 0.1),
+            bias=self.model_config.get("bias", True)
+        )
+    
+    @classmethod
+    def from_yaml(cls, config_path: str) -> Union['TrainingConfig', List['TrainingConfig']]:
+        """Load configuration from YAML file.
+        
+        If the file is a hyperparameter search config, returns a list of configs.
+        Otherwise, returns a single config.
+        
+        Args:
+            config_path: Path to YAML configuration file
+        """
+        with open(config_path, 'r') as f:
+            config_dict = yaml.safe_load(f)
+        
+        # Check if this is a hyperparameter search config
+        if any(isinstance(v, list) for v in config_dict["model"].values()) or \
+           any(isinstance(v, list) for v in config_dict["training"].values()):
+            return cls._create_search_configs(config_dict)
+        
+        return cls(
+            model_config=config_dict["model"],
+            training_config=config_dict["training"],
+            data_config=config_dict["data"]
+        )
+    
+    @classmethod
+    def _create_search_configs(cls, config_dict: Dict[str, Any]) -> List['TrainingConfig']:
+        """Create multiple configurations for hyperparameter search"""
+        # Separate list and non-list parameters
+        model_lists = {k: v for k, v in config_dict["model"].items() if isinstance(v, list)}
+        model_fixed = {k: v for k, v in config_dict["model"].items() if not isinstance(v, list)}
+        
+        training_lists = {k: v for k, v in config_dict["training"].items() if isinstance(v, list)}
+        training_fixed = {k: v for k, v in config_dict["training"].items() if not isinstance(v, list)}
+        
+        # Generate all combinations
+        model_keys = list(model_lists.keys())
+        model_values = list(model_lists.values())
+        
+        training_keys = list(training_lists.keys())
+        training_values = list(training_lists.values())
+        
+        configs = []
+        
+        # Generate model combinations
+        model_combinations = list(product(*model_values)) if model_values else [()]
+        training_combinations = list(product(*training_values)) if training_values else [()]
+        
+        for model_combo in model_combinations:
+            model_config = model_fixed.copy()
+            model_config.update(dict(zip(model_keys, model_combo)))
+            
+            for training_combo in training_combinations:
+                training_config = training_fixed.copy()
+                training_config.update(dict(zip(training_keys, training_combo)))
+                
+                configs.append(cls(
+                    model_config=model_config,
+                    training_config=training_config,
+                    data_config=config_dict["data"],
+                    is_hyperparameter_search=True,
+                    search_space={
+                        "model": model_lists,
+                        "training": training_lists
+                    }
+                ))
+        
+        # Randomly shuffle configurations
+        random.shuffle(configs)
+        return configs
 
-        # dimensions
-        self.input_size = next(iter(self.train_loader))[0].size(-1) ** 2
-        self.output_size = next(iter(self.train_loader))[1].size(-1)
-        if signPhi:
-            self.output_size = self.output_size**2
 
-        # directories
-        self.checkpoint_dir = "./checkpoints"
+class ModelTrainer:
+    """Main trainer class for managing model training"""
+    
+    def __init__(
+        self,
+        config: TrainingConfig,
+        experiment_name: Optional[str] = None,
+        checkpoint_dir: Optional[str] = None
+    ):
+        """
+        Args:
+            config: Training configuration
+            experiment_name: Name for logging and checkpointing
+            checkpoint_dir: Directory for saving checkpoints
+        """
+        self.config = config
+        self.experiment_name = experiment_name or config.model_config['type']
+        self.checkpoint_dir = checkpoint_dir or "./checkpoints"
+        
+        # Create checkpoint directory
+        os.makedirs(self.checkpoint_dir, exist_ok=True)
+        
+        # Setup data
+        self.setup_data()
+        
+        # Create model and lightning module
+        self.model = self.create_model()
+        self.lightning_module = self.create_lightning_module()
+        
+        # Setup training
+        self.trainer = self.setup_trainer()
 
-        # print CUDA info
         # Check what version of PyTorch is installed
         print(torch.__version__)
 
@@ -53,260 +180,133 @@ class Trainer:
         # Check if FlashAttention is available
         print("FlashAttention available:", torch.backends.cuda.flash_sdp_enabled())
 
-    def set_dataloaders_batch_size(self, batch_size=64, unpack_diagonals=False):
-        self.batch_size = batch_size
-        self.train_loader = get_custom_dataloader(
-            self.training_h5, batch_size=self.batch_size,
-            absPhi=self.absPhi,
-            signPhi=self.signPhi,
-            multiTask=self.multiTask,
-            shuffle=True,
-            unpack_diagonals=unpack_diagonals)
-        self.valid_loader = get_custom_dataloader(
-            self.validation_h5,
-            batch_size=self.batch_size,
-            absPhi=self.absPhi,
-            signPhi=self.signPhi,
-            multiTask=self.multiTask,
-            shuffle=False,
-            unpack_diagonals=unpack_diagonals)
-        self.test_loader = get_custom_dataloader(
-            self.testing_h5,
-            batch_size=self.batch_size,
-            absPhi=self.absPhi,
-            signPhi=self.signPhi,
-            multiTask=self.multiTask,
-            shuffle=False,
-            unpack_diagonals=unpack_diagonals)
-
-    def check_dataloaders(self):
-        train_noshuffle_loader = get_custom_dataloader(
-            self.training_h5, batch_size=self.batch_size,
-            absPhi=self.absPhi,
-            signPhi=self.signPhi,
-            multiTask=self.multiTask,
-            shuffle=False)
-
-        train_batch = next(iter(train_noshuffle_loader))
-        valid_batch = next(iter(self.valid_loader))
-        test_batch = next(iter(self.test_loader))
-        # Check for independence of the data sets by checking for equality of the first batch (unshuffled)
-        assert (train_batch[0] != valid_batch[0]).any(), "Training and validation sets are not independent"
-        assert (train_batch[0] != test_batch[0]).any(), "Training and test sets are not independent"
-        assert (valid_batch[0] != test_batch[0]).any(), "Validation and test sets are not independent"
-
-    def train_model(self, model_name, task_name, save_name=None, **kwargs):
-        """Train model.
-
-        Args:
-            model_name: Name of the model you want to run. Is used to look up
-            the class in "model_dict"
-            save_name (optional): If specified, this name will be used for
-            creating the checkpoint and logging directory.
-        """
-        if save_name is None:
-            save_name = model_name
-
-        # logger
-        if self.log:
-            logger = WandbLogger(
-                project='triple_correlation',
-                group=model_name,
-                log_model=True,
-                save_dir=os.path.join(
-                    self.checkpoint_dir,
-                    save_name))
+    
+    def setup_data(self):
+        """Setup data loaders"""
+        if self.config.data_config['test_path']:
+            self.train_loader, self.val_loader, self.test_loader = create_data_loaders(
+                train_path=self.config.data_config['train_path'],
+                val_path=self.config.data_config['val_path'],
+                test_path=self.config.data_config['test_path'],
+                batch_size=self.config.training_config['batch_size'],
+                num_workers=self.config.data_config['num_workers']
+            )
         else:
-            logger = None
-
-        # callbacks
-        # early stopping
-        early_stop_callback = EarlyStopping(monitor="val_loss",
-                                            min_delta=0.005,
-                                            patience=10,
-                                            verbose=True,
-                                            mode="min")
-        checkpoint_callback = ModelCheckpoint(save_weights_only=True,
-                                              mode="min", monitor="train_loss",
-                                              save_top_k=1)
-        # Save the best checkpoint based on the maximum val_acc recorded.
-        # Saves only weights and not optimizer
-
-        # Create a PyTorch Lightning trainer with the generation callback
-        trainer = L.Trainer(
-            default_root_dir=os.path.join(self.checkpoint_dir, save_name),
-            accelerator="gpu",
-            devices=[0],
-            max_epochs=500,
-            #callbacks=[checkpoint_callback, early_stop_callback],
-            callbacks=[checkpoint_callback],
-            check_val_every_n_epoch=10,
-            logger=logger
+            self.test_loader = None
+            self.train_loader, self.val_loader, _  = create_data_loaders(
+                train_path=self.config.data_config['train_path'],
+                val_path=self.config.data_config['val_path'],
+                test_path=None,
+                batch_size=self.config.training_config['batch_size'],
+                num_workers=self.config.data_config['num_workers']
+            )
+    
+    def create_model(self) -> BaseModel:
+        """Create model instance based on config"""
+        model_type = self.config.model_config.pop('type')
+        if model_type == "GPT":
+            return GPT(**self.config.model_config)
+        else:
+            raise ValueError(f"Unknown model type: {model_type}")
+    
+    def create_lightning_module(self) -> BaseLightningModule:
+        """Create lightning module based on model type"""
+        if isinstance(self.model, GPT):
+            return GPTDecoder(
+                model=self.model,
+                optimizer_name=self.config.training_config['optimizer'],
+                optimizer_hparams={
+                    'lr': self.config.training_config['learning_rate'],
+                    'weight_decay': self.config.training_config['weight_decay']
+                }
+            )
+        else:
+            return BaseLightningModule(
+                model=self.model,
+                optimizer_name=self.config.training_config['optimizer'],
+                optimizer_hparams={
+                    'lr': self.config.training_config['learning_rate'],
+                    'weight_decay': self.config.training_config['weight_decay']
+                }
+            )
+    
+    def setup_trainer(self) -> L.Trainer:
+        """Setup Lightning trainer with callbacks and loggers"""
+        # Callbacks
+        callbacks = [
+            ModelCheckpoint(
+                dirpath=os.path.join(self.checkpoint_dir, self.experiment_name),
+                filename='{epoch}-{val_loss:.2f}',
+                monitor='val_loss',
+                mode='min',
+                save_top_k=1
+            ),
+            EarlyStopping(
+                monitor='val_loss',
+                patience=10,
+                mode='min'
+            ),
+            LearningRateMonitor(logging_interval='epoch')
+        ]
+        
+        # Add WandB logger if configured
+        if self.config.training_config.get('use_wandb', False):
+            loggers = [
+                WandbLogger(
+                    project=self.config.training_config.get('wandb_project', 'ml-template'),
+                    name=self.experiment_name,
+                    save_dir=os.path.join(self.checkpoint_dir, 'wandb')
+                )
+            ]
+        else:
+            loggers = []
+        
+        # Get accelerator and device settings from config
+        accelerator = self.config.training_config.get('accelerator', 'auto')
+        devices = self.config.training_config.get('devices', 1)
+        
+        # Convert devices to proper type if it's a string
+        if isinstance(devices, str):
+            try:
+                devices = int(devices)
+            except ValueError:
+                # If it can't be converted to int, keep as string (e.g. for specific GPU like '0')
+                pass
+        
+        return L.Trainer(
+            max_epochs=self.config.training_config['max_epochs'],
+            callbacks=callbacks,
+            logger=loggers,
+            accelerator=accelerator,
+            devices=devices
         )
-        task_dict = {
-            "sign_classification": SignClassifier,
-            "phase_regression": PhaseRegressor,
-            "auto_decoder": AutoDecoder,
-            "hybrid_classification": HybridClassifier
-        }
-        # L.seed_everything(42)  # To be reproducible
-        model = task_dict[task_name](model_name=model_name, **kwargs)
-        trainer.fit(model, self.train_loader, self.valid_loader)
-
-        # Load best checkpoint after training
-        model = task_dict[task_name].load_from_checkpoint(
-            trainer.checkpoint_callback.best_model_path)
-
-        # Run test set through best model and log metrics
-        trainer.test(model, dataloaders=self.test_loader,
-                                   verbose=False)
-
-        logger.experiment.finish()
-
-        return model
-
-    def scan_hyperparams(self, num_samples: int = 16):
-
-        for _ in range(num_samples):
-        # for (num_layers, num_conv_layers, kernel_size, dropout_rate, momentum,
-        #      lr, batch_size, zeta, norm, hidden_size) in product(
-        #         [10], [None], [None], [0.0], [0.9], [1e-4], [512],
-        #         [1], [False], [64]):
-
-            model_name = "GPT"
-            model_config = GPTConfig()
-            model_config.n_layer = 2#int(np.random.choice([2]))
-            model_config.n_head = 16#int(np.random.choice([16]))
-            model_config.n_embd = 128#int(np.random.choice([128]))
-            model_config.bias = True#np.random.choice([True])
-            lr = 5e-4#float(np.random.choice([5e-4]))  # np.random.uniform(5e-5, 1e-3)
-            zeta = 1
-            batch_size = 1024#int(np.random.choice([1024]))
-            unpack_diagonals = False
-            # model_config = {#"num_layers": num_layers,
-            #                 #"activation": "LeakyReLU",
-            #                 #"norm": norm,
-            #                 "input_size": self.input_size,
-            #                 "hidden_size": hidden_size,
-            #                 #"output_size": self.output_size
-            #                 }
-            model_config = asdict(model_config)  # Convert dataclass to dict
-            loss_config = {"loss_name": "mse",
-                           "zeta": zeta,
-                           "alpha": 0*np.log(2)/np.pi}
-            optimizer_name = "Adam"
-            optimizer_config = {"lr": lr}
-            misc_config = {"batch_size": batch_size,
-                           "unpack_diagonals": unpack_diagonals}
-            self.set_dataloaders_batch_size(batch_size=batch_size, unpack_diagonals=unpack_diagonals)
-
-            self.train_model(model_name="GPT",
-                             task_name="auto_decoder",
-                             model_hparams=model_config,
-                             optimizer_name=optimizer_name,
-                             optimizer_hparams=optimizer_config,
-                             misc_hparams=misc_config,
-                             loss_hparams=loss_config)
-
-    def load_model(self, model_name="BottleCNN", model_id="5nozki8z"):
-        # Check whether pretrained model exists. If yes, load it and skip
-        # training
-        print(self.checkpoint_dir)
-        pretrained_filename = os.path.join(
-            self.checkpoint_dir,
-            model_name,
-            "triple_correlation",
-            model_id,
-            "checkpoints",
-            "*" + ".ckpt")
-        pretrained_filename = glob.glob(pretrained_filename)[0]
-        if os.path.isfile(pretrained_filename):
-            print(f"Found pretrained model at {
-                  pretrained_filename}, loading...")
-            # Automatically loads the model with the saved hyperparameters
-            # TODO: add conditional loading based on task name here
-            model = AutoDecoder.load_from_checkpoint(
-                pretrained_filename)
-
-            return model
-
-    def plot_phase_predictions(self, model_name="BottleCNN",
-                              model_id="i52c3rlz"):
-
-        model = self.load_model(model_name=model_name, model_id=model_id)
-        model.task_name = "auto_decoder"
-        trainer = L.Trainer(
-            accelerator="cpu",
-            # devices=[0]
+    
+    def train(self):
+        """Train the model"""
+        self.trainer.fit(
+            self.lightning_module,
+            train_dataloaders=self.train_loader,
+            val_dataloaders=self.val_loader
         )
-        y = trainer.predict(model, dataloaders=self.test_loader)
-
-        print(y[0][0].numpy().shape)
-        print(y[0][2].numpy().shape)
-        # y[batch_idx][return_idx], return_idx 0...3: 0: Predictions, 1:
-        # Targets, 2: inputs, 3: encoded
-        print("MSE Loss: ", np.mean((y[0][0].numpy() - y[0][1].numpy())**2))
-
-        for i in range(len(y[0][0].numpy()[:, 0])):
-            fig = plt.figure(figsize=(15, 5))
-            ax1, ax2, ax3 = fig.subplots(1, 3)
-
-            im1 = ax1.imshow(y[0][2].numpy()[i, :, :], origin="lower")
-            ax1.set_title("Inputs")
-            plt.colorbar(im1, ax=ax1)
-
-            ax2.plot(y[0][1].numpy()[i, :], label="Targets")
-            ax2.plot(y[0][0].numpy()[i, :], label="Predictions")
-            # ax2.set_title("MSE Loss: " + str(nn.MSELoss(reduction='sum')
-            #               (y[0][0][i, :], y[0][1][i, :]).item()))
-            ax2.legend()
-
-            im3 = ax3.imshow(y[0][3].numpy()[i, :, :], origin="lower")
-            # ax3.set_title("Encoded Prediction, MSE Loss: " +
-            #               str(nn.MSELoss(reduction='sum')(y[0][3][i, :],
-            #                                               y[0][2][i, :]).item())
-            #               )
-            plt.colorbar(im3, ax=ax3)
-
-            plt.tight_layout()
-            plt.show()
-
-    def plot_sign_predictions(self, model_name="MLP",
-                              model_id="i52c3rlz"):
-
-        model = self.load_model(model_name=model_name, model_id=model_id)
-        model.task_name = "sign_classification"
-        trainer = L.Trainer(
-            accelerator="cpu",
-            # devices=[0]
+    
+    def test(self):
+        """Test the model"""
+        if hasattr(self, 'test_loader'):
+            self.trainer.test(
+                self.lightning_module,
+                dataloaders=self.test_loader
+            )
+    
+    @classmethod
+    def load_from_checkpoint(
+        cls,
+        checkpoint_path: str,
+        config: TrainingConfig
+    ) -> 'ModelTrainer':
+        """Load model from checkpoint"""
+        trainer = cls(config)
+        trainer.lightning_module = trainer.lightning_module.load_from_checkpoint(
+            checkpoint_path,
+            model=trainer.model
         )
-        y = trainer.predict(model, dataloaders=self.test_loader)
-
-        print(y[0][0].numpy().shape)
-        print(y[0][2].numpy().shape)
-        # y[batch_idx][return_idx], return_idx 0...2: 0: Predictions, 1:
-        # Targets, 2: inputs
-        print("MSE Loss: ", np.mean((y[0][0].numpy() - y[0][1].numpy())**2))
-
-        for i in range(len(y[0][0].numpy()[:, 0])):
-            fig = plt.figure(figsize=(10, 5))
-            ax1, ax2, ax3 = fig.subplots(1, 3)
-
-            im1 = ax1.imshow(y[0][2].numpy()[i, :, :], origin="lower")
-            ax1.set_title("Inputs")
-            plt.colorbar(im1, ax=ax1)
-
-            im2 = ax2.imshow(2*y[0][1].numpy()[i, :, :]-1, origin="lower", vmin=-1,
-                             vmax=1, cmap="coolwarm")
-            ax2.set_title("Targets [-1, 1]")
-            cbar2 = plt.colorbar(im2, ax=ax2)
-            cbar2.set_ticks([-1, 0, 1])
-
-            im3 = ax3.imshow(2*y[0][0].numpy()[i, :, :]-1, origin="lower", vmin=-1,
-                             vmax=1, cmap="coolwarm")
-            ax3.set_title("Predictions [-1, 1]")
-            cbar3 = plt.colorbar(im3, ax=ax3)
-            cbar3.set_ticks([-1, 0, 1])
-
-            plt.tight_layout()
-            plt.show()
+        return trainer

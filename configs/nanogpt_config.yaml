@@ -1,0 +1,22 @@
+model:
+  type: "CNNAutoencoder"
+  in_channels: 1
+  latent_dim: 128
+  hidden_dims: [32, 64, 128, 256]
+  activation: "ReLU"
+  norm_layer: "BatchNorm2d"
+
+training:
+  max_epochs: 100
+  batch_size: 32
+  optimizer: "Adam"
+  learning_rate: 0.001
+  weight_decay: 0.00001
+  use_wandb: false
+  wandb_project: "image-autoencoder"
+
+data:
+  train_path: "./data/gaussian_spots/train.h5"
+  val_path: "./data/gaussian_spots/val.h5"
+  test_path: "./data/gaussian_spots/test.h5"
+  num_workers: 4

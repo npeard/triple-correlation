@@ -1,47 +1,109 @@
 #!/usr/bin/env python
 
+import os
+import argparse
+import random
 import numpy as np
-import sys
-import training
-import datasets
+from pathlib import Path
+from training_new import TrainingConfig, ModelTrainer
+from utils import create_train_val_test_datasets
+
+def parse_args():
+    parser = argparse.ArgumentParser(description='Train or evaluate a model')
+    parser.add_argument(
+        '--config',
+        type=str,
+        required=True,
+        help='Path to YAML config file'
+    )
+    parser.add_argument(
+        '--mode',
+        type=str,
+        choices=['train', 'test', 'both'],
+        default='both',
+        help='Run mode: train, test, or both'
+    )
+    parser.add_argument(
+        '--checkpoint',
+        type=str,
+        help='Path to checkpoint for testing or resuming training'
+    )
+    parser.add_argument(
+        '--experiment_name',
+        type=str,
+        help='Name for the experiment (used in logging and checkpoints)'
+    )
+    parser.add_argument(
+        '--regenerate_datasets',
+        action='store_true',
+        help='Regenerate training, validation, and test datasets with a new random seed'
+    )
+    parser.add_argument(
+        '--random_seed',
+        type=int,
+        help='Random seed for dataset generation. If not provided, a random one will be used'
+    )
+    return parser.parse_args()
+
+def setup_random_seed(seed=None):
+    """Set random seed for reproducibility."""
+    if seed is None:
+        # Generate a random seed between 0 and 2^32 - 1
+        seed = random.randint(0, 2**32 - 1)
+    
+    random.seed(seed)
+    np.random.seed(seed)
+    return seed
+
+def main():
+    # Parse command line arguments
+    args = parse_args()
+    
+    # Load config
+    config = TrainingConfig.from_yaml(args.config)
+    
+    # Regenerate datasets if requested
+    if args.regenerate_datasets:
+        seed = setup_random_seed(args.random_seed)
+        print(f"\nRegenerating datasets with random seed: {seed}")
+        
+        # Get dataset parameters from config
+        dataset_params = config.dataset_params if hasattr(config, 'dataset_params') else {}
+        
+        # Generate new datasets
+        create_train_val_test_datasets(
+            output_dir=config.data_dir,
+            **dataset_params
+        )
+        print("Dataset regeneration complete!\n")
+    
+    # Create trainer
+    trainer = ModelTrainer(
+        config=config,
+        experiment_name=args.experiment_name
+    )
+    
+    # Load from checkpoint if provided
+    if args.checkpoint:
+        trainer = ModelTrainer.load_from_checkpoint(
+            checkpoint_path=args.checkpoint,
+            config=config
+        )
+    
+    # Run training and/or testing
+    if args.mode in ['train', 'both']:
+        trainer.train()
+    
+    if args.mode in ['test', 'both']:
+        trainer.test()
 
 if __name__ == '__main__':
-    np.random.seed()
-    if len(sys.argv) == 1:
-        """Run functions in this scratch area. 
-        """
-        num_pix = 21
-        train_samples = int(1e6)
-        valid_samples = int(1e4)
-        train_file = f"./data/pretrain_numpix{num_pix}_{train_samples:.0e}_samples.h5"
-        valid_file = f"./data/prevalid_numpix{num_pix}_{valid_samples:.0e}_samples.h5"
-        test_file = f"./data/pretest_numpix{num_pix}_{valid_samples:.0e}_samples.h5"
-
-        # datasets.generate_pretraining_data(
-        #     num_pix=num_pix, num_samples=int(train_samples),
-        #     file_path=train_file)
-        
-        # datasets.generate_pretraining_data(
-        #     num_pix=num_pix, num_samples=int(valid_samples),
-        #     file_path=valid_file)
-        
-        # datasets.generate_pretraining_data(
-        #     num_pix=num_pix, num_samples=int(valid_samples),
-        #     file_path=test_file)
-
-        runner = training.Trainer(train_file, valid_file, test_file,
-                                  absPhi=True, signPhi=False, multiTask=False, log=True)
-        #runner.check_dataloaders()
-        #runner.scan_hyperparams(num_samples=1)
-        
-        runner.plot_phase_predictions(model_name="GPT", model_id="e1z6bc3c")
-        
-        # Best hybrid classifier so far
-        # runner.plot_phase_predictions(model_name="MLP",
-        #                              model_id="eojqvv3v")
-        #runner.plot_sign_predictions(model_name="MLP", model_id="eojqvv3v")
+    main()
 
 
-    else:
-        raise NotImplementedError("Unsupported number of command-line "
-                                  "arguments")
+# Example code, how to run training:
+# python main.py --config configs/autoencoder_config.yaml --mode train --experiment_name my_experiment
+# How to test a trained model:
+# python main.py --config configs/autoencoder_config.yaml --mode test --checkpoint path/to/checkpoint.ckpt
+# How to regenerate datasets and train:
+# python main.py --config configs/autoencoder_config.yaml --mode train --regenerate_datasets --random_seed 42
