@@ -17,9 +17,9 @@ from dataclasses import dataclass, field
 import random
 from itertools import product
 
-from lightning_config import BaseLightningModule, GPTDecoder
-from datasets import create_data_loaders
-from nanogpt import GPTConfig
+from biphase_gpt.lightning_config import BaseLightningModule, GPTDecoder
+from biphase_gpt.datasets import create_data_loaders
+from biphase_gpt.nano_gpt import GPTConfig, GPT
 
 
 @dataclass
@@ -40,20 +40,37 @@ class TrainingConfig:
     def _set_defaults(self):
         """Set default values for configs if not provided"""
         # Model defaults
-        self.model_config.setdefault("type", "CNNAutoencoder")
-        self.model_config.setdefault("in_channels", 3)
-        self.model_config.setdefault("latent_dim", 128)
+        self.model_config.setdefault("type", "GPT")
+        self.model_config.setdefault("n_layer", 1)
+        self.model_config.setdefault("n_head", 4)
+        self.model_config.setdefault("n_embd", 128)
+        self.model_config.setdefault("dropout", 0.1)
+        self.model_config.setdefault("bias", False)
         
         # Training defaults
-        self.training_config.setdefault("max_epochs", 100)
-        self.training_config.setdefault("batch_size", 32)
-        self.training_config.setdefault("learning_rate", 1e-3)
-        self.training_config.setdefault("weight_decay", 1e-4)
-        self.training_config.setdefault("accelerator", "auto")  # Options: 'cpu', 'gpu', 'auto'
-        self.training_config.setdefault("devices", 1)  # Can be int or str
+        self.training_config.setdefault("max_epochs", 50)
+        self.training_config.setdefault("batch_size", 512)
+        self.training_config.setdefault("optimizer", "Adam")
+        self.training_config.setdefault("learning_rate", 3e-4)
+        self.training_config.setdefault("weight_decay", 0.1)
+        self.training_config.setdefault("accelerator", "cpu")
+        self.training_config.setdefault("devices", "0")
+        self.training_config.setdefault("use_logging", False)
+        self.training_config.setdefault("wandb_project", "triple_correlation")
+        self.training_config.setdefault("experiment_name", "gpt_biphase")
+        self.training_config.setdefault("checkpoint_dir", "./checkpoints")
+        self.training_config.setdefault("random_seed", 42)
         
         # Data defaults
+        self.data_config.setdefault("data_dir", "./data")
+        self.data_config.setdefault("train_file", "train.h5")
+        self.data_config.setdefault("val_file", "val.h5")
+        self.data_config.setdefault("test_file", "test.h5")
         self.data_config.setdefault("num_workers", 4)
+        self.data_config.setdefault("dataset_params", {
+            "num_samples": 10000,
+            "num_pix": 21
+        })
     
     def _create_gpt_config(self) -> GPTConfig:
         """Create GPTConfig from model configuration"""
@@ -183,25 +200,48 @@ class ModelTrainer:
     
     def setup_data(self):
         """Setup data loaders"""
-        if self.config.data_config['test_path']:
+        # Convert data_dir to absolute path
+        base_dir = Path(__file__).parent.parent  # Go up two levels from training.py
+        
+        def resolve_path(data_dir: str, filename: str = None) -> str:
+            """Resolve path relative to project root, optionally joining with filename"""
+            # Remove leading './' if present
+            data_dir = str(data_dir).lstrip('./')
+            abs_dir = base_dir / data_dir
+            
+            # Create directory if it doesn't exist
+            os.makedirs(abs_dir, exist_ok=True)
+            
+            # If filename is provided, join it with the directory
+            return str(abs_dir / filename) if filename else str(abs_dir)
+        
+        # Get absolute data directory
+        data_dir = self.config.data_config['data_dir']
+        
+        # Resolve paths for data files
+        train_path = resolve_path(data_dir, self.config.data_config.get('train_file'))
+        val_path = resolve_path(data_dir, self.config.data_config.get('val_file'))
+        test_path = resolve_path(data_dir, self.config.data_config.get('test_file'))
+        
+        if test_path:
             self.train_loader, self.val_loader, self.test_loader = create_data_loaders(
-                train_path=self.config.data_config['train_path'],
-                val_path=self.config.data_config['val_path'],
-                test_path=self.config.data_config['test_path'],
+                train_path=train_path,
+                val_path=val_path,
+                test_path=test_path,
                 batch_size=self.config.training_config['batch_size'],
                 num_workers=self.config.data_config['num_workers']
             )
         else:
             self.test_loader = None
-            self.train_loader, self.val_loader, _  = create_data_loaders(
-                train_path=self.config.data_config['train_path'],
-                val_path=self.config.data_config['val_path'],
+            self.train_loader, self.val_loader, _ = create_data_loaders(
+                train_path=train_path,
+                val_path=val_path,
                 test_path=None,
                 batch_size=self.config.training_config['batch_size'],
                 num_workers=self.config.data_config['num_workers']
             )
     
-    def create_model(self) -> BaseModel:
+    def create_model(self) -> BaseLightningModule:
         """Create model instance based on config"""
         model_type = self.config.model_config.pop('type')
         if model_type == "GPT":
@@ -250,7 +290,7 @@ class ModelTrainer:
         ]
         
         # Add WandB logger if configured
-        if self.config.training_config.get('use_wandb', False):
+        if self.config.training_config.get('use_logging', False):
             loggers = [
                 WandbLogger(
                     project=self.config.training_config.get('wandb_project', 'ml-template'),

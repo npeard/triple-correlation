@@ -10,7 +10,6 @@ training:
   weight_decay: [0.1, 0.2]
   batch_size: [32, 64]
   max_epochs: [50]
-  warmup_iters: [100, 500]
 
 data:
   train_path: "./data/train.h5"

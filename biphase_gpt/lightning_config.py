@@ -6,7 +6,7 @@ from torch import optim, nn
 import lightning as L
 from torch.nn import functional as F
 import numpy as np
-from nanogpt import GPT, GPTConfig
+from biphase_gpt.nano_gpt import GPT, GPTConfig
 
 
 class BaseLightningModule(L.LightningModule):

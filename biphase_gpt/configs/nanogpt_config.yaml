@@ -1,22 +1,33 @@
 model:
-  type: "CNNAutoencoder"
-  in_channels: 1
-  latent_dim: 128
-  hidden_dims: [32, 64, 128, 256]
-  activation: "ReLU"
-  norm_layer: "BatchNorm2d"
+  type: "GPT"
+  n_layer: 1
+  n_head: 4
+  n_embd: 128
+  dropout: 0.1
+  bias: false
 
 training:
-  max_epochs: 100
-  batch_size: 32
+  max_epochs: 50
+  batch_size: 512
   optimizer: "Adam"
-  learning_rate: 0.001
-  weight_decay: 0.00001
-  use_wandb: false
-  wandb_project: "image-autoencoder"
+  learning_rate: 3e-4
+  weight_decay: 0.1
+  accelerator: "cpu"
+  devices: "0"
+  use_logging: false
+  wandb_project: "triple_correlation"
+  experiment_name: "gpt_biphase"
+  checkpoint_dir: "./checkpoints"
+  random_seed: 42
 
 data:
-  train_path: "./data/gaussian_spots/train.h5"
-  val_path: "./data/gaussian_spots/val.h5"
-  test_path: "./data/gaussian_spots/test.h5"
+  data_dir: "./biphase_gpt/data"
+  train_file: "train.h5"
+  val_file: "val.h5"
+  test_file: "test.h5"
   num_workers: 4
+  dataset_params:
+    train_samples: 1000
+    val_samples: 100
+    test_samples: 100
+    num_pix: 21
