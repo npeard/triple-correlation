@@ -148,8 +148,7 @@ class PhiDataset(BaseH5Dataset):
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
         inputs, targets = super().__getitem__(idx)
         
-        # Cut off zero element edges
-        inputs = inputs[1:, 1:]
+        # TODO: Add check that we have already cut zero-value edges for efficiency
         
         if self.unpack_diagonals:
             inputs = self.unpack_by_diagonals(inputs)
@@ -273,6 +272,7 @@ def generate_pretraining_data(
         
         # Create datasets with chunking and compression
         Phi_dim = ((num_pix//2 + 1)//2 + 1)
+        Phi_dim -= 1 # for removal of zero-valued row/column with no information
         f.create_dataset(
             'Phi',
             shape=(num_samples, Phi_dim, Phi_dim),
@@ -302,7 +302,7 @@ def generate_pretraining_data(
             Phi = Fluorescence1D.compute_Phi_from_phase(phase[num_pix // 2:])
             
             # Store in dataset
-            f['Phi'][i] = Phi
+            f['Phi'][i] = Phi[1:, 1:]
             f['phase'][i] = phase
 
 

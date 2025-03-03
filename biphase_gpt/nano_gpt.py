@@ -69,7 +69,7 @@ class CausalSelfAttention(nn.Module):
         if self.flash:
             # efficient attention using Flash Attention CUDA kernels
             # print("using flash attention")
-            y = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=None, dropout_p=self.dropout if self.training else 0, is_causal=False)
+            y = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=None, dropout_p=self.dropout if self.training else 0, is_causal=True)
         else:
             # manual implementation of attention
             # print("using manual attention")
@@ -148,39 +148,39 @@ class Block(nn.Module):
 
 @dataclass
 class GPTConfig:
-    block_size: int = 5*5      # input sequence length
-    output_block_size: int = 11  # output sequence length
+    in_seq_len: int = 5*5      # input sequence length
+    out_seq_len: int = 11      # output sequence length
     input_dim: int = 1         # dimension of input features
     output_dim: int = 1        # dimension of output (target) features
     n_layer: int = 8           # number of transformer layers
     n_head: int = 4            # number of attention heads
-    n_embd: int = 32          # embedding dimension
+    n_embd: int = 32           # embedding dimension
     dropout: float = 0.1       # dropout rate
     bias: bool = False         # use bias in linear layers
 
 class GPT(nn.Module):
 
-    def __init__(self, config):
+    def __init__(self, config: GPTConfig):
         super().__init__()
         assert config.input_dim is not None
-        assert config.block_size is not None
-        assert config.output_block_size is not None
+        assert config.in_seq_len is not None
+        assert config.out_seq_len is not None
         self.config = config
 
         self.transformer = nn.ModuleDict(dict(
             # Replace embedding with linear projection for continuous inputs
             wte = nn.Linear(config.input_dim, config.n_embd),
             # Keep positional embeddings for sequence structure
-            wpe = nn.Embedding(config.block_size, config.n_embd),
+            wpe = nn.Embedding(config.in_seq_len, config.n_embd),
             # Add output position embeddings
-            wpe_out = nn.Embedding(config.output_block_size, config.n_embd),
+            wpe_out = nn.Embedding(config.out_seq_len, config.n_embd),
             drop = nn.Dropout(config.dropout),
             h = nn.ModuleList([Block(config) for _ in range(config.n_layer)]),
             ln_f = LayerNorm(config.n_embd, bias=config.bias),
         ))
         # Add sequence length reduction layer
         # Option 1: Simple linear reduction (current)
-        self.seq_reduction = nn.Linear(config.block_size, config.output_block_size)
+        self.seq_reduction = nn.Linear(config.in_seq_len, config.out_seq_len)
         # Option 2: MLP reduction (uncomment to use)
         # self.seq_reduction = ReductionMLP(config)
 
@@ -224,7 +224,7 @@ class GPT(nn.Module):
         x = x.squeeze(1)
         x = x.unsqueeze(-1)
         b, t, f = x.size()  # batch, sequence length, features
-        assert t <= self.config.block_size, f"Cannot forward sequence of length {t}, block size is only {self.config.block_size}"
+        assert t <= self.config.in_seq_len, f"Cannot forward sequence of length {t}, block size is only {self.config.in_seq_len}"
         
         # Input sequence processing
         pos = torch.arange(0, t, dtype=torch.long, device=device)
@@ -239,27 +239,21 @@ class GPT(nn.Module):
         
         # Reduce sequence length
         x = x.transpose(1, 2)  # (b, n_embd, t)
-        x = self.seq_reduction(x)  # (b, n_embd, output_block_size)
-        x = x.transpose(1, 2)  # (b, output_block_size, n_embd)
+        x = self.seq_reduction(x)  # (b, n_embd, out_seq_len)
+        x = x.transpose(1, 2)  # (b, out_seq_len, n_embd)
         # TODO: try removing output positional embeddings, and one of the reduction steps.
         # Add output positional embeddings
-        out_pos = torch.arange(0, self.config.output_block_size, dtype=torch.long, device=device)
+        out_pos = torch.arange(0, self.config.out_seq_len, dtype=torch.long, device=device)
         out_pos_emb = self.transformer.wpe_out(out_pos)
         x = x + out_pos_emb
         
         # Output continuous predictions
         predictions = self.regression_head(x)
 
-        # if targets is not None:
-        #     # if we are given some desired targets also calculate the loss
-        #     logits = self.lm_head(x)
-        #     loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1), ignore_index=-1)
-        # else:
-        #     # inference-time mini-optimization: only forward the lm_head on the very last position
-        #     logits = self.lm_head(x[:, [-1], :]) # note: using list [-1] to preserve the time dim
-        #     loss = None
+        # implement antisymmetry of output sequence
+        predictions = torch.cat([-1*predictions.flip(1), predictions[:, 1:]], dim=1)
         
-        return predictions
+        return predictions.squeeze(2)
 
     def get_attention_metrics(self):
         """
@@ -274,10 +268,10 @@ class GPT(nn.Module):
             with torch.no_grad():
                 if block.attn.flash:
                     # For flash attention, we need to compute attention weights explicitly
-                    q, k, v = block.attn.c_attn(torch.ones(1, self.config.block_size, self.config.n_embd).to(next(self.parameters()).device)).split(self.config.n_embd, dim=-1)
-                    q = q.view(1, self.config.block_size, self.config.n_head, self.config.n_embd // self.config.n_head).transpose(1, 2)
-                    k = k.view(1, self.config.block_size, self.config.n_head, self.config.n_embd // self.config.n_head).transpose(1, 2)
-                    v = v.view(1, self.config.block_size, self.config.n_head, self.config.n_embd // self.config.n_head).transpose(1, 2)
+                    q, k, v = block.attn.c_attn(torch.ones(1, self.config.in_seq_len, self.config.n_embd).to(next(self.parameters()).device)).split(self.config.n_embd, dim=-1)
+                    q = q.view(1, self.config.in_seq_len, self.config.n_head, self.config.n_embd // self.config.n_head).transpose(1, 2)
+                    k = k.view(1, self.config.in_seq_len, self.config.n_head, self.config.n_embd // self.config.n_head).transpose(1, 2)
+                    v = v.view(1, self.config.in_seq_len, self.config.n_head, self.config.n_embd // self.config.n_head).transpose(1, 2)
                     att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
                     # print("att abs mean: ", torch.abs(att).mean())
                     att_abs_mean = torch.abs(att).mean().item()
@@ -308,7 +302,7 @@ class GPT(nn.Module):
         """
         with torch.no_grad():
             # Get position embeddings for input sequence
-            pos = torch.arange(0, self.config.block_size, dtype=torch.long, 
+            pos = torch.arange(0, self.config.in_seq_len, dtype=torch.long, 
                              device=next(self.parameters()).device)
             pos_emb = self.transformer.wpe(pos)  # [block_size, n_embd]
             

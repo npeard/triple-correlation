@@ -65,7 +65,6 @@ class BaseLightningModule(L.LightningModule):
             "optimizer": optimizer,
             "lr_scheduler": {
                 "scheduler": scheduler,
-                "monitor": self.scheduler_hparams.get("monitor", "val_loss")
             }
         }
     
@@ -81,7 +80,7 @@ class GPTDecoder(BaseLightningModule):
     
     def __init__(
         self,
-        model_name: str = "GPT",
+        model_type: str = "GPT",
         model_hparams: Optional[Dict] = None,
         optimizer_name: str = "Adam",
         optimizer_hparams: Optional[Dict] = None,
@@ -91,7 +90,7 @@ class GPTDecoder(BaseLightningModule):
     ):
         """
         Args:
-            model_name: Name of the model (should be "GPT")
+            model_type: Name of the model (should be "GPT")
             model_hparams: Hyperparameters for the GPT model
             optimizer_name: Name of the optimizer to use
             optimizer_hparams: Hyperparameters for the optimizer
@@ -100,8 +99,8 @@ class GPTDecoder(BaseLightningModule):
             task_name: Name of the task
         """
         # Create GPT model
-        if model_name != "GPT":
-            raise ValueError("model_name must be 'GPT' for GPTDecoder")
+        if model_type != 'GPT':
+            raise ValueError('model_type must be \'GPT\' for GPTDecoder')
         
         model_hparams = model_hparams or {}
         gpt_config = GPTConfig(**model_hparams)

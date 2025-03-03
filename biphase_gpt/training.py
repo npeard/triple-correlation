@@ -41,45 +41,47 @@ class TrainingConfig:
         """Set default values for configs if not provided"""
         # Model defaults
         self.model_config.setdefault("type", "GPT")
-        self.model_config.setdefault("n_layer", 1)
-        self.model_config.setdefault("n_head", 4)
-        self.model_config.setdefault("n_embd", 128)
-        self.model_config.setdefault("dropout", 0.1)
-        self.model_config.setdefault("bias", False)
+        self.gpt_config = self._create_gpt_config()
         
         # Training defaults
         self.training_config.setdefault("max_epochs", 50)
         self.training_config.setdefault("batch_size", 512)
         self.training_config.setdefault("optimizer", "Adam")
         self.training_config.setdefault("learning_rate", 3e-4)
-        self.training_config.setdefault("weight_decay", 0.1)
         self.training_config.setdefault("accelerator", "cpu")
         self.training_config.setdefault("devices", "0")
         self.training_config.setdefault("use_logging", False)
         self.training_config.setdefault("wandb_project", "triple_correlation")
-        self.training_config.setdefault("experiment_name", "gpt_biphase")
-        self.training_config.setdefault("checkpoint_dir", "./checkpoints")
+        self.training_config.setdefault("experiment_name", "biphase_gpt")
+        self.training_config.setdefault("checkpoint_dir", "./biphase_gpt/checkpoints")
         self.training_config.setdefault("random_seed", 42)
         
         # Data defaults
-        self.data_config.setdefault("data_dir", "./data")
+        self.data_config.setdefault("data_dir", "./biphase_gpt/data")
         self.data_config.setdefault("train_file", "train.h5")
         self.data_config.setdefault("val_file", "val.h5")
         self.data_config.setdefault("test_file", "test.h5")
         self.data_config.setdefault("num_workers", 4)
         self.data_config.setdefault("dataset_params", {
-            "num_samples": 10000,
+            "train_samples": 10000,
+            "val_samples": 1000,
+            "test_samples": 1000,
             "num_pix": 21
         })
     
     def _create_gpt_config(self) -> GPTConfig:
         """Create GPTConfig from model configuration"""
+        num_pix = self.data_config.get("num_pix", 21)
+        Phi_dim = (num_pix // 2 + 1)//2 + 1
+        Phi_dim -= 1 # for removal of zero-valued row/column with no information
         return GPTConfig(
-            n_layer=self.model_config.get("n_layer", 4),
+            in_seq_len=Phi_dim**2,
+            out_seq_len=num_pix//2 + 1,
+            n_layer=self.model_config.get("n_layer", 1),
             n_head=self.model_config.get("n_head", 4),
             n_embd=self.model_config.get("n_embd", 128),
             dropout=self.model_config.get("dropout", 0.1),
-            bias=self.model_config.get("bias", True)
+            bias=self.model_config.get("bias", False)
         )
     
     @classmethod
@@ -191,11 +193,12 @@ class ModelTrainer:
         # Check the current CUDA version being used
         print("CUDA Version: ", torch.version.cuda)
 
-        # Check if CUDA is available and if so, print the device name
-        print("Device name:", torch.cuda.get_device_properties("cuda").name)
+        if torch.version.cuda is not None:
+            # Check if CUDA is available and if so, print the device name
+            print("Device name:", torch.cuda.get_device_properties("cuda").name)
 
-        # Check if FlashAttention is available
-        print("FlashAttention available:", torch.backends.cuda.flash_sdp_enabled())
+            # Check if FlashAttention is available
+            print("FlashAttention available:", torch.backends.cuda.flash_sdp_enabled())
 
     
     def setup_data(self):
@@ -244,8 +247,9 @@ class ModelTrainer:
     def create_model(self) -> BaseLightningModule:
         """Create model instance based on config"""
         model_type = self.config.model_config.pop('type')
-        if model_type == "GPT":
-            return GPT(**self.config.model_config)
+        if model_type == 'GPT':
+            print('Creating GPT model...')
+            return GPT(self.config.gpt_config)
         else:
             raise ValueError(f"Unknown model type: {model_type}")
     
@@ -253,22 +257,15 @@ class ModelTrainer:
         """Create lightning module based on model type"""
         if isinstance(self.model, GPT):
             return GPTDecoder(
-                model=self.model,
+                model_type='GPT',
                 optimizer_name=self.config.training_config['optimizer'],
                 optimizer_hparams={
-                    'lr': self.config.training_config['learning_rate'],
-                    'weight_decay': self.config.training_config['weight_decay']
+                    # TODO: why is this loaded as a string?
+                    'lr': eval(self.config.training_config['learning_rate']),
                 }
             )
         else:
-            return BaseLightningModule(
-                model=self.model,
-                optimizer_name=self.config.training_config['optimizer'],
-                optimizer_hparams={
-                    'lr': self.config.training_config['learning_rate'],
-                    'weight_decay': self.config.training_config['weight_decay']
-                }
-            )
+            raise ValueError(f"Unknown model type, can't initialize Lightning.")
     
     def setup_trainer(self) -> L.Trainer:
         """Setup Lightning trainer with callbacks and loggers"""
@@ -286,7 +283,7 @@ class ModelTrainer:
                 patience=10,
                 mode='min'
             ),
-            LearningRateMonitor(logging_interval='epoch')
+            #LearningRateMonitor(logging_interval='epoch')
         ]
         
         # Add WandB logger if configured
