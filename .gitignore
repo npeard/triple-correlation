@@ -129,10 +129,10 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-# training data
-data/*
-checkpoints/*
-lightning_logs/*
+# training data, checkpoints, and logging
+biphase_gpt/data/*
+biphase_gpt/checkpoints/*
+biphase_gpt/lightning_logs/*
 
 # MacOS
 .DS_Store
