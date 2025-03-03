@@ -342,7 +342,7 @@ class Fluorescence1D:
     @jit(nopython=True, parallel=False)
     def compute_Phi_from_phase(phase):
         """
-        Computes the cosine of the phase difference array.
+        Computes the phase difference array, Phi.
 
         Parameters:
             phase (ndarray): The phase array, both sides of origin

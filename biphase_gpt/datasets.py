@@ -115,13 +115,14 @@ class BaseH5Dataset(Dataset):
         self._cache_keys.append(key)
 
 
-class PhiDataset(BaseH5Dataset):
-    """Dataset for Phi matrices with optional diagonal unpacking."""
+class AbsPhiDataset(BaseH5Dataset):
+    """Dataset for pre-computed abs(Phi) matrices with optional diagonal unpacking.
+    The corresponding phase that generated abs(Phi) is stored as a target."""
     
     def __init__(
         self,
         file_path: str,
-        input_key: str = "Phi",
+        input_key: str = "absPhi",
         target_key: str = "phase",
         unpack_diagonals: bool = False,
         **kwargs
@@ -158,13 +159,6 @@ class PhiDataset(BaseH5Dataset):
         return inputs, targets
 
 
-class AbsPhiDataset(PhiDataset):
-    """Dataset that returns absolute values of Phi matrices."""
-    
-    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
-        inputs, targets = super().__getitem__(idx)
-        return torch.abs(inputs), targets
-
 def create_data_loaders(
     train_path: str,
     val_path: str,
@@ -186,9 +180,9 @@ def create_data_loaders(
     Returns:
         Tuple of (train_loader, val_loader, test_loader)
     """
-    train_dataset = PhiDataset(train_path, **dataset_kwargs)
-    val_dataset = PhiDataset(val_path, **dataset_kwargs)
-    test_dataset = PhiDataset(test_path, **dataset_kwargs)
+    train_dataset = AbsPhiDataset(train_path, **dataset_kwargs)
+    val_dataset = AbsPhiDataset(val_path, **dataset_kwargs)
+    test_dataset = AbsPhiDataset(test_path, **dataset_kwargs)
     
     train_loader = DataLoader(
         train_dataset,
@@ -218,30 +212,6 @@ def create_data_loaders(
     )
     
     return train_loader, val_loader, test_loader
-
-def append_to_h5file(Phi, phase, file_path):
-    """Append Phi matrix and phase to HDF5 file.
-    
-    Args:
-        Phi: Phi matrix to append
-        phase: Phase array to append
-        file_path: Path to HDF5 file
-    """
-    with h5py.File(file_path, 'a') as f:
-        if 'Phi' not in f:
-            f.create_dataset('Phi',
-                         data=np.expand_dims(Phi, axis=0),
-                         maxshape=(None, *Phi.shape),
-                         chunks=True)
-            f.create_dataset('phase',
-                         data=np.expand_dims(phase, axis=0),
-                         maxshape=(None,) + phase.shape,
-                         chunks=True)
-        else:
-            f['Phi'].resize((f['Phi'].shape[0] + 1), axis=0)
-            f['Phi'][-1] = Phi
-            f['phase'].resize((f['phase'].shape[0] + 1), axis=0)
-            f['phase'][-1] = phase
 
 
 def generate_pretraining_data(
@@ -302,7 +272,7 @@ def generate_pretraining_data(
             Phi = Fluorescence1D.compute_Phi_from_phase(phase[num_pix // 2:])
             
             # Store in dataset
-            f['Phi'][i] = Phi[1:, 1:]
+            f['absPhi'][i] = np.abs(Phi[1:, 1:])
             f['phase'][i] = phase
 
 
@@ -445,8 +415,8 @@ def inspect_pretraining_dataset(file_path: str) -> dict:
 if __name__ == '__main__':
     file_path = f"./data/pretest_numpix21_1e+04_samples.h5"
     
-    dataset = PhiDataset(file_path)
-    dataset_diag = PhiDataset(file_path, unpack_diagonals=True)
+    dataset = AbsPhiDataset(file_path)
+    dataset_diag = AbsPhiDataset(file_path, unpack_diagonals=True)
     
     print("Original shape:", dataset[0][0].shape)
     print("Unpacked shape:", dataset_diag[0][0].shape)
