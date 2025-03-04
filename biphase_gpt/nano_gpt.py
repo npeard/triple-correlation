@@ -44,6 +44,7 @@ class CausalSelfAttention(nn.Module):
         self.n_head = config.n_head
         self.n_embd = config.n_embd
         self.dropout = config.dropout
+        self.is_causal = config.is_causal
         # flash attention make GPU go brrrrr but support is only in PyTorch >= 2.0
         self.flash = hasattr(torch.nn.functional, 'scaled_dot_product_attention')
         if not self.flash:
@@ -61,20 +62,16 @@ class CausalSelfAttention(nn.Module):
         q = q.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
         v = v.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
 
-        # print("k std: ", torch.std(k))
-        # print("q std: ", torch.std(q))
-        # print("v std: ", torch.std(v))
-
         # causal self-attention; Self-attend: (B, nh, T, hs) x (B, nh, hs, T) -> (B, nh, T, T)
         if self.flash:
             # efficient attention using Flash Attention CUDA kernels
             # print("using flash attention")
-            y = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=None, dropout_p=self.dropout if self.training else 0, is_causal=True)
+            y = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=None, dropout_p=self.dropout if self.training else 0, is_causal=self.is_causal)
         else:
             # manual implementation of attention
-            # print("using manual attention")
             att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
-            att = att.masked_fill(self.bias[:,:,:T,:T] == 0, float('-inf'))
+            if self.is_causal:
+                att = att.masked_fill(self.bias[:,:,:T,:T] == 0, float('-inf'))
             att = F.softmax(att, dim=-1)
             att = self.attn_dropout(att)
             y = att @ v # (B, nh, T, T) x (B, nh, T, hs) -> (B, nh, T, hs)
@@ -157,6 +154,7 @@ class GPTConfig:
     n_embd: int = 32           # embedding dimension
     dropout: float = 0.1       # dropout rate
     bias: bool = False         # use bias in linear layers
+    is_causal: bool = True     # Whether to use causal masking in self-attention
 
 class GPT(nn.Module):
 
@@ -310,7 +308,7 @@ class GPT(nn.Module):
             pos_std = torch.std(pos_emb, dim=-1).mean().item()
             
             # Get position embeddings for output sequence
-            out_pos = torch.arange(0, self.config.output_block_size, dtype=torch.long, 
+            out_pos = torch.arange(0, self.config.out_seq_len, dtype=torch.long, 
                                  device=next(self.parameters()).device)
             out_pos_emb = self.transformer.wpe_out(out_pos)  # [output_block_size, n_embd]
             
