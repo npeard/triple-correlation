@@ -28,6 +28,7 @@ class TrainingConfig:
     model_config: Dict[str, Any]
     training_config: Dict[str, Any]
     data_config: Dict[str, Any]
+    loss_config: Dict[str, Any]
     is_hyperparameter_search: bool = False
     search_space: Optional[Dict[str, List[Any]]] = None
     
@@ -99,12 +100,14 @@ class TrainingConfig:
         
         # Check if this is a hyperparameter search config
         if any(isinstance(v, list) for v in config_dict["model"].values()) or \
-           any(isinstance(v, list) for v in config_dict["training"].values()):
+           any(isinstance(v, list) for v in config_dict["training"].values()) or \
+           any(isinstance(v, list) for v in config_dict["loss"].values()):
             return cls._create_search_configs(config_dict)
         
         return cls(
             model_config=config_dict["model"],
             training_config=config_dict["training"],
+            loss_config=config_dict["loss"],
             data_config=config_dict["data"]
         )
     
@@ -117,6 +120,9 @@ class TrainingConfig:
         
         training_lists = {k: v for k, v in config_dict["training"].items() if isinstance(v, list)}
         training_fixed = {k: v for k, v in config_dict["training"].items() if not isinstance(v, list)}
+
+        loss_lists = {k: v for k, v in config_dict["loss"].items() if isinstance(v, list)}
+        loss_fixed = {k: v for k, v in config_dict["loss"].items() if not isinstance(v, list)}
         
         # Generate all combinations
         model_keys = list(model_lists.keys())
@@ -125,11 +131,15 @@ class TrainingConfig:
         training_keys = list(training_lists.keys())
         training_values = list(training_lists.values())
         
+        loss_keys = list(loss_lists.keys())
+        loss_values = list(loss_lists.values())
+        
         configs = []
         
         # Generate model combinations
         model_combinations = list(product(*model_values)) if model_values else [()]
         training_combinations = list(product(*training_values)) if training_values else [()]
+        loss_combinations = list(product(*loss_values)) if loss_values else [()]
         
         for model_combo in model_combinations:
             model_config = model_fixed.copy()
@@ -142,11 +152,13 @@ class TrainingConfig:
                 configs.append(cls(
                     model_config=model_config,
                     training_config=training_config,
+                    loss_config=loss_config,
                     data_config=config_dict["data"],
                     is_hyperparameter_search=True,
                     search_space={
                         "model": model_lists,
-                        "training": training_lists
+                        "training": training_lists,
+                        "loss": loss_lists
                     }
                 ))
         
@@ -225,6 +237,9 @@ class ModelTrainer:
         train_path = resolve_path(data_dir, self.config.data_config.get('train_file'))
         val_path = resolve_path(data_dir, self.config.data_config.get('val_file'))
         test_path = resolve_path(data_dir, self.config.data_config.get('test_file'))
+
+        # unpack diagonally or square
+        unpack_diagonal = self.config.data_config.get('unpack_diagonal', False)
         
         if test_path:
             self.train_loader, self.val_loader, self.test_loader = create_data_loaders(
@@ -232,7 +247,8 @@ class ModelTrainer:
                 val_path=val_path,
                 test_path=test_path,
                 batch_size=self.config.training_config['batch_size'],
-                num_workers=self.config.data_config['num_workers']
+                num_workers=self.config.data_config['num_workers'],
+                unpack_diagonal=unpack_diagonal
             )
         else:
             self.test_loader = None
@@ -241,7 +257,8 @@ class ModelTrainer:
                 val_path=val_path,
                 test_path=None,
                 batch_size=self.config.training_config['batch_size'],
-                num_workers=self.config.data_config['num_workers']
+                num_workers=self.config.data_config['num_workers'],
+                unpack_diagonal=unpack_diagonal
             )
     
     def create_model(self) -> BaseLightningModule:
@@ -258,11 +275,14 @@ class ModelTrainer:
         if isinstance(self.model, GPT):
             return GPTDecoder(
                 model_type='GPT',
+                model_hparams=self.config.gpt_config.to_dict(),
                 optimizer_name=self.config.training_config['optimizer'],
                 optimizer_hparams={
                     # TODO: why is this loaded as a string?
                     'lr': eval(self.config.training_config['learning_rate']),
-                }
+                },
+                # I need the Lightning module to know how the data is being unpacked
+                loss_hparams=self.config.loss_config.to_dict()
             )
         else:
             raise ValueError(f"Unknown model type, can't initialize Lightning.")

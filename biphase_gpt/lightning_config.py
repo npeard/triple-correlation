@@ -19,7 +19,6 @@ class BaseLightningModule(L.LightningModule):
         optimizer_hparams: Optional[Dict] = None,
         scheduler_hparams: Optional[Dict] = None,
         loss_hparams: Optional[Dict] = None,
-        task_name: Optional[str] = None
     ):
         """
         Args:
@@ -28,7 +27,6 @@ class BaseLightningModule(L.LightningModule):
             optimizer_hparams: Hyperparameters for the optimizer
             scheduler_hparams: Hyperparameters for the learning rate scheduler
             loss_hparams: Hyperparameters for the loss function
-            task_name: Name of the task (e.g. "phase_regression")
         """
         super().__init__()
         self.save_hyperparameters(ignore=['model'])
@@ -41,7 +39,6 @@ class BaseLightningModule(L.LightningModule):
             "gamma": 0.1
         }
         self.loss_hparams = loss_hparams or {}
-        self.task_name = task_name
         
         torch.set_float32_matmul_precision('high')
     
@@ -86,7 +83,6 @@ class GPTDecoder(BaseLightningModule):
         optimizer_hparams: Optional[Dict] = None,
         scheduler_hparams: Optional[Dict] = None,
         loss_hparams: Optional[Dict] = None,
-        task_name: Optional[str] = None
     ):
         """
         Args:
@@ -96,7 +92,6 @@ class GPTDecoder(BaseLightningModule):
             optimizer_hparams: Hyperparameters for the optimizer
             scheduler_hparams: Hyperparameters for the learning rate scheduler
             loss_hparams: Hyperparameters for the loss function
-            task_name: Name of the task
         """
         # Create GPT model
         if model_type != 'GPT':
@@ -112,7 +107,6 @@ class GPTDecoder(BaseLightningModule):
             optimizer_hparams=optimizer_hparams,
             scheduler_hparams=scheduler_hparams,
             loss_hparams=loss_hparams,
-            task_name=task_name
         )
     
     def loss_function(self, y_hat: torch.Tensor, targets: torch.Tensor, x: Optional[torch.Tensor] = None, *args, **kwargs) -> torch.Tensor:
@@ -125,12 +119,9 @@ class GPTDecoder(BaseLightningModule):
             *args, **kwargs: Additional arguments
         """
         # Base loss (MSE)
-        loss = nn.MSELoss()(y_hat, targets)
-        
-        # Add antisymmetry loss if enabled
-        if self.loss_hparams.get("use_antisymmetry_loss", False):
-            antisym_weight = self.loss_hparams.get("antisymmetry_weight", 1.0)
-            loss += antisym_weight * self.antisymmetry_loss(y_hat)
+        # I've found that comparing the absolute value trains better
+        # because there is an overall global +/-1 sign ambiguity
+        loss = nn.MSELoss()(torch.abs(y_hat), torch.abs(targets))
         
         # Add encoding loss if enabled and x is provided
         if self.loss_hparams.get("use_encoding_loss", False) and x is not None:
@@ -139,44 +130,52 @@ class GPTDecoder(BaseLightningModule):
         
         return loss
     
-    @staticmethod
-    def antisymmetry_loss(outputs: torch.Tensor) -> torch.Tensor:
-        """Compute antisymmetry loss to enforce phase antisymmetry.
-        
-        Args:
-            outputs: Model outputs to enforce antisymmetry on
-        """
-        positive_x = outputs[:, outputs.size(1) // 2 + 1:]
-        negative_x = torch.flip(outputs[:, :outputs.size(1) // 2], [1])
-        
-        loss = torch.sum(torch.add(positive_x, negative_x)**2) + torch.sum(
-            outputs[:, outputs.size(1) // 2]**2)
-        return loss
-    
     def encoding_loss(self, phase: torch.Tensor, absPhi: torch.Tensor) -> torch.Tensor:
-        """Compute encoding loss to ensure phase can reconstruct input.
+        """Compute encoding loss to ensure phase can reconstruct input abs(Phi).
         
         Args:
-            phase: Predicted phase
-            absPhi: Input absolute Phi matrix
+            phase: Predicted phase, both quadrants included
+            absPhi: Input absolute Phi matrix, has length ((n//2+1)//2+1) - 1) 
+            where n is the length of the predicted phase (nanoGPT is configured
+            to predict the full antisymmetric output internally), and then we remove
+            the zero value row and column with no information due to symmetry.
+        Returns:
+            torch.Tensor: Encoding loss
         """
-        # Get dimensions
-        batch_size = phase.size(0)
-        n = phase.size(1)
-        
-        # Construct Phi matrix from phase
-        Phi_recon = torch.zeros((batch_size, n, n), device=phase.device)
-        
-        # Fill in the matrix
-        for i in range(n):
-            for j in range(i + 1, n):
-                phase_diff = phase[:, j] - phase[:, i]
-                Phi_recon[:, i, j] = torch.cos(phase_diff)
-                Phi_recon[:, j, i] = torch.cos(phase_diff)
+        encoded = self._encode(phase)
         
         # Compare with input
-        loss = nn.MSELoss()(torch.abs(Phi_recon), absPhi)
+        loss = nn.MSELoss()(encoded, absPhi)
         return loss
+
+    @staticmethod
+    def _encode(phase: torch.Tensor) -> torch.Tensor:
+        """Re-encode abs(Phi) matrix from predicted phase.
+        
+        Args:
+            phase: Predicted phase, both quadrants included
+        Returns:
+            torch.Tensor: Re-encoded abs(Phi) matrix
+        """
+        batch_size = phase.size(0)
+        phase_dim = phase.size(1)//2 + 1
+        encoded_dim = (phase_dim//2 + 1)
+
+        # Phase in positive quadrant
+        phase = torch.flip(phase[:, :phase_dim], dims=[1])
+        
+        # Re-encode abs(Phi) matrix from predicted phase
+        encoded = torch.zeros((batch_size, phase_dim, phase_dim), device=phase.device)
+        
+        for i in range(phase_dim):
+            encoded[:, i, :] = (torch.roll(phase, -i, dims=-1) - phase - phase[:, i].unsqueeze(-1))
+
+        encoded = encoded[:, :encoded_dim, :encoded_dim]
+        # Remove zero row and column
+        encoded = encoded[:, 1:, 1:]
+        # absolute value
+        encoded = torch.abs(encoded)
+        return encoded
     
     def training_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> torch.Tensor:
         """Training step for GPT model.

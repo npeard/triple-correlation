@@ -345,7 +345,7 @@ class Fluorescence1D:
         Computes the phase difference array, Phi.
 
         Parameters:
-            phase (ndarray): The phase array, both sides of origin
+            phase (ndarray): The phase array, one side of origin
 
         Returns:
             ndarray: The signed phase difference array

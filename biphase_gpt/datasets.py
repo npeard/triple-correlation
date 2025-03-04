@@ -244,7 +244,7 @@ def generate_pretraining_data(
         Phi_dim = ((num_pix//2 + 1)//2 + 1)
         Phi_dim -= 1 # for removal of zero-valued row/column with no information
         f.create_dataset(
-            'Phi',
+            'absPhi',
             shape=(num_samples, Phi_dim, Phi_dim),
             dtype='float32',
             chunks=(chunk_size, Phi_dim, Phi_dim),

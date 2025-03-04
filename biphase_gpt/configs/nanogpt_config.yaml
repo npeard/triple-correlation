@@ -19,6 +19,11 @@ training:
   checkpoint_dir: "./biphase_gpt/checkpoints"
   random_seed: 42
 
+loss:
+  use_encoding_loss: true
+  encoding_weight: 1.0
+  unpack_diagonal: false
+
 data:
   data_dir: "./biphase_gpt/data"
   train_file: "train.h5"
