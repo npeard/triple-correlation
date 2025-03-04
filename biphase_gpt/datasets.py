@@ -136,9 +136,10 @@ class AbsPhiDataset(BaseH5Dataset):
         # First flip left-right
         x = torch.fliplr(x)
         
+        print(x.shape)
         # Get dimensions
-        n = x.size(0)
-        assert x.size(0) == x.size(1), "Input tensor must be square"
+        n = x.size(-1)
+        assert x.size(-1) == x.size(-2), "Input tensor must be square"
         
         # Extract diagonals from offset n-1 to -(n-1)
         diagonals = [torch.diagonal(x, offset=offset) for offset in range(n-1, -(n), -1)]
@@ -154,7 +155,7 @@ class AbsPhiDataset(BaseH5Dataset):
         if self.unpack_diagonals:
             inputs = self.unpack_by_diagonals(inputs)
         else:
-            inputs = inputs.reshape(-1)  # Flatten
+            inputs = inputs.flatten()  # Flatten
         
         return inputs, targets
 

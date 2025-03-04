@@ -13,7 +13,7 @@ from lightning.pytorch.callbacks import (
     LearningRateMonitor
 )
 from lightning.pytorch.loggers import WandbLogger
-from dataclasses import dataclass, field
+from dataclasses import dataclass, asdict
 import random
 from itertools import product
 
@@ -239,7 +239,7 @@ class ModelTrainer:
         test_path = resolve_path(data_dir, self.config.data_config.get('test_file'))
 
         # unpack diagonally or square
-        unpack_diagonal = self.config.data_config.get('unpack_diagonal', False)
+        unpack_diagonals = self.config.data_config.get('unpack_diagonals', False)
         
         if test_path:
             self.train_loader, self.val_loader, self.test_loader = create_data_loaders(
@@ -248,7 +248,7 @@ class ModelTrainer:
                 test_path=test_path,
                 batch_size=self.config.training_config['batch_size'],
                 num_workers=self.config.data_config['num_workers'],
-                unpack_diagonal=unpack_diagonal
+                unpack_diagonals=unpack_diagonals
             )
         else:
             self.test_loader = None
@@ -258,7 +258,7 @@ class ModelTrainer:
                 test_path=None,
                 batch_size=self.config.training_config['batch_size'],
                 num_workers=self.config.data_config['num_workers'],
-                unpack_diagonal=unpack_diagonal
+                unpack_diagonals=unpack_diagonals
             )
     
     def create_model(self) -> BaseLightningModule:
@@ -275,14 +275,14 @@ class ModelTrainer:
         if isinstance(self.model, GPT):
             return GPTDecoder(
                 model_type='GPT',
-                model_hparams=self.config.gpt_config.to_dict(),
+                model_hparams=asdict(self.config.gpt_config),
                 optimizer_name=self.config.training_config['optimizer'],
                 optimizer_hparams={
                     # TODO: why is this loaded as a string?
                     'lr': eval(self.config.training_config['learning_rate']),
                 },
                 # I need the Lightning module to know how the data is being unpacked
-                loss_hparams=self.config.loss_config.to_dict()
+                loss_hparams=self.config.loss_config
             )
         else:
             raise ValueError(f"Unknown model type, can't initialize Lightning.")

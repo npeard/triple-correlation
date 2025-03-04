@@ -5,7 +5,7 @@ import torch
 from torch import optim, nn
 import lightning as L
 from torch.nn import functional as F
-import numpy as np
+from biphase_gpt.datasets import AbsPhiDataset
 from biphase_gpt.nano_gpt import GPT, GPTConfig
 
 
@@ -131,20 +131,28 @@ class GPTDecoder(BaseLightningModule):
         return loss
     
     def encoding_loss(self, phase: torch.Tensor, absPhi: torch.Tensor) -> torch.Tensor:
-        """Compute encoding loss to ensure phase can reconstruct input abs(Phi).
+        """
+        Compute loss between re-encoded abs(Phi) matrix and input abs(Phi) matrix.
         
         Args:
             phase: Predicted phase, both quadrants included
-            absPhi: Input absolute Phi matrix, has length ((n//2+1)//2+1) - 1) 
-            where n is the length of the predicted phase (nanoGPT is configured
-            to predict the full antisymmetric output internally), and then we remove
-            the zero value row and column with no information due to symmetry.
+            absPhi: Input absolute Phi matrix sequence, has length 
+            ((n//2+1)//2+1) - 1)**2 where n is the length of the predicted 
+            phase (nanoGPT is configured to predict the full antisymmetric 
+            output internally), and then we remove the zero value row and 
+            column with no information due to symmetry.
         Returns:
-            torch.Tensor: Encoding loss
+            torch.Tensor: MSE loss between re-encoded and input abs(Phi)
         """
         encoded = self._encode(phase)
+
+        if self.loss_hparams.get("unpack_diagonals", False):
+            encoded = self._unpack_by_diagonals_batched(encoded)
+        else:
+            encoded = encoded.flatten(start_dim=1)  # Flatten
         
-        # Compare with input
+        # Compare with input. Both should be flat and unpacked 
+        # from square in the same order.
         loss = nn.MSELoss()(encoded, absPhi)
         return loss
 
@@ -177,6 +185,39 @@ class GPTDecoder(BaseLightningModule):
         encoded = torch.abs(encoded)
         return encoded
     
+    @staticmethod
+    def _unpack_by_diagonals_batched(x: torch.Tensor) -> torch.Tensor:
+        """
+        Unpack a batch of square matrices by diagonals, similar to AbsPhiDataset.unpack_by_diagonals
+        but handles batched input.
+        
+        Args:
+            x: Input tensor of shape (batch_size, n, n)
+            
+        Returns:
+            torch.Tensor: Flattened tensor containing diagonals in order from top-right to bottom-left
+        """
+        # First flip left-right for each matrix in batch
+        x = torch.flip(x, dims=[-1])
+        
+        # Get dimensions
+        batch_size, n, _ = x.shape
+        assert x.size(-1) == x.size(-2), "Input tensors must be square"
+        
+        # Extract diagonals from offset n-1 to -(n-1) for each matrix in batch
+        # and concatenate them directly without padding
+        all_diagonals = []
+        for b in range(batch_size):
+            batch_diagonals = []
+            for offset in range(n-1, -(n), -1):
+                diag = torch.diagonal(x[b], offset=offset)
+                batch_diagonals.append(diag)
+            # Concatenate all diagonals for this batch item
+            all_diagonals.append(torch.cat(batch_diagonals))
+        
+        # Stack results from each batch
+        return torch.stack(all_diagonals)
+
     def training_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> torch.Tensor:
         """Training step for GPT model.
         
