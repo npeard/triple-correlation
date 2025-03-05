@@ -243,6 +243,19 @@ class GPTDecoder(BaseLightningModule):
         y_hat = self(x)
         loss = self.loss_function(y_hat, y, x)
         
+        # Verify encoding/unpacking order during sanity check (first validation)
+        if self.trainer.sanity_checking:
+            # Re-encode the targets and compare with input
+            encoded = self._encode(y)
+            if self.loss_hparams.get("unpack_diagonals", False):
+                encoded = self._unpack_by_diagonals_batched(encoded)
+            else:
+                encoded = encoded.flatten(start_dim=1)
+            
+            encoding_loss = nn.MSELoss()(encoded, x)
+            assert encoding_loss < 1e-6, f"Encoding verification failed! Loss: {encoding_loss:.2e}"
+            print(f"✓ Encoding verification passed (loss: {encoding_loss:.2e})")
+        
         self.log('val_loss', loss, prog_bar=True)
     
     def test_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> None:
