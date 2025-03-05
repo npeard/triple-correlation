@@ -1,14 +1,14 @@
 model:
   type: "GPT"
   n_layer: 1
-  n_head: 4
+  n_head: 8
   n_embd: 128
   dropout: 0.1
   bias: false
   is_causal: true  # Whether to use causal masking in self-attention
 
 training:
-  max_epochs: 50
+  max_epochs: 3
   batch_size: 512
   optimizer: "Adam"
   learning_rate: 3e-4
@@ -18,12 +18,11 @@ training:
   wandb_project: "triple_correlation"
   experiment_name: "biphase_gpt"
   checkpoint_dir: "./biphase_gpt/checkpoints"
-  random_seed: 42
 
 loss:
   use_encoding_loss: true
   encoding_weight: 1.0
-  unpack_diagonals: true
+  unpack_diagonals: [true, false]
 
 data:
   data_dir: "./biphase_gpt/data"

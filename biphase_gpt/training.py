@@ -35,7 +35,13 @@ class TrainingConfig:
     def __post_init__(self):
         """Set default values for running checkpoints. Check points do not 
         need all config variables."""
-        self._set_checkpoint_defaults()
+        if self.model_config == {}:
+            print("TrainingConfig in checkpoint mode...")
+            self._set_checkpoint_defaults()
+        else:
+            print("TrainingConfig in training mode...")
+            print("Creating GPTConfig...")
+            self.gpt_config = self._create_gpt_config()
     
     def _set_checkpoint_defaults(self):
         """Set default values for running checkpoints. Check points do not
@@ -135,19 +141,23 @@ class TrainingConfig:
             for training_combo in training_combinations:
                 training_config = training_fixed.copy()
                 training_config.update(dict(zip(training_keys, training_combo)))
+
+                for loss_combo in loss_combinations:
+                    loss_config = loss_fixed.copy()
+                    loss_config.update(dict(zip(loss_keys, loss_combo)))
                 
-                configs.append(cls(
-                    model_config=model_config,
-                    training_config=training_config,
-                    loss_config=loss_config,
-                    data_config=config_dict["data"],
-                    is_hyperparameter_search=True,
-                    search_space={
-                        "model": model_lists,
-                        "training": training_lists,
-                        "loss": loss_lists
-                    }
-                ))
+                    configs.append(cls(
+                        model_config=model_config,
+                        training_config=training_config,
+                        loss_config=loss_config,
+                        data_config=config_dict["data"],
+                        is_hyperparameter_search=True,
+                        search_space={
+                            "model": model_lists,
+                            "training": training_lists,
+                            "loss": loss_lists
+                        }
+                    ))
         
         # Randomly shuffle configurations
         random.shuffle(configs)
@@ -230,7 +240,8 @@ class ModelTrainer:
         if unpack_diagonals is None:
             # unpack_diagonals should only not be None during prediction where
             # we need to setup the test data loader with correct unpacking
-            unpack_diagonals = self.config.data_config.get('unpack_diagonals', False)
+            print("getting unpack_diagonals from config YAML...")
+            unpack_diagonals = self.config.loss_config.get('unpack_diagonals', False)
         print(f"Unpacking diagonals in setup_data: {unpack_diagonals}")
         
         self.train_loader, self.val_loader, self.test_loader = create_data_loaders(
@@ -244,7 +255,7 @@ class ModelTrainer:
 
     def create_model(self) -> BaseLightningModule:
         """Create model instance based on config"""
-        model_type = self.config.model_config.pop('type')
+        model_type = self.config.model_config.get('type')
         if model_type == 'GPT':
             print('Creating GPT model...')
             return GPT(self.config.gpt_config)
@@ -379,6 +390,8 @@ class ModelTrainer:
             im4 = ax4.imshow(np.sign(encoded[i, :, :]), origin="lower")
             ax4.set_title("Sign Encoded")
             plt.colorbar(im4, ax=ax4)
+
+            # TODO: print some extra config info here
 
             plt.tight_layout()
             plt.show()

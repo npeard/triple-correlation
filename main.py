@@ -3,6 +3,7 @@
 import argparse
 import random
 import numpy as np
+import time
 from pathlib import Path
 from biphase_gpt.training import TrainingConfig, ModelTrainer
 from biphase_gpt.datasets import create_train_val_test_datasets
@@ -12,6 +13,7 @@ def parse_args():
     parser.add_argument(
         '--config',
         type=str,
+        default="./biphase_gpt/configs/nanogpt_config.yaml",
         help='Path to YAML config file. Required for training, optional for testing.'
     )
     parser.add_argument(
@@ -53,27 +55,34 @@ def main():
     
     config = TrainingConfig.from_yaml(args.config)
     
-    # Set random seed from config
-    seed = setup_random_seed(config.training_config.get('random_seed'))
+    # Set random seed from time
+    seed = setup_random_seed(int(time.time()))
     
-    # Regenerate datasets if requested
+    # Convert single config to list for unified processing
+    configs = config if isinstance(config, list) else [config]
+    base_config = configs[0]  # Use first config for dataset generation
+    
+    # Regenerate datasets if requested (using base config)
     if args.regenerate_datasets:
         print(f"\nRegenerating datasets with random seed: {seed}")
         create_train_val_test_datasets(
-            output_dir=config.data_config['data_dir'],
-            **config.data_config.get('dataset_params', {})
+            output_dir=base_config.data_config['data_dir'],
+            **base_config.data_config.get('dataset_params', {})
         )
         print("Dataset regeneration complete!\n")
     
-    # Create trainer
-    trainer = ModelTrainer(
-        config=config,
-        experiment_name=config.training_config.get('experiment_name'),
-        checkpoint_dir=config.training_config.get('checkpoint_dir')
-    )
+    # Train with each configuration
+    for idx, train_config in enumerate(configs):
+        print(f"\nStarting training run {idx + 1}/{len(configs)}")
+        # Create trainer
+        trainer = ModelTrainer(
+            config=train_config,
+            experiment_name=train_config.training_config.get('experiment_name'),
+            checkpoint_dir=train_config.training_config.get('checkpoint_dir')
+        )
 
-    # Start training
-    trainer.train()
+        # Start training
+        trainer.train()
 
 if __name__ == '__main__':
 # Training new model:
