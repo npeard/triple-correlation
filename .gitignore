@@ -134,6 +134,8 @@ biphase_gpt/data/*
 biphase_gpt/checkpoints/*
 biphase_gpt/lightning_logs/*
 lightning_logs/*
+checkpoints/*
+data/*
 
 # MacOS
 .DS_Store
