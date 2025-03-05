@@ -12,7 +12,6 @@ def parse_args():
     parser.add_argument(
         '--config',
         type=str,
-        default='./biphase_gpt/configs/nanogpt_config.yaml',
         help='Path to YAML config file. Required for training, optional for testing.'
     )
     parser.add_argument(
@@ -40,10 +39,12 @@ def setup_random_seed(seed=None):
 def main():
     args = parse_args()
     
-    # For testing mode (checkpoint provided), config is optional
+    # For testing mode (checkpoint provided), config is not necessary
     if args.checkpoint and not args.config:
-        trainer = ModelTrainer.load_from_checkpoint(args.checkpoint)
-        trainer.test()
+        print("Loading from checkpoint for quick plotting...")
+        print(args.checkpoint)
+        model_trainer = ModelTrainer(TrainingConfig({},{},{},{}), experiment_name="checkpoint_eval")
+        model_trainer.plot_predictions_from_checkpoint(checkpoint_path=args.checkpoint)
         return
     
     # For training mode, load config
@@ -70,19 +71,9 @@ def main():
         experiment_name=config.training_config.get('experiment_name'),
         checkpoint_dir=config.training_config.get('checkpoint_dir')
     )
-    
-    # If checkpoint provided, load it (for fine-tuning)
-    if args.checkpoint:
-        trainer = ModelTrainer.load_from_checkpoint(
-            checkpoint_path=args.checkpoint,
-            config=config
-        )
-    
-    # Train if no checkpoint, or test if checkpoint provided
-    if args.checkpoint:
-        trainer.test()
-    else:
-        trainer.train()
+
+    # Start training
+    trainer.train()
 
 if __name__ == '__main__':
 # Training new model:

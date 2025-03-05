@@ -259,12 +259,15 @@ class GPTDecoder(BaseLightningModule):
         self.log('test_loss', loss)
     
     def predict_step(self, batch: torch.Tensor, batch_idx: int, dataloader_idx: int = 0) -> torch.Tensor:
-        """Prediction step for GPT model.
+        """Prediction step for GPT model. Return all relevant quantities for plotting.
         
         Args:
             batch: Input tensor
             batch_idx: Index of current batch
             dataloader_idx: Index of dataloader
         """
-        x = batch[0] if isinstance(batch, (tuple, list)) else batch
-        return self(x)
+        x, y = batch
+        predictions = self.model(x)
+        encoded = self._encode(predictions)
+        x = x.view_as(encoded)
+        return predictions, y, encoded, x

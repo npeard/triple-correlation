@@ -5,7 +5,7 @@ model:
   n_embd: 128
   dropout: 0.1
   bias: false
-  is_causal: false  # Whether to use causal masking in self-attention
+  is_causal: true  # Whether to use causal masking in self-attention
 
 training:
   max_epochs: 50

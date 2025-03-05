@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+from tkinter import Y
 from typing import Optional, Dict, Any, Union, List, Tuple
 import os
 from pathlib import Path
@@ -10,7 +11,6 @@ import lightning as L
 from lightning.pytorch.callbacks import (
     ModelCheckpoint,
     EarlyStopping,
-    LearningRateMonitor
 )
 from lightning.pytorch.loggers import WandbLogger
 from dataclasses import dataclass, asdict
@@ -33,29 +33,16 @@ class TrainingConfig:
     search_space: Optional[Dict[str, List[Any]]] = None
     
     def __post_init__(self):
-        """Set default values and handle GPT config if present"""
-        self._set_defaults()
-        if self.model_config.get("type") == "GPT":
-            self.gpt_config = self._create_gpt_config()
+        """Set default values for running checkpoints. Check points do not 
+        need all config variables."""
+        self._set_checkpoint_defaults()
     
-    def _set_defaults(self):
-        """Set default values for configs if not provided"""
-        # Model defaults
-        self.model_config.setdefault("type", "GPT")
-        self.gpt_config = self._create_gpt_config()
+    def _set_checkpoint_defaults(self):
+        """Set default values for running checkpoints. Check points do not
+        need all config variables."""
         
         # Training defaults
-        self.training_config.setdefault("max_epochs", 50)
-        self.training_config.setdefault("batch_size", 512)
-        self.training_config.setdefault("optimizer", "Adam")
-        self.training_config.setdefault("learning_rate", 3e-4)
-        self.training_config.setdefault("accelerator", "cpu")
-        self.training_config.setdefault("devices", "0")
-        self.training_config.setdefault("use_logging", False)
-        self.training_config.setdefault("wandb_project", "triple_correlation")
-        self.training_config.setdefault("experiment_name", "biphase_gpt")
-        self.training_config.setdefault("checkpoint_dir", "./biphase_gpt/checkpoints")
-        self.training_config.setdefault("random_seed", 42)
+        self.training_config.setdefault("batch_size", 64)
         
         # Data defaults
         self.data_config.setdefault("data_dir", "./biphase_gpt/data")
@@ -192,12 +179,13 @@ class ModelTrainer:
         # Setup data
         self.setup_data()
         
-        # Create model and lightning module
-        self.model = self.create_model()
-        self.lightning_module = self.create_lightning_module()
-        
-        # Setup training
-        self.trainer = self.setup_trainer()
+        if experiment_name != "checkpoint_eval":
+            # Create model and lightning module
+            self.model = self.create_model()
+            self.lightning_module = self.create_lightning_module()
+            
+            # Setup training
+            self.trainer = self.setup_trainer()
 
         # Check what version of PyTorch is installed
         print(torch.__version__)
@@ -353,17 +341,47 @@ class ModelTrainer:
                 self.lightning_module,
                 dataloaders=self.test_loader
             )
-    
-    @classmethod
-    def load_from_checkpoint(
-        cls,
-        checkpoint_path: str,
-        config: TrainingConfig
-    ) -> 'ModelTrainer':
-        """Load model from checkpoint"""
-        trainer = cls(config)
-        trainer.lightning_module = trainer.lightning_module.load_from_checkpoint(
-            checkpoint_path,
-            model=trainer.model
-        )
-        return trainer
+
+    def plot_predictions_from_checkpoint(self, checkpoint_path: str):
+        """Plot predictions from a checkpoint"""
+        import numpy as np
+        import matplotlib.pyplot as plt
+
+        model = GPTDecoder.load_from_checkpoint(checkpoint_path)
+        trainer = L.Trainer(accelerator='cpu')
+        predictions = trainer.predict(model, self.test_loader)
+
+        print(predictions[0][0].numpy().shape)
+        print(predictions[0][2].numpy().shape)
+        # y[batch_idx][return_idx], return_idx 0...3: 
+        # 0: Predictions, 1: Targets, 2: Encoded, 3: Inputs
+        batch_len = len(predictions[0][0].numpy()[:, 0])
+        y_hat = predictions[0][0].numpy()
+        y = predictions[0][1].numpy()
+        encoded = predictions[0][2].numpy()
+        inputs = predictions[0][3].numpy()
+
+        for i in range(batch_len):
+            fig = plt.figure(figsize=(10, 10))
+            (ax1, ax2), (ax3, ax4) = fig.subplots(2, 2)
+
+            im1 = ax1.imshow(inputs[i, :, :], origin="lower")
+            ax1.set_title("Inputs")
+            plt.colorbar(im1, ax=ax1)
+
+            ax2.plot(y[i, :], label="Targets")
+            ax2.plot(y_hat[i, :], label="Predictions")
+            ax2.legend()
+
+            im3 = ax3.imshow(encoded[i, :, :], origin="lower")
+            ax3.set_title("Encoded")
+            plt.colorbar(im3, ax=ax3)
+
+            # TODO: currently, _encode returns abs(Phi) and not the sign info
+            # So this plot shows nothing for now.
+            im4 = ax4.imshow(np.sign(encoded[i, :, :]), origin="lower")
+            ax4.set_title("Sign Encoded")
+            plt.colorbar(im4, ax=ax4)
+
+            plt.tight_layout()
+            plt.show()
