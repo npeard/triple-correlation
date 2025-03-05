@@ -229,7 +229,7 @@ class GPTDecoder(BaseLightningModule):
         y_hat = self(x)
         loss = self.loss_function(y_hat, y, x)
         
-        self.log('train_loss', loss, prog_bar=True)
+        self.log('train_loss', loss, prog_bar=True, on_epoch=True)
         return loss
     
     def validation_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> None:

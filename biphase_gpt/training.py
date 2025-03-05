@@ -326,6 +326,7 @@ class ModelTrainer:
             max_epochs=self.config.training_config['max_epochs'],
             callbacks=callbacks,
             logger=loggers,
+            check_val_every_n_epoch=7,
             accelerator=accelerator,
             devices=devices
         )
@@ -337,6 +338,9 @@ class ModelTrainer:
             train_dataloaders=self.train_loader,
             val_dataloaders=self.val_loader
         )
+
+        if self.config.training_config.get('use_logging', False):
+            self.trainer.loggers[0].experiment.finish()
     
     def test(self):
         """Test the model"""
