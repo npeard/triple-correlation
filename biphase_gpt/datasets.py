@@ -136,7 +136,6 @@ class AbsPhiDataset(BaseH5Dataset):
         # First flip left-right
         x = torch.fliplr(x)
         
-        print(x.shape)
         # Get dimensions
         n = x.size(-1)
         assert x.size(-1) == x.size(-2), "Input tensor must be square"

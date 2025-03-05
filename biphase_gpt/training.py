@@ -176,10 +176,10 @@ class ModelTrainer:
         # Create checkpoint directory
         os.makedirs(self.checkpoint_dir, exist_ok=True)
         
-        # Setup data
-        self.setup_data()
-        
         if experiment_name != "checkpoint_eval":
+            # Setup data
+            self.setup_data()
+        
             # Create model and lightning module
             self.model = self.create_model()
             self.lightning_module = self.create_lightning_module()
@@ -201,7 +201,7 @@ class ModelTrainer:
             print("FlashAttention available:", torch.backends.cuda.flash_sdp_enabled())
 
     
-    def setup_data(self):
+    def setup_data(self, unpack_diagonals: bool = None):
         """Setup data loaders"""
         # Convert data_dir to absolute path
         base_dir = Path(__file__).parent.parent  # Go up two levels from training.py
@@ -227,28 +227,21 @@ class ModelTrainer:
         test_path = resolve_path(data_dir, self.config.data_config.get('test_file'))
 
         # unpack diagonally or square
-        unpack_diagonals = self.config.data_config.get('unpack_diagonals', False)
+        if unpack_diagonals is None:
+            # unpack_diagonals should only not be None during prediction where
+            # we need to setup the test data loader with correct unpacking
+            unpack_diagonals = self.config.data_config.get('unpack_diagonals', False)
+        print(f"Unpacking diagonals in setup_data: {unpack_diagonals}")
         
-        if test_path:
-            self.train_loader, self.val_loader, self.test_loader = create_data_loaders(
-                train_path=train_path,
-                val_path=val_path,
-                test_path=test_path,
-                batch_size=self.config.training_config['batch_size'],
-                num_workers=self.config.data_config['num_workers'],
-                unpack_diagonals=unpack_diagonals
-            )
-        else:
-            self.test_loader = None
-            self.train_loader, self.val_loader, _ = create_data_loaders(
-                train_path=train_path,
-                val_path=val_path,
-                test_path=None,
-                batch_size=self.config.training_config['batch_size'],
-                num_workers=self.config.data_config['num_workers'],
-                unpack_diagonals=unpack_diagonals
-            )
-    
+        self.train_loader, self.val_loader, self.test_loader = create_data_loaders(
+            train_path=train_path,
+            val_path=val_path,
+            test_path=test_path,
+            batch_size=self.config.training_config['batch_size'],
+            num_workers=self.config.data_config['num_workers'],
+            unpack_diagonals=unpack_diagonals
+        )
+
     def create_model(self) -> BaseLightningModule:
         """Create model instance based on config"""
         model_type = self.config.model_config.pop('type')
@@ -348,7 +341,11 @@ class ModelTrainer:
         import matplotlib.pyplot as plt
 
         model = GPTDecoder.load_from_checkpoint(checkpoint_path)
-        trainer = L.Trainer(accelerator='cpu')
+        trainer = L.Trainer(accelerator='cpu', logger=[])
+
+        # setup dataloaders with correct unpacking
+        self.setup_data(unpack_diagonals=model.loss_hparams["unpack_diagonals"])
+
         predictions = trainer.predict(model, self.test_loader)
 
         print(predictions[0][0].numpy().shape)

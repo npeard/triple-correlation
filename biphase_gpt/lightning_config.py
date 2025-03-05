@@ -269,5 +269,15 @@ class GPTDecoder(BaseLightningModule):
         x, y = batch
         predictions = self.model(x)
         encoded = self._encode(predictions)
+        # reshape x to square
         x = x.view_as(encoded)
+        # Use the same unpacking logic as in AbsPhiDataset
+        if self.loss_hparams.get("unpack_diagonals", False):
+            print("Unpacking diagonals...")
+            encoded = self._unpack_by_diagonals_batched(encoded)
+        else:
+            print("Unpacking flat...")
+            encoded = encoded.flatten(start_dim=1)  # Flatten
+        # reshape encoded to square to match x
+        encoded = encoded.view_as(x)
         return predictions, y, encoded, x
