@@ -42,7 +42,7 @@ def main():
     args = parse_args()
     
     # For testing mode (checkpoint provided), config is not necessary
-    if args.checkpoint and not args.config:
+    if args.checkpoint:
         print("Loading from checkpoint for quick plotting...")
         print(args.checkpoint)
         model_trainer = ModelTrainer(TrainingConfig({},{},{},{}), experiment_name="checkpoint_eval")

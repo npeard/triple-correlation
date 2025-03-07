@@ -1,10 +1,10 @@
 model:
   type: "GPT"
-  n_layer: 1
+  n_layer: [1,2]
   n_head: 16
   n_embd: 128
   dropout: 0.1
-  bias: false
+  bias: [true, false]
   is_causal: [true, false]  # Whether to use causal masking in self-attention
 
 training:

@@ -375,7 +375,7 @@ class ModelTrainer:
         inputs = predictions[0][3].numpy()
 
         for i in range(batch_len):
-            fig = plt.figure(figsize=(10, 10))
+            fig = plt.figure(figsize=(7, 7))
             (ax1, ax2), (ax3, ax4) = fig.subplots(2, 2)
 
             im1 = ax1.imshow(inputs[i, :, :], origin="lower")
