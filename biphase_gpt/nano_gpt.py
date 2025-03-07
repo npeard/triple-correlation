@@ -29,7 +29,7 @@ class LayerNorm(nn.Module):
     def forward(self, input):
         return F.layer_norm(input, self.weight.shape, self.weight, self.bias, 1e-5)
 
-class CausalSelfAttention(nn.Module):
+class SelfAttention(nn.Module):
 
     def __init__(self, config):
         super().__init__()
@@ -134,7 +134,7 @@ class Block(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.ln_1 = LayerNorm(config.n_embd, bias=config.bias)
-        self.attn = CausalSelfAttention(config)
+        self.attn = SelfAttention(config)
         self.ln_2 = LayerNorm(config.n_embd, bias=config.bias)
         self.mlp = MLP(config)
 
@@ -184,9 +184,10 @@ class GPT(nn.Module):
 
         # Replace language model head with regression head
         # Option 1: Simple linear regression (current)
-        self.regression_head = nn.Linear(config.n_embd, config.output_dim)
+        # self.regression_head = nn.Linear(config.n_embd, config.output_dim)
         # Option 2: MLP regression (uncomment to use)
         # self.regression_head = RegressionMLP(config)
+        self.regression_head = nn.Linear(config.n_embd*config.in_seq_len, config.output_dim*config.out_seq_len)
         # init all weights
         self.apply(self._init_weights)
         # apply special scaled init to the residual projections, per GPT-2 paper
@@ -221,37 +222,44 @@ class GPT(nn.Module):
         device = x.device
         x = x.squeeze(1)
         x = x.unsqueeze(-1)
-        b, t, f = x.size()  # batch, sequence length, features
-        assert t <= self.config.in_seq_len, f"Cannot forward sequence of length {t}, block size is only {self.config.in_seq_len}"
+        batch_size, seq_len, n_features = x.size()  # batch, sequence length, features
+        assert seq_len <= self.config.in_seq_len, f"Cannot forward sequence of length {seq_len}, block size is only {self.config.in_seq_len}"
         
         # Input sequence processing
-        pos = torch.arange(0, t, dtype=torch.long, device=device)
-        tok_emb = self.transformer.wte(x)  # project inputs to embedding dimension (b, t, n_embd)
-        pos_emb = self.transformer.wpe(pos)  # position embeddings of shape (t, n_embd)
+        pos = torch.arange(0, seq_len, dtype=torch.long, device=device)
+        tok_emb = self.transformer.wte(x)  # project inputs to embedding dimension (batch_size, seq_len, n_embd)
+        pos_emb = self.transformer.wpe(pos)  # position embeddings of shape (seq_len, n_embd)
         x = self.transformer.drop(tok_emb + pos_emb)
         
         # Process through transformer blocks
         for block in self.transformer.h:
             x = block(x)
         x = self.transformer.ln_f(x)
+        print(x.shape)
         
-        # Reduce sequence length
-        x = x.transpose(1, 2)  # (b, n_embd, t)
-        x = self.seq_reduction(x)  # (b, n_embd, out_seq_len)
-        x = x.transpose(1, 2)  # (b, out_seq_len, n_embd)
-        # TODO: try removing output positional embeddings, and one of the reduction steps.
-        # Add output positional embeddings
-        out_pos = torch.arange(0, self.config.out_seq_len, dtype=torch.long, device=device)
-        out_pos_emb = self.transformer.wpe_out(out_pos)
-        x = x + out_pos_emb
+        # # Reduce sequence length
+        # x = x.transpose(1, 2)  # (batch_size, in_seq_len, n_embd) -> (batch_size, n_embd, in_seq_len)
+        # x = self.seq_reduction(x)  # (batch_size, n_embd, in_seq_len) -> (batch_size, n_embd, out_seq_len)
+        # x = x.transpose(1, 2)  # (batch_size, n_embd, out_seq_len) -> (batch_size, out_seq_len, n_embd)
+        # # TODO: try removing output positional embeddings, and one of the reduction steps.
+        # # Add output positional embeddings
+        # out_pos = torch.arange(0, self.config.out_seq_len, dtype=torch.long, device=device)
+        # out_pos_emb = self.transformer.wpe_out(out_pos)
+        # x = x + out_pos_emb
         
         # Output continuous predictions
-        predictions = self.regression_head(x)
+        # Option 1: 
+        # predictions = self.regression_head(x)
+        # Option 2: 
+        predictions = self.regression_head(x.flatten(1))
 
         # implement antisymmetry of output sequence
         predictions = torch.cat([-1*predictions.flip(1), predictions[:, 1:]], dim=1)
         
-        return predictions.squeeze(2)
+        # Option 1: 
+        # predictions = predictions.squeeze(2)
+        # Option 2: 
+        return predictions#.squeeze(2)
 
     def get_attention_metrics(self):
         """
