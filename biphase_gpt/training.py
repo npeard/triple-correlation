@@ -75,7 +75,8 @@ class TrainingConfig:
             n_head=self.model_config.get("n_head", 4),
             n_embd=self.model_config.get("n_embd", 128),
             dropout=self.model_config.get("dropout", 0.1),
-            bias=self.model_config.get("bias", False)
+            bias=self.model_config.get("bias", False),
+            is_causal=self.model_config.get("is_causal", True)
         )
     
     @classmethod

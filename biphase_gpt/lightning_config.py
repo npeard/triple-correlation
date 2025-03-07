@@ -99,6 +99,7 @@ class GPTDecoder(BaseLightningModule):
         
         model_hparams = model_hparams or {}
         gpt_config = GPTConfig(**model_hparams)
+        print("is_causal", gpt_config.is_causal)
         model = GPT(gpt_config)
         
         super().__init__(
@@ -204,19 +205,15 @@ class GPTDecoder(BaseLightningModule):
         batch_size, n, _ = x.shape
         assert x.size(-1) == x.size(-2), "Input tensors must be square"
         
-        # Extract diagonals from offset n-1 to -(n-1) for each matrix in batch
-        # and concatenate them directly without padding
-        all_diagonals = []
-        for b in range(batch_size):
-            batch_diagonals = []
-            for offset in range(n-1, -(n), -1):
-                diag = torch.diagonal(x[b], offset=offset)
-                batch_diagonals.append(diag)
-            # Concatenate all diagonals for this batch item
-            all_diagonals.append(torch.cat(batch_diagonals))
+        # Extract diagonals from offset n-1 to -(n-1) for all matrices in batch at once
+        diagonals = []
+        for offset in range(n-1, -(n), -1):
+            # Get diagonals for all batches at once
+            diag = torch.diagonal(x, offset=offset, dim1=1, dim2=2)  # Shape: (batch_size, diagonal_length)
+            diagonals.append(diag)
         
-        # Stack results from each batch
-        return torch.stack(all_diagonals)
+        # Concatenate all diagonals along the second dimension
+        return torch.cat(diagonals, dim=1)
 
     def training_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> torch.Tensor:
         """Training step for GPT model.
