@@ -97,38 +97,6 @@ class MLP(nn.Module):
         x = self.dropout(x)
         return x
 
-class ReductionMLP(nn.Module):
-    """MLP for sequence length reduction, replacing the simple linear layer."""
-    def __init__(self, config):
-        super().__init__()
-        self.c_fc    = nn.Linear(config.block_size, 4 * config.output_block_size, bias=config.bias)
-        self.gelu    = nn.GELU()
-        self.c_proj  = nn.Linear(4 * config.output_block_size, config.output_block_size, bias=config.bias)
-        self.dropout = nn.Dropout(config.dropout)
-
-    def forward(self, x):
-        x = self.c_fc(x)
-        x = self.gelu(x)
-        x = self.c_proj(x)
-        x = self.dropout(x)
-        return x
-
-class RegressionMLP(nn.Module):
-    """MLP for regression head, replacing the simple linear layer."""
-    def __init__(self, config):
-        super().__init__()
-        self.c_fc    = nn.Linear(config.n_embd, 4 * config.n_embd, bias=config.bias)
-        self.gelu    = nn.GELU()
-        self.c_proj  = nn.Linear(4 * config.n_embd, config.output_dim, bias=config.bias)
-        self.dropout = nn.Dropout(config.dropout)
-
-    def forward(self, x):
-        x = self.c_fc(x)
-        x = self.gelu(x)
-        x = self.c_proj(x)
-        x = self.dropout(x)
-        return x
-
 class Block(nn.Module):
 
     def __init__(self, config):
@@ -176,17 +144,8 @@ class GPT(nn.Module):
             h = nn.ModuleList([Block(config) for _ in range(config.n_layer)]),
             ln_f = LayerNorm(config.n_embd, bias=config.bias),
         ))
-        # Add sequence length reduction layer
-        # Option 1: Simple linear reduction (current)
-        self.seq_reduction = nn.Linear(config.in_seq_len, config.out_seq_len)
-        # Option 2: MLP reduction (uncomment to use)
-        # self.seq_reduction = ReductionMLP(config)
-
-        # Replace language model head with regression head
-        # Option 1: Simple linear regression (current)
-        # self.regression_head = nn.Linear(config.n_embd, config.output_dim)
-        # Option 2: MLP regression (uncomment to use)
-        # self.regression_head = RegressionMLP(config)
+        
+        # regression and sequence reduction head
         self.regression_head = nn.Linear(config.n_embd*config.in_seq_len, config.output_dim*config.out_seq_len)
         # init all weights
         self.apply(self._init_weights)
@@ -235,92 +194,10 @@ class GPT(nn.Module):
         for block in self.transformer.h:
             x = block(x)
         x = self.transformer.ln_f(x)
-        print(x.shape)
         
-        # # Reduce sequence length
-        # x = x.transpose(1, 2)  # (batch_size, in_seq_len, n_embd) -> (batch_size, n_embd, in_seq_len)
-        # x = self.seq_reduction(x)  # (batch_size, n_embd, in_seq_len) -> (batch_size, n_embd, out_seq_len)
-        # x = x.transpose(1, 2)  # (batch_size, n_embd, out_seq_len) -> (batch_size, out_seq_len, n_embd)
-        # # TODO: try removing output positional embeddings, and one of the reduction steps.
-        # # Add output positional embeddings
-        # out_pos = torch.arange(0, self.config.out_seq_len, dtype=torch.long, device=device)
-        # out_pos_emb = self.transformer.wpe_out(out_pos)
-        # x = x + out_pos_emb
-        
-        # Output continuous predictions
-        # Option 1: 
-        # predictions = self.regression_head(x)
-        # Option 2: 
         predictions = self.regression_head(x.flatten(1))
 
         # implement antisymmetry of output sequence
         predictions = torch.cat([-1*predictions.flip(1), predictions[:, 1:]], dim=1)
         
-        # Option 1: 
-        # predictions = predictions.squeeze(2)
-        # Option 2: 
-        return predictions#.squeeze(2)
-
-    def get_attention_metrics(self):
-        """
-        Calculate the standard deviation of attention weights across all heads and layers.
-        This helps monitor if the attention patterns are becoming too uniform (low std) 
-        or maintaining meaningful distinctions (higher std).
-        """
-        attention_stds = []
-        for block in self.transformer.h:
-            # For each attention block, get the attention weights
-            # Shape: [batch_size, n_head, sequence_length, sequence_length]
-            with torch.no_grad():
-                if block.attn.flash:
-                    # For flash attention, we need to compute attention weights explicitly
-                    q, k, v = block.attn.c_attn(torch.ones(1, self.config.in_seq_len, self.config.n_embd).to(next(self.parameters()).device)).split(self.config.n_embd, dim=-1)
-                    q = q.view(1, self.config.in_seq_len, self.config.n_head, self.config.n_embd // self.config.n_head).transpose(1, 2)
-                    k = k.view(1, self.config.in_seq_len, self.config.n_head, self.config.n_embd // self.config.n_head).transpose(1, 2)
-                    v = v.view(1, self.config.in_seq_len, self.config.n_head, self.config.n_embd // self.config.n_head).transpose(1, 2)
-                    att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
-                    # print("att abs mean: ", torch.abs(att).mean())
-                    att_abs_mean = torch.abs(att).mean().item()
-                    att_std = torch.std(att, dim=-1).mean().item()
-                    q_std = torch.std(q, dim=-1).mean().item()
-                    k_std = torch.std(k, dim=-1).mean().item()
-                    v_std = torch.std(v, dim=-1).mean().item()
-                    att = F.softmax(att, dim=-1)
-                    # print("att uniformity: ", torch.abs(att - 1/att.size(-1)).mean())
-                    # print("att sparsity: ", (att.max(dim=-1).values > -.9).float().mean())
-                    uniformity = torch.abs(att - 1/att.size(-1)).mean().item()
-                    sparsity = (att.max(dim=-1).values > -.9).float().mean().item()
-                else:
-                    # For regular attention, we can access the attention weights directly
-                    att = block.attn.att if hasattr(block.attn, 'att') else None
-                
-                if att is not None:
-                    # Calculate std across the attention dimension
-                    std = torch.std(att, dim=-1).mean()  # Mean across heads and sequence positions
-                    attention_stds.append(std.item())
-        
-        return att_abs_mean, att_std, q_std, k_std, v_std, uniformity, sparsity 
-
-    def get_position_encoding_std(self):
-        """
-        Calculate the standard deviation of position encodings.
-        This helps monitor if the position encodings maintain meaningful positional information.
-        """
-        with torch.no_grad():
-            # Get position embeddings for input sequence
-            pos = torch.arange(0, self.config.in_seq_len, dtype=torch.long, 
-                             device=next(self.parameters()).device)
-            pos_emb = self.transformer.wpe(pos)  # [block_size, n_embd]
-            
-            # Calculate std across the embedding dimension for each position
-            pos_std = torch.std(pos_emb, dim=-1).mean().item()
-            
-            # Get position embeddings for output sequence
-            out_pos = torch.arange(0, self.config.out_seq_len, dtype=torch.long, 
-                                 device=next(self.parameters()).device)
-            out_pos_emb = self.transformer.wpe_out(out_pos)  # [output_block_size, n_embd]
-            
-            # Calculate std across the embedding dimension for each output position
-            out_pos_std = torch.std(out_pos_emb, dim=-1).mean().item()
-            
-            return (pos_std + out_pos_std) / 2.0  # Average of input and output position encoding stds
+        return predictions
