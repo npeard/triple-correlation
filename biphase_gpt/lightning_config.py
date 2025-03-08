@@ -56,7 +56,9 @@ class BaseLightningModule(L.LightningModule):
             raise ValueError(f"Unknown optimizer: {self.hparams.optimizer_name}")
         
         # Configure scheduler
-        scheduler = optim.lr_scheduler.MultiStepLR(optimizer, **self.scheduler_hparams)
+        # scheduler = optim.lr_scheduler.MultiStepLR(optimizer, **self.scheduler_hparams)
+        # TODO: setup proper passing of scheduler_hparams for hyperparameter optimization
+        scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, **self.scheduler_hparams)
         
         return {
             "optimizer": optimizer,

@@ -11,6 +11,7 @@ import lightning as L
 from lightning.pytorch.callbacks import (
     ModelCheckpoint,
     EarlyStopping,
+    LearningRateMonitor
 )
 from lightning.pytorch.loggers import WandbLogger
 from dataclasses import dataclass, asdict
@@ -272,9 +273,12 @@ class ModelTrainer:
                 optimizer_name=self.config.training_config['optimizer'],
                 optimizer_hparams={
                     # TODO: why is this loaded as a string?
-                    'lr': eval(self.config.training_config['learning_rate']),
+                    'lr': eval(self.config.training_config['learning_rate'])
                 },
-                # I need the Lightning module to know how the data is being unpacked
+                scheduler_hparams={
+                    'T_max': self.config.training_config['T_max'],
+                    'eta_min': self.config.training_config['eta_min']
+                },
                 loss_hparams=self.config.loss_config
             )
         else:
@@ -296,7 +300,7 @@ class ModelTrainer:
                 patience=10,
                 mode='min'
             ),
-            #LearningRateMonitor(logging_interval='epoch')
+            LearningRateMonitor(logging_interval='epoch')
         ]
         
         # Add WandB logger if configured
