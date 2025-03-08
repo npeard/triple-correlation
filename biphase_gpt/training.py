@@ -300,7 +300,7 @@ class ModelTrainer:
                 patience=10,
                 mode='min'
             ),
-            LearningRateMonitor(logging_interval='epoch')
+            LearningRateMonitor()
         ]
         
         # Add WandB logger if configured
@@ -344,8 +344,8 @@ class ModelTrainer:
             val_dataloaders=self.val_loader
         )
 
-        if self.config.training_config.get('use_logging', False):
-            self.trainer.loggers[0].experiment.finish()
+        # if self.config.training_config.get('use_logging', False):
+        #     self.trainer.loggers[0].experiment.finish()
     
     def test(self):
         """Test the model"""

@@ -8,15 +8,15 @@ model:
   is_causal: false  # Whether to use causal masking in self-attention
 
 training:
-  max_epochs: 500
+  max_epochs: 10
   batch_size: 1024
   optimizer: "Adam"
   learning_rate: 5e-4
-  T_max: 500
+  T_max: 5
   eta_min: 0
   accelerator: "gpu"
   devices: '1'
-  use_logging: false
+  use_logging: true
   wandb_project: "triple_correlation"
   experiment_name: "gpt_regress_block"
   checkpoint_dir: "./biphase_gpt/checkpoints"

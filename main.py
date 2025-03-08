@@ -83,6 +83,10 @@ def main():
 
         # Start training
         trainer.train()
+        trainer.test()
+        # Close the wandb logger if it was configured
+        if trainer.config.training_config.get('use_logging', False):
+            trainer.trainer.loggers[0].experiment.finish()
 
 if __name__ == '__main__':
 # Training new model:
