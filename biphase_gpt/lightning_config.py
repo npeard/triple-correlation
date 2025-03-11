@@ -125,6 +125,8 @@ class GPTDecoder(BaseLightningModule):
         # I've found that comparing the absolute value trains better
         # because there is an overall global +/-1 sign ambiguity
         loss = nn.MSELoss()(torch.abs(y_hat), torch.abs(targets))
+        # But we should also try to infer the overall sign
+        loss += nn.MSELoss()(y_hat, targets)
         
         # Add encoding loss if enabled and x is provided
         if self.loss_hparams.get("use_encoding_loss", False) and x is not None:

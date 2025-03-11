@@ -295,11 +295,11 @@ class ModelTrainer:
                 mode='min',
                 save_top_k=1
             ),
-            EarlyStopping(
-                monitor='val_loss',
-                patience=10,
-                mode='min'
-            ),
+            # EarlyStopping(
+            #     monitor='val_loss',
+            #     patience=10,
+            #     mode='min'
+            # ),
             LearningRateMonitor()
         ]
         

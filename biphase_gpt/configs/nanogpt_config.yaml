@@ -1,24 +1,24 @@
 model:
   type: "GPT"
-  n_layer: 2
-  n_head: 16
-  n_embd: 128
-  dropout: 0.1
+  n_layer: [2,3,4]
+  n_head: [4,8,16]
+  n_embd: [64,128]
+  dropout: [0.1,0.2]
   bias: false
   is_causal: false  # Whether to use causal masking in self-attention
 
 training:
-  max_epochs: 10
+  max_epochs: 500
   batch_size: 1024
   optimizer: "Adam"
   learning_rate: 5e-4
-  T_max: 5
+  T_max: [100, 500]
   eta_min: 0
   accelerator: "gpu"
   devices: '1'
   use_logging: true
   wandb_project: "triple_correlation"
-  experiment_name: "gpt_regress_block"
+  experiment_name: "gpt_cosine_anneal"
   checkpoint_dir: "./biphase_gpt/checkpoints"
 
 loss:
@@ -34,6 +34,6 @@ data:
   num_workers: 4
   dataset_params:
     train_samples: 100000
-    val_samples: 10000
-    test_samples: 1000
+    val_samples: 1000
+    test_samples: 100000
     num_pix: 21
