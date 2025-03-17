@@ -66,7 +66,7 @@ class TrainingConfig:
     
     def _create_gpt_config(self) -> GPTConfig:
         """Create GPTConfig from model configuration"""
-        num_pix = self.data_config.get("num_pix", 21)
+        num_pix = self.data_config.get("dataset_params", {}).get("num_pix", 21)
         Phi_dim = (num_pix // 2 + 1)//2 + 1
         Phi_dim -= 1 # for removal of zero-valued row/column with no information
         return GPTConfig(
@@ -286,6 +286,7 @@ class ModelTrainer:
     
     def setup_trainer(self) -> L.Trainer:
         """Setup Lightning trainer with callbacks and loggers"""
+        
         # Callbacks
         callbacks = [
             ModelCheckpoint(
@@ -300,9 +301,9 @@ class ModelTrainer:
             #     patience=10,
             #     mode='min'
             # ),
-            LearningRateMonitor()
+            # LearningRateMonitor()
         ]
-        
+
         # Add WandB logger if configured
         if self.config.training_config.get('use_logging', False):
             loggers = [
@@ -312,6 +313,7 @@ class ModelTrainer:
                     save_dir=os.path.join(self.checkpoint_dir, 'wandb')
                 )
             ]
+            callbacks.append(LearningRateMonitor())
         else:
             loggers = []
         
