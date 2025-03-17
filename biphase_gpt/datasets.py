@@ -294,9 +294,19 @@ def create_train_val_test_datasets(
         test_samples: Number of test samples
         **kwargs: Additional arguments passed to generate_pretraining_data
     """
+    output_dir = Path(output_dir)
+    dataset_files = ['train.h5', 'val.h5', 'test.h5']
+    
+    # Delete existing dataset files if they exist
+    for file in dataset_files:
+        file_path = output_dir / file
+        if file_path.exists():
+            print(f"Removing existing dataset file: {file}")
+            file_path.unlink()
+    
     print("Generating training dataset...")
     generate_pretraining_data(
-        file_path=str(Path(output_dir) / f'train.h5'),
+        file_path=str(output_dir / 'train.h5'),
         num_pix=num_pix,
         num_samples=train_samples,
         **kwargs
@@ -304,7 +314,7 @@ def create_train_val_test_datasets(
     
     print("\nGenerating validation dataset...")
     generate_pretraining_data(
-        file_path=str(Path(output_dir) / f'val.h5'),
+        file_path=str(output_dir / 'val.h5'),
         num_pix=num_pix,
         num_samples=val_samples,
         **kwargs
@@ -312,7 +322,7 @@ def create_train_val_test_datasets(
     
     print("\nGenerating test dataset...")
     generate_pretraining_data(
-        file_path=str(Path(output_dir) / f'test.h5'),
+        file_path=str(output_dir / 'test.h5'),
         num_pix=num_pix,
         num_samples=test_samples,
         **kwargs
