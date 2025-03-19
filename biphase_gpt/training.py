@@ -289,6 +289,7 @@ class ModelTrainer:
         
         # Callbacks
         callbacks = [
+            # TODO: change this to saving at the end of training rather than the best model
             ModelCheckpoint(
                 dirpath=os.path.join(self.checkpoint_dir, self.experiment_name),
                 filename='{epoch}-{val_loss:.2f}',
@@ -310,7 +311,7 @@ class ModelTrainer:
                 WandbLogger(
                     project=self.config.training_config.get('wandb_project', 'ml-template'),
                     name=self.experiment_name,
-                    save_dir=os.path.join(self.checkpoint_dir, 'wandb')
+                    save_dir=self.checkpoint_dir
                 )
             ]
             callbacks.append(LearningRateMonitor())
