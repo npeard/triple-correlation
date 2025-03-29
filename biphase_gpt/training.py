@@ -289,13 +289,13 @@ class ModelTrainer:
 
         # Callbacks
         callbacks = [
-            ModelCheckpoint(
-                dirpath=os.path.join(self.checkpoint_dir, self.experiment_name),
-                filename='{epoch}-{val_loss:.4f}',
-                monitor='val_loss',
-                mode='min',
-                save_top_k=-1,
-            ),
+            # ModelCheckpoint(
+            #     dirpath=os.path.join(self.checkpoint_dir, self.experiment_name),
+            #     filename='{epoch}-{val_loss:.4f}',
+            #     monitor='val_loss',
+            #     mode='min',
+            #     save_top_k=-1,
+            # ),
             # EarlyStopping(
             #     monitor='val_loss',
             #     patience=10,
@@ -310,10 +310,16 @@ class ModelTrainer:
                     project=self.config.training_config.get('wandb_project', 'ml-template'),
                     name=self.experiment_name,
                     save_dir=self.checkpoint_dir,
-                    log_model=True
                 )
             ]
             callbacks.append(LearningRateMonitor())
+            callbacks.append(ModelCheckpoint(
+                dirpath=os.path.join(self.checkpoint_dir, self.experiment_name),
+                filename=str(loggers[0].experiment.id)+'_{epoch}-{val_loss:.4f}',
+                monitor='val_loss',
+                mode='min',
+                save_top_k=1,
+            ))
         else:
             loggers = []
 

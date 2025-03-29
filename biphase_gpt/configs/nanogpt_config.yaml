@@ -8,7 +8,7 @@ model:
   is_causal: false  # Whether to use causal masking in self-attention
 
 training:
-  max_epochs: 10
+  max_epochs: 30
   batch_size: 64
   optimizer: "Adam"
   learning_rate: 5e-4
