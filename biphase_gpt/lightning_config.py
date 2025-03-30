@@ -153,6 +153,8 @@ class GPTDecoder(BaseLightningModule):
 
         if self.loss_hparams.get("unpack_diagonals", False):
             encoded = self._unpack_by_diagonals_batched(encoded)
+        elif self.loss_hparams.get("unpack_orders", False):
+            encoded = self._unpack_by_orders_batched(encoded)
         else:
             encoded = encoded.flatten(start_dim=1)  # Flatten
         
@@ -219,6 +221,38 @@ class GPTDecoder(BaseLightningModule):
         # Concatenate all diagonals along the second dimension
         return torch.cat(diagonals, dim=1)
 
+    @staticmethod
+    def _unpack_by_orders_batched(x: torch.Tensor) -> torch.Tensor:
+        """
+        Unpack a batch of square matrices by orders along the diagonal, similar to AbsPhiDataset.unpack_by_orders
+        but handles batched input.
+        
+        Args:
+            x: Input tensor of shape (batch_size, n, n)
+            
+        Returns:
+            torch.Tensor: Flattened tensor containing orders along the diagonal
+        """
+        # Get dimensions
+        batch_size, n, _ = x.shape
+        assert x.size(-1) == x.size(-2), "Input tensors must be square"
+        
+        # Extract orders for all matrices in batch at once
+        orders = []
+        for i in range(n):
+            # For each order, we need to concatenate:
+            # 1. The column from row i to the end (including diagonal)
+            # 2. The row from column i+1 to the end (excluding diagonal to avoid double counting)
+            col = x[:, i:, i]  # Shape: (batch_size, n-i)
+            row = x[:, i, i+1:]  # Shape: (batch_size, n-i-1)
+            
+            # Concatenate row and column for each batch
+            order = torch.cat([col, row], dim=1)
+            orders.append(order)
+        
+        # Concatenate all orders along the second dimension
+        return torch.cat(orders, dim=1)
+
     def training_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> torch.Tensor:
         """Training step for GPT model.
         
@@ -232,7 +266,7 @@ class GPTDecoder(BaseLightningModule):
         
         self.log('train_loss', loss, prog_bar=True, on_epoch=True)
         return loss
-    
+
     def validation_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> None:
         """Validation step for GPT model.
         
@@ -250,6 +284,8 @@ class GPTDecoder(BaseLightningModule):
             encoded = self._encode(y)
             if self.loss_hparams.get("unpack_diagonals", False):
                 encoded = self._unpack_by_diagonals_batched(encoded)
+            elif self.loss_hparams.get("unpack_orders", False):
+                encoded = self._unpack_by_orders_batched(encoded)
             else:
                 encoded = encoded.flatten(start_dim=1)
             
@@ -288,6 +324,8 @@ class GPTDecoder(BaseLightningModule):
         # Use the same unpacking logic as in AbsPhiDataset
         if self.loss_hparams.get("unpack_diagonals", False):
             encoded = self._unpack_by_diagonals_batched(encoded)
+        elif self.loss_hparams.get("unpack_orders", False):
+            encoded = self._unpack_by_orders_batched(encoded)
         else:
             encoded = encoded.flatten(start_dim=1)  # Flatten
         # reshape encoded to square to match x

@@ -6,3 +6,5 @@ matplotlib
 numba
 torch
 lightning
+h5py
+tqdm

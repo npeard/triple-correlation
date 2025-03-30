@@ -125,10 +125,12 @@ class AbsPhiDataset(BaseH5Dataset):
         input_key: str = "absPhi",
         target_key: str = "phase",
         unpack_diagonals: bool = False,
+        unpack_orders: bool = False,
         **kwargs
     ):
         super().__init__(file_path, input_key, target_key, **kwargs)
         self.unpack_diagonals = unpack_diagonals
+        self.unpack_orders = unpack_orders
     
     @staticmethod
     def unpack_by_diagonals(x: torch.Tensor) -> torch.Tensor:
@@ -145,6 +147,19 @@ class AbsPhiDataset(BaseH5Dataset):
         
         # Concatenate all diagonals into single tensor
         return torch.cat(diagonals)
+
+    @staticmethod
+    def unpack_by_orders(x: torch.Tensor) -> torch.Tensor:
+        """Unpack a 2D tensor by orders along the diagonal. Singles, doubles, triples, etc., 
+        orders of the difference equation as in Shoulga et al."""
+        orders = []
+        for n in range(x.size(0)):
+            # Get column (including diagonal)
+            col = x[n:, n]
+            # Get row (excluding diagonal to avoid double counting)
+            row = x[n, n+1:]
+            orders.append(torch.cat([col, row]))
+        return torch.cat(orders)
     
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
         inputs, targets = super().__getitem__(idx)
@@ -153,6 +168,8 @@ class AbsPhiDataset(BaseH5Dataset):
         
         if self.unpack_diagonals:
             inputs = self.unpack_by_diagonals(inputs)
+        elif self.unpack_orders:
+            inputs = self.unpack_by_orders(inputs)
         else:
             inputs = inputs.flatten()  # Flatten
         
