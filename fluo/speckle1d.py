@@ -34,7 +34,6 @@ class Fluorescence1D:
         """
         # print("Initializing system...")
         self.k_pix = np.linspace(-self.kmax, self.kmax, self.num_pix)
-        self.k_pix_even = np.linspace(-self.kmax, self.kmax, self.num_pix + 1)
         self.x_pix = np.linspace(-1, 1, self.num_pix)
         self.x_double_pix = np.linspace(-1, 1, 2 * self.num_pix - 1)
         self.weights = np.correlate(
@@ -107,7 +106,6 @@ class Fluorescence1D:
 
         # Define the coherent diffraction
         self.kr_product = np.outer(self.k_pix, self.coords)
-        self.kr_product_even = np.outer(self.k_pix_even, self.coords)
         self.qr_product = np.outer(self.q_pix, self.coords)
         self.coh_ft = np.exp(-1j * self.kr_product * 2 * np.pi).mean(1)
         self.coh_phase = np.angle(self.coh_ft)
@@ -332,7 +330,7 @@ class Fluorescence1D:
             float: The cosine of the closure phase computed from the unknown
             phase.
         """
-        true_phase = self.coh_phase_double[self.num_pix - 1:]
+        true_phase = self.coh_phase[self.num_pix//2:]
         Phi = self.compute_Phi_from_phase(true_phase)
         cosPhi = np.cos(Phi)
 
