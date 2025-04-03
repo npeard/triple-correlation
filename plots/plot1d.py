@@ -2,8 +2,7 @@
 
 import numpy as np
 import pylab as P
-import speckle1d
-import triphase1d
+from fluo import Fluorescence1D
 
 
 class Plot1D:
@@ -23,9 +22,9 @@ class Plot1D:
         self.num_atoms = num_atoms
         self.num_pix = num_pix
         self.kmax = kmax
-        self.fluo = Speckle_1D.Fluorescence1D(kmax=self.kmax,
-                                              num_pix=self.num_pix,
-                                              num_atoms=self.num_atoms)
+        self.fluo = Fluorescence1D(kmax=self.kmax,
+                                  num_pix=self.num_pix,
+                                  num_atoms=self.num_atoms)
 
     def plot_Object(self):
         """Plot the atomic array, the array retrieved by taking the inverse
@@ -196,10 +195,10 @@ class Plot1D:
         cosPhi_from_phase = self.fluo.cosPhi_from_phase()
         cosPhi_from_phase_symmetrized = (cosPhi_from_phase +
                                          cosPhi_from_phase.T) / 2
+        print(cosPhi_from_phase.shape)
+        print(cosPhi_from_data.shape)
         assert cosPhi_from_data.shape == cosPhi_from_phase.shape, \
             "Shapes do not match"
-        assert np.allclose(cosPhi_from_phase.T, cosPhi_from_phase), \
-            "Not symmetric"
 
         fig = P.figure(figsize=(7, 7))
         s = fig.add_subplot(221)
@@ -288,3 +287,7 @@ class Plot1D:
         P.legend()
         P.tight_layout()
         P.show()
+
+if __name__ == '__main__':
+    plotter = Plot1D(num_atoms=5, num_pix=21, kmax=10)
+    plotter.plot_cosPhi()

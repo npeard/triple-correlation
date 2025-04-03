@@ -330,11 +330,12 @@ class Fluorescence1D:
             float: The cosine of the closure phase computed from the unknown
             phase.
         """
-        true_phase = self.coh_phase[self.num_pix//2:]
+        #true_phase = self.coh_phase[self.num_pix//2:]
+        true_phase = self.coh_phase_double[self.num_pix-1:]
         Phi = self.compute_Phi_from_phase(true_phase)
         cosPhi = np.cos(Phi)
 
-        return cosPhi, np.abs(Phi)
+        return cosPhi
 
     @staticmethod
     @jit(nopython=True, parallel=False)

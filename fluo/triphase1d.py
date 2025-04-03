@@ -4,7 +4,7 @@ import numpy as np
 from scipy import optimize
 import h5py
 from tqdm import tqdm
-import speckle1d
+from fluo import Fluorescence1D
 
 
 def simple_PhiSolver(cosPhi, initial_phase=0):
