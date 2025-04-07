@@ -290,6 +290,8 @@ def generate_pretraining_data(
         )
 
         # Generate data
+        # TODO: make a test case that compares the output dims of this block
+        # to the output dims of plot_cosPhi (the from_data method therein)
         print(f"\nGenerating {num_samples} samples...")
         for i in tqdm(range(num_samples)):
             # Generate random phase, out to 2*num_pix - 1 where num_pix is the
@@ -303,6 +305,7 @@ def generate_pretraining_data(
 
             # Store in dataset
             f['absPhi'][i] = np.abs(Phi[1:, 1:])
+            # TODO: we don't really need to store the entire phase across the origin
             f['phase'][i] = phase
 
 

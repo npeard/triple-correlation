@@ -138,13 +138,11 @@ class GPT(nn.Module):
             wte = nn.Linear(config.input_dim, config.n_embd),
             # Keep positional embeddings for sequence structure
             wpe = nn.Embedding(config.in_seq_len, config.n_embd),
-            # Add output position embeddings
-            wpe_out = nn.Embedding(config.out_seq_len, config.n_embd),
             drop = nn.Dropout(config.dropout),
             h = nn.ModuleList([Block(config) for _ in range(config.n_layer)]),
             ln_f = LayerNorm(config.n_embd, bias=config.bias),
         ))
-        
+
         # regression and sequence reduction head
         self.regression_head = nn.Linear(config.n_embd*config.in_seq_len, config.output_dim*config.out_seq_len)
         # init all weights
@@ -155,18 +153,27 @@ class GPT(nn.Module):
                 torch.nn.init.normal_(p, mean=0.0, std=0.02/math.sqrt(2 * config.n_layer))
 
         # report number of parameters
-        print("number of parameters: %.2fM" % (self.get_num_params()/1e6,))
+        print("Total number of parameters: %.2fM" % (self.get_num_params()/1e6,))
 
-    def get_num_params(self, non_embedding=True):
+    def get_num_params(self, non_embedding=False):
         """
         Return the number of parameters in the model.
         For non-embedding count (default), the position embeddings get subtracted.
-        The token embeddings would too, except due to the parameter sharing these
-        params are actually used as weights in the final layer, so we include them.
         """
         n_params = sum(p.numel() for p in self.parameters())
         if non_embedding:
             n_params -= self.transformer.wpe.weight.numel()
+
+        embedding_params = sum(p.numel() for p in self.transformer.wte.parameters())
+        position_params = sum(p.numel() for p in self.transformer.wpe.parameters())
+        block_params = sum(p.numel() for p in self.transformer.h.parameters())
+        regression_params = sum(p.numel() for p in self.regression_head.parameters())
+
+        print("Number of embedding params: %.3fM" % (embedding_params/1e6,))
+        print("Number of position params: %.3fM" % (position_params/1e6,))
+        print("Number of block params: %.3fM" % (block_params/1e6,))
+        print("Number of regression params: %.3fM" % (regression_params/1e6,))
+
         return n_params
 
     def _init_weights(self, module):
@@ -183,21 +190,21 @@ class GPT(nn.Module):
         x = x.unsqueeze(-1)
         batch_size, seq_len, n_features = x.size()  # batch, sequence length, features
         assert seq_len <= self.config.in_seq_len, f"Cannot forward sequence of length {seq_len}, block size is only {self.config.in_seq_len}"
-        
+
         # Input sequence processing
         pos = torch.arange(0, seq_len, dtype=torch.long, device=device)
         tok_emb = self.transformer.wte(x)  # project inputs to embedding dimension (batch_size, seq_len, n_embd)
         pos_emb = self.transformer.wpe(pos)  # position embeddings of shape (seq_len, n_embd)
         x = self.transformer.drop(tok_emb + pos_emb)
-        
+
         # Process through transformer blocks
         for block in self.transformer.h:
             x = block(x)
         x = self.transformer.ln_f(x)
-        
+
         predictions = self.regression_head(x.flatten(1))
 
         # implement antisymmetry of output sequence
         predictions = torch.cat([-1*predictions.flip(1), predictions[:, 1:]], dim=1)
-        
+
         return predictions
