@@ -67,11 +67,11 @@ class TrainingConfig:
     def _create_gpt_config(self) -> GPTConfig:
         """Create GPTConfig from model configuration"""
         num_pix = self.data_config.get("dataset_params", {}).get("num_pix", 21)
-        Phi_dim = (num_pix // 2 + 1)//2 + 1
+        Phi_dim = num_pix // 2 + 1
         Phi_dim -= 1 # for removal of zero-valued row/column with no information
         return GPTConfig(
             in_seq_len=Phi_dim**2,
-            out_seq_len=num_pix//2 + 1,
+            out_seq_len=num_pix,
             n_layer=self.model_config.get("n_layer", 1),
             n_head=self.model_config.get("n_head", 4),
             n_embd=self.model_config.get("n_embd", 128),

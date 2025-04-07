@@ -57,6 +57,19 @@ class BaseH5Dataset(Dataset):
         if self.target_key not in f:
             raise ValueError(f"Target key '{self.target_key}' not found in file")
 
+        # Check that zero-valued edges of inputs have been removed already
+        input_element = f[self.input_key][0]
+        # Get edge elements and validate their sum
+        edges = [input_element[0, ...],  # first in dim 0
+                input_element[:, 0, ...]]  # first in dim 1
+        if input_element.ndim > 2:
+            edges.extend(input_element[..., 0])  # first in dim 2
+        if input_element.ndim > 3:
+            edges.extend(input_element[..., 0, :])  # first in dim 3
+        edge_sum = sum(edge.sum() for edge in edges)
+        if edge_sum < 0.1:
+            raise ValueError(f"Sum of edge elements {edge_sum:.3f} less than threshold 0.1\r\nDid you remember to remove the zero-valued edges?")
+
     def _get_dataset_length(self, f: h5py.File) -> int:
         """Get the length of the dataset."""
         return len(f[self.target_key])
@@ -164,8 +177,6 @@ class AbsPhiDataset(BaseH5Dataset):
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
         inputs, targets = super().__getitem__(idx)
 
-        # TODO: Add check that we have already cut zero-value edges for efficiency
-
         if self.unpack_diagonals:
             inputs = self.unpack_by_diagonals(inputs)
         elif self.unpack_orders:
@@ -241,7 +252,7 @@ def generate_pretraining_data(
 
     Args:
         file_path: Path to save the HDF5 file
-        num_pix: Number of pixels in each sample
+        num_pix: Number of pixels in the detector
         num_samples: Number of samples to generate
         chunk_size: Optional chunk size for HDF5 dataset compression
     """
@@ -258,7 +269,7 @@ def generate_pretraining_data(
         f.attrs['num_pix'] = num_pix
 
         # Create datasets with chunking and compression
-        Phi_dim = ((num_pix//2 + 1)//2 + 1)
+        Phi_dim = (num_pix//2 + 1)
         Phi_dim -= 1 # for removal of zero-valued row/column with no information
         f.create_dataset(
             'absPhi',
@@ -271,9 +282,9 @@ def generate_pretraining_data(
 
         f.create_dataset(
             'phase',
-            shape=(num_samples, num_pix),
+            shape=(num_samples, 2*num_pix-1),
             dtype='float32',
-            chunks=(chunk_size, num_pix),
+            chunks=(chunk_size, 2*num_pix-1),
             compression='gzip',
             compression_opts=4
         )
@@ -281,12 +292,14 @@ def generate_pretraining_data(
         # Generate data
         print(f"\nGenerating {num_samples} samples...")
         for i in tqdm(range(num_samples)):
-            # Generate random phase
-            phase = np.random.uniform(-np.pi, np.pi, num_pix // 2)
+            # Generate random phase, out to 2*num_pix - 1 where num_pix is the
+            # number of pixels in the detector. We expect the triple correlation to
+            # contain phase information out to 2*kmax or num_pix from origin.
+            phase = np.random.uniform(-np.pi, np.pi, num_pix-1)
             phase = np.concatenate((-phase, np.zeros(1), np.flip(phase)))
 
             # Compute Phi matrix
-            Phi = Fluorescence1D.compute_Phi_from_phase(phase[num_pix // 2:])
+            Phi = Fluorescence1D.compute_Phi_from_phase(phase[num_pix - 1:])
 
             # Store in dataset
             f['absPhi'][i] = np.abs(Phi[1:, 1:])
