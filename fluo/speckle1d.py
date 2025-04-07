@@ -49,7 +49,9 @@ class Fluorescence1D:
         self.g3_2d = None
         self.weights_2d = None
 
-        self.randomize_coords()
+        if self.x is None:
+            self.randomize_coords()
+        self.digitize_coords()
 
     def init_weights_2d(self):
         """
@@ -81,14 +83,10 @@ class Fluorescence1D:
 
         return weights_2d
 
-    def randomize_coords(self) -> None:
+    def digitize_coords(self) -> None:
         """
-        Randomize or load atomic coordinates and compute coherent
-        diffraction quantities.
+        Digitize the atomic coordinates into a real space object for plotting.
         """
-        self.coords = np.random.random((self.num_atoms)) * 2 - 1
-        # Set spatial extent of real space object here
-
         if self.x is not None:
             self.coords = self.x
 
@@ -103,6 +101,15 @@ class Fluorescence1D:
         )
         # object_double is NOT the same object with double sampling, it is
         # slightly different in the binning
+
+
+    def randomize_coords(self) -> None:
+        """
+        Randomize or load atomic coordinates and compute coherent
+        diffraction quantities.
+        """
+        # Set spatial extent of real space object here
+        self.coords = np.random.random((self.num_atoms)) * 2 - 1
 
         # Define the coherent diffraction
         self.kr_product = np.outer(self.k_pix, self.coords)

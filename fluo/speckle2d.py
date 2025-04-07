@@ -50,7 +50,9 @@ class Fluorescence2D:
         self.g3_4d = None
         self.weights_4d = None
 
-        self.randomize_coords()
+        if self.x is None:
+            self.randomize_coords()
+        self.digitize_coords()
 
     def init_weights_4d(self):
         """
@@ -90,12 +92,10 @@ class Fluorescence2D:
                                 weights_4d[q1x, q1y, q2x, q2y] += 1
         return weights_4d
 
-    def randomize_coords(self):
-        """Randomize or load atomic coordinates and compute coherent
-        diffraction quantities.
+    def digitize_coords(self) -> None:
         """
-        self.coords = np.random.random((2, self.num_atoms)) * 2 - 1
-
+        Digitize the atomic coordinates into a real space object for plotting.
+        """
         if self.x is not None:
             self.coords = self.x
 
@@ -110,6 +110,12 @@ class Fluorescence2D:
             np.digitize(self.coords[0, :], self.x_double_pix[0, :, 0]),
             np.digitize(self.coords[1, :], self.x_double_pix[1, 0, :])
         ] = 1 / self.num_atoms
+
+    def randomize_coords(self):
+        """Randomize or load atomic coordinates and compute coherent
+        diffraction quantities.
+        """
+        self.coords = np.random.random((2, self.num_atoms)) * 2 - 1
 
         self.kr_product_x = np.multiply.outer(self.k_pix[0, :, :],
                                               self.coords[0, :])
