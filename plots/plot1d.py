@@ -289,5 +289,5 @@ class Plot1D:
         P.show()
 
 if __name__ == '__main__':
-    plotter = Plot1D(num_atoms=5, num_pix=21, kmax=10)
+    plotter = Plot1D(num_atoms=5, num_pix=21, kmax=3)
     plotter.plot_cosPhi()
