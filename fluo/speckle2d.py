@@ -4,6 +4,32 @@ import numpy as np
 from numba import jit
 
 
+@jit(nopython=True)
+def roll2d(arr, shift_x, shift_y):
+    """
+    Numba-compatible implementation of np.roll for 2D arrays.
+
+    Parameters:
+        arr (ndarray): 2D input array
+        shift_x (int): Number of places to shift along first axis
+        shift_y (int): Number of places to shift along second axis
+
+    Returns:
+        ndarray: Shifted array
+    """
+    nx, ny = arr.shape
+    out = np.empty_like(arr)
+
+    for i in range(nx):
+        for j in range(ny):
+            # Calculate rolled indices with proper wrapping
+            idx_x = (i - shift_x) % nx
+            idx_y = (j - shift_y) % ny
+            out[i, j] = arr[idx_x, idx_y]
+
+    return out
+
+
 class Fluorescence2D:
     def __init__(self, kmax=5, num_pix=51, num_atoms=3, x=None):
         """
@@ -132,8 +158,6 @@ class Fluorescence2D:
         self.coh_ft_double = np.exp(-1j * (self.qr_product_x +
                                     self.qr_product_y + 0) * 2 * np.pi).mean(2)
         self.coh_phase_double = np.angle(self.coh_ft_double)
-
-    import numpy as np
 
     def get_incoh_intens(self):
         """
@@ -380,7 +404,7 @@ class Fluorescence2D:
              * (weights > 0))
         return c
 
-    def cosPhi_from_structure(self):
+    def cosPhi_from_structure(self) -> np.ndarray:
         """
         Get the cosine of the closure phase from the structure coherent
         diffraction.
@@ -391,7 +415,48 @@ class Fluorescence2D:
         """
         return np.cos(self.closure_from_structure(return_phase=True))
 
-    def cosPhi_from_data(self, num_shots=1000):
+    def cosPhi_from_phase(self) -> np.ndarray:
+        """
+        Get the cosine of the closure phase from the true phase. Reverse model.
+
+        Returns:
+            numpy.ndarray: The cosine of the closure phase computed from the unknown
+            phase.
+        """
+        true_phase = self.coh_phase_double[self.num_pix-1:, self.num_pix-1:]
+        Phi = self.compute_Phi_from_phase(true_phase)
+        cosPhi = np.cos(Phi)
+
+        return cosPhi
+
+    @staticmethod
+    @jit(nopython=True, parallel=False)
+    def compute_Phi_from_phase(phase):
+        """
+        Computes the phase difference array, Phi, for 2D phase data.
+
+        Parameters:
+            phase (ndarray): The 2D phase array, one quadrant of origin
+
+        Returns:
+            ndarray: The signed phase difference array in 4D
+        """
+        nx, ny = phase.shape
+        Phi = np.zeros((nx, ny, nx, ny))
+
+        for nx_shift in range(nx):
+            for ny_shift in range(ny):
+                shifted_phase = roll2d(phase, -nx_shift, -ny_shift)
+                Phi[nx_shift, ny_shift,:, :] = shifted_phase - phase - phase[nx_shift, ny_shift]
+
+        # Trim to match the expected output dimensions
+        half_nx = nx // 2 + 1
+        half_ny = ny // 2 + 1
+        Phi = Phi[:half_nx, :half_ny, :half_nx, :half_ny]
+
+        return Phi
+
+    def cosPhi_from_data(self, num_shots=1000) -> np.ndarray:
         """
         Compute the cosine of the closure phase from correlations of
         incoherent fluorescence data.

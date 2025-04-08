@@ -2,12 +2,11 @@
 
 import numpy as np
 import matplotlib.pyplot as P
-import speckle2d
+from fluo import Fluorescence2D
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import matplotlib.ticker
-from mpl_point_clicker import clicker
+#from mpl_point_clicker import clicker
 import matplotlib.gridspec as gridspec
-import triphase2d
 
 
 class OOMFormatter(matplotlib.ticker.ScalarFormatter):
@@ -43,8 +42,8 @@ class Plot2D:
         self.num_atoms = num_atoms
         self.num_pix = num_pix
         self.kmax = kmax
-        self.fluo = Speckle_2D.Fluorescence2D(kmax=kmax, num_pix=num_pix,
-                                              num_atoms=num_atoms)
+        self.fluo = Fluorescence2D(kmax=kmax, num_pix=num_pix,
+                                  num_atoms=num_atoms)
 
     def plot_Object(self):
         """Plot the atomic array, the array retrieved by taking the inverse
@@ -288,32 +287,33 @@ class Plot2D:
         Keyword arguments:
             num_shots (int) - number of shots to compute the correlation
         """
+        cosPhi_from_phase = self.fluo.cosPhi_from_phase()
+
         cosPhi_from_dataPhase = self.fluo.cosPhi_from_data(num_shots=num_shots)
-        cosPhi_from_dataPhase = (cosPhi_from_dataPhase[self.fluo.num_pix - 1:2 * self.fluo.num_pix,
-                                                       self.fluo.num_pix - 1:2 * self.fluo.num_pix,
-                                                       self.fluo.num_pix - 1:2 * self.fluo.num_pix,
-                                                       self.fluo.num_pix - 1:2 * self.fluo.num_pix] + cosPhi_from_dataPhase[0:self.fluo.num_pix,
-                                                                                                                            0:self.fluo.num_pix,
-                                                                                                                            0:self.fluo.num_pix,
-                                                                                                                            0:self.fluo.num_pix][::-1,
-                                                                                                                                                 ::-1,
-                                                                                                                                                 ::-1,
-                                                                                                                                                 ::-1])[1,
-                                                                                                                                                        :,
-                                                                                                                                                        1,
-                                                                                                                                                        :] / 2
-        cosPhi_from_structurePhase = self.fluo.cosPhi_from_structure()[
-            1, :, 1, :]
+        cosPhi_from_dataPhase = cosPhi_from_dataPhase[self.fluo.num_pix - 1:3 * self.fluo.num_pix // 2,
+                                                       self.fluo.num_pix - 1:3 * self.fluo.num_pix // 2,
+                                                       self.fluo.num_pix - 1:3 * self.fluo.num_pix // 2,
+                                                       self.fluo.num_pix - 1:3 * self.fluo.num_pix // 2]
+
+        assert cosPhi_from_dataPhase.shape == cosPhi_from_phase.shape, \
+            "Shapes do not match"
+
+        # Choose a random 2D slice for plotting
+        cosPhi_from_dataPhase = cosPhi_from_dataPhase[1,:,1, :]
+        cosPhi_from_phase = cosPhi_from_phase[1,:,1, :]
+
+        assert cosPhi_from_dataPhase.shape == cosPhi_from_phase.shape, \
+            "Shapes do not match"
 
         fig = P.figure(figsize=(10, 5))
         s = fig.add_subplot(121)
         im = s.imshow(cosPhi_from_dataPhase, origin="lower")
-        s.set_title("cos(Phi) from phase_from_data")
+        s.set_title("cos(Phi) from Data")
         P.colorbar(im, ax=s)
 
         s = fig.add_subplot(122)
-        im = s.imshow(cosPhi_from_structurePhase, origin="lower")
-        s.set_title("cos(Phi) from phase_from_structure")
+        im = s.imshow(cosPhi_from_phase, origin="lower")
+        s.set_title("cos(Phi) from Phase")
         P.colorbar(im, ax=s)
         P.tight_layout()
         P.show()
@@ -730,3 +730,7 @@ class Plot2D:
         P.tight_layout()
         P.subplots_adjust(wspace=0.4, hspace=0.4)
         P.show()
+
+if __name__ == "__main__":
+    plotter = Plot2D(num_pix=11, num_atoms=4, kmax=3)
+    plotter.plot_cosPhi(num_shots=10000)
