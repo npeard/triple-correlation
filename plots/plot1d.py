@@ -189,9 +189,6 @@ class Plot1D:
         cosPhi_from_data_symmetrized = (
             cosPhi_from_data + cosPhi_from_data.T) / 2
 
-        # cosPhi_from_structurePhase = self.fluo.cosPhi_from_structure()[
-        #     self.fluo.num_pix-1:, self.fluo.num_pix-1:]
-
         cosPhi_from_phase = self.fluo.cosPhi_from_phase()
         cosPhi_from_phase_symmetrized = (cosPhi_from_phase +
                                          cosPhi_from_phase.T) / 2

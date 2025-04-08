@@ -289,25 +289,25 @@ class Plot2D:
         """
         cosPhi_from_phase = self.fluo.cosPhi_from_phase()
 
-        cosPhi_from_dataPhase = self.fluo.cosPhi_from_data(num_shots=num_shots)
-        cosPhi_from_dataPhase = cosPhi_from_dataPhase[self.fluo.num_pix - 1:3 * self.fluo.num_pix // 2,
+        cosPhi_from_data = self.fluo.cosPhi_from_data(num_shots=num_shots)
+        cosPhi_from_data = cosPhi_from_data[self.fluo.num_pix - 1:3 * self.fluo.num_pix // 2,
                                                        self.fluo.num_pix - 1:3 * self.fluo.num_pix // 2,
                                                        self.fluo.num_pix - 1:3 * self.fluo.num_pix // 2,
                                                        self.fluo.num_pix - 1:3 * self.fluo.num_pix // 2]
 
-        assert cosPhi_from_dataPhase.shape == cosPhi_from_phase.shape, \
+        assert cosPhi_from_data.shape == cosPhi_from_phase.shape, \
             "Shapes do not match"
 
         # Choose a random 2D slice for plotting
-        cosPhi_from_dataPhase = cosPhi_from_dataPhase[1,:,1, :]
+        cosPhi_from_data = cosPhi_from_data[1,:,1, :]
         cosPhi_from_phase = cosPhi_from_phase[1,:,1, :]
 
-        assert cosPhi_from_dataPhase.shape == cosPhi_from_phase.shape, \
+        assert cosPhi_from_data.shape == cosPhi_from_phase.shape, \
             "Shapes do not match"
 
         fig = P.figure(figsize=(10, 5))
         s = fig.add_subplot(121)
-        im = s.imshow(cosPhi_from_dataPhase, origin="lower")
+        im = s.imshow(cosPhi_from_data, origin="lower")
         s.set_title("cos(Phi) from Data")
         P.colorbar(im, ax=s)
 
