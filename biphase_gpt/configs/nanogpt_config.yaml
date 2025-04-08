@@ -9,7 +9,7 @@ model:
 
 training:
   max_epochs: 500
-  batch_size: 1024
+  batch_size: 8
   optimizer: "Adam"
   learning_rate: 5e-4
   T_max: 500
@@ -37,4 +37,4 @@ data:
     train_samples: 1000
     val_samples: 100
     test_samples: 100
-    num_pix: 21
+    num_pix: 101

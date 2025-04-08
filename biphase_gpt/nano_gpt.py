@@ -204,7 +204,4 @@ class GPT(nn.Module):
 
         predictions = self.regression_head(x.flatten(1))
 
-        # implement antisymmetry of output sequence
-        predictions = torch.cat([-1*predictions.flip(1), predictions[:, 1:]], dim=1)
-
         return predictions

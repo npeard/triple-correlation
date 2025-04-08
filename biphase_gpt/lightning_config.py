@@ -11,7 +11,7 @@ from biphase_gpt.nano_gpt import GPT, GPTConfig
 
 class BaseLightningModule(L.LightningModule):
     """Base Lightning Module for all models"""
-    
+
     def __init__(
         self,
         model: Optional[torch.nn.Module] = None,
@@ -31,7 +31,7 @@ class BaseLightningModule(L.LightningModule):
         super().__init__()
         self.save_hyperparameters(ignore=['model'])
         self.model = model
-        
+
         # Set default optimizer hyperparameters if none provided
         self.optimizer_hparams = optimizer_hparams or {"lr": 1e-3, "weight_decay": 1e-5}
         self.scheduler_hparams = scheduler_hparams or {
@@ -39,12 +39,12 @@ class BaseLightningModule(L.LightningModule):
             "gamma": 0.1
         }
         self.loss_hparams = loss_hparams or {}
-        
+
         torch.set_float32_matmul_precision('high')
-    
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.model(x)
-    
+
     def configure_optimizers(self):
         """Configure optimizer and learning rate scheduler"""
         # Configure optimizer
@@ -54,19 +54,19 @@ class BaseLightningModule(L.LightningModule):
             optimizer = optim.SGD(self.parameters(), **self.optimizer_hparams)
         else:
             raise ValueError(f"Unknown optimizer: {self.hparams.optimizer_name}")
-        
+
         # Configure scheduler
         # scheduler = optim.lr_scheduler.MultiStepLR(optimizer, **self.scheduler_hparams)
         # TODO: setup proper passing of scheduler_hparams for hyperparameter optimization
         scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, **self.scheduler_hparams)
-        
+
         return {
             "optimizer": optimizer,
             "lr_scheduler": {
                 "scheduler": scheduler,
             }
         }
-    
+
     def _get_progress_bar_dict(self) -> Dict[str, Any]:
         """Modify progress bar display"""
         items = super()._get_progress_bar_dict()
@@ -76,7 +76,7 @@ class BaseLightningModule(L.LightningModule):
 
 class GPTDecoder(BaseLightningModule):
     """Lightning Module for training GPT models"""
-    
+
     def __init__(
         self,
         model_type: str = "GPT",
@@ -98,12 +98,12 @@ class GPTDecoder(BaseLightningModule):
         # Create GPT model
         if model_type != 'GPT':
             raise ValueError('model_type must be \'GPT\' for GPTDecoder')
-        
+
         model_hparams = model_hparams or {}
         gpt_config = GPTConfig(**model_hparams)
         print("is_causal", gpt_config.is_causal)
         model = GPT(gpt_config)
-        
+
         super().__init__(
             model=model,
             optimizer_name=optimizer_name,
@@ -111,10 +111,10 @@ class GPTDecoder(BaseLightningModule):
             scheduler_hparams=scheduler_hparams,
             loss_hparams=loss_hparams,
         )
-    
+
     def loss_function(self, y_hat: torch.Tensor, targets: torch.Tensor, x: Optional[torch.Tensor] = None, *args, **kwargs) -> torch.Tensor:
         """Custom loss function for GPT training.
-        
+
         Args:
             y_hat: Model predictions
             targets: Ground truth targets
@@ -127,24 +127,24 @@ class GPTDecoder(BaseLightningModule):
         loss = nn.MSELoss()(torch.abs(y_hat), torch.abs(targets))
         # But we should also try to infer the overall sign
         loss += nn.MSELoss()(y_hat, targets)
-        
+
         # Add encoding loss if enabled and x is provided
         if self.loss_hparams.get("use_encoding_loss", False) and x is not None:
             encoding_weight = self.loss_hparams.get("encoding_weight", 1.0)
             loss += encoding_weight * self.encoding_loss(y_hat, x)
-        
+
         return loss
-    
+
     def encoding_loss(self, phase: torch.Tensor, absPhi: torch.Tensor) -> torch.Tensor:
         """
         Compute loss between re-encoded abs(Phi) matrix and input abs(Phi) matrix.
-        
+
         Args:
             phase: Predicted phase, both quadrants included
-            absPhi: Input absolute Phi matrix sequence, has length 
-            ((n//2+1)//2+1) - 1)**2 where n is the length of the predicted 
-            phase (nanoGPT is configured to predict the full antisymmetric 
-            output internally), and then we remove the zero value row and 
+            absPhi: Input absolute Phi matrix sequence, has length
+            ((n//2+1)//2+1) - 1)**2 where n is the length of the predicted
+            phase (nanoGPT is configured to predict the full antisymmetric
+            output internally), and then we remove the zero value row and
             column with no information due to symmetry.
         Returns:
             torch.Tensor: MSE loss between re-encoded and input abs(Phi)
@@ -157,67 +157,64 @@ class GPTDecoder(BaseLightningModule):
             encoded = self._unpack_by_orders_batched(encoded)
         else:
             encoded = encoded.flatten(start_dim=1)  # Flatten
-        
-        # Compare with input. Both should be flat and unpacked 
+
+        # Compare with input. Both should be flat and unpacked
         # from square in the same order.
         loss = nn.MSELoss()(encoded, absPhi)
         return loss
 
     @staticmethod
+    @torch.jit.script
     def _encode(phase: torch.Tensor) -> torch.Tensor:
         """Re-encode abs(Phi) matrix from predicted phase.
-        
+
         Args:
             phase: Predicted phase, both quadrants included
         Returns:
             torch.Tensor: Re-encoded abs(Phi) matrix
         """
         batch_size = phase.size(0)
-        phase_dim = phase.size(1)//2 + 1
-        encoded_dim = (phase_dim//2 + 1)
+        Phi_dim = phase.size(1)//2 + 1
 
-        # Phase in positive quadrant
-        phase = torch.flip(phase[:, :phase_dim], dims=[1])
-        
         # Re-encode abs(Phi) matrix from predicted phase
-        encoded = torch.zeros((batch_size, phase_dim, phase_dim), device=phase.device)
-        
-        for i in range(phase_dim):
+        encoded = torch.zeros((batch_size, phase.size(1), phase.size(1)), device=phase.device)
+
+        for i in range(phase.size(1)):
             encoded[:, i, :] = (torch.roll(phase, -i, dims=-1) - phase - phase[:, i].unsqueeze(-1))
 
-        encoded = encoded[:, :encoded_dim, :encoded_dim]
+        encoded = encoded[:, :Phi_dim, :Phi_dim]
         # Remove zero row and column
         encoded = encoded[:, 1:, 1:]
         # absolute value
         encoded = torch.abs(encoded)
         return encoded
-    
+
     @staticmethod
     def _unpack_by_diagonals_batched(x: torch.Tensor) -> torch.Tensor:
         """
         Unpack a batch of square matrices by diagonals, similar to AbsPhiDataset.unpack_by_diagonals
         but handles batched input.
-        
+
         Args:
             x: Input tensor of shape (batch_size, n, n)
-            
+
         Returns:
             torch.Tensor: Flattened tensor containing diagonals in order from top-right to bottom-left
         """
         # First flip left-right for each matrix in batch
         x = torch.flip(x, dims=[-1])
-        
+
         # Get dimensions
         batch_size, n, _ = x.shape
         assert x.size(-1) == x.size(-2), "Input tensors must be square"
-        
+
         # Extract diagonals from offset n-1 to -(n-1) for all matrices in batch at once
         diagonals = []
         for offset in range(n-1, -(n), -1):
             # Get diagonals for all batches at once
             diag = torch.diagonal(x, offset=offset, dim1=1, dim2=2)  # Shape: (batch_size, diagonal_length)
             diagonals.append(diag)
-        
+
         # Concatenate all diagonals along the second dimension
         return torch.cat(diagonals, dim=1)
 
@@ -226,17 +223,17 @@ class GPTDecoder(BaseLightningModule):
         """
         Unpack a batch of square matrices by orders along the diagonal, similar to AbsPhiDataset.unpack_by_orders
         but handles batched input.
-        
+
         Args:
             x: Input tensor of shape (batch_size, n, n)
-            
+
         Returns:
             torch.Tensor: Flattened tensor containing orders along the diagonal
         """
         # Get dimensions
         batch_size, n, _ = x.shape
         assert x.size(-1) == x.size(-2), "Input tensors must be square"
-        
+
         # Extract orders for all matrices in batch at once
         orders = []
         for i in range(n):
@@ -245,17 +242,17 @@ class GPTDecoder(BaseLightningModule):
             # 2. The row from column i+1 to the end (excluding diagonal to avoid double counting)
             col = x[:, i:, i]  # Shape: (batch_size, n-i)
             row = x[:, i, i+1:]  # Shape: (batch_size, n-i-1)
-            
+
             # Concatenate row and column for each batch
             order = torch.cat([col, row], dim=1)
             orders.append(order)
-        
+
         # Concatenate all orders along the second dimension
         return torch.cat(orders, dim=1)
 
     def training_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> torch.Tensor:
         """Training step for GPT model.
-        
+
         Args:
             batch: Tuple of (inputs, targets)
             batch_idx: Index of current batch
@@ -263,13 +260,13 @@ class GPTDecoder(BaseLightningModule):
         x, y = batch
         y_hat = self(x)
         loss = self.loss_function(y_hat, y, x)
-        
+
         self.log('train_loss', loss, prog_bar=True, on_epoch=True)
         return loss
 
     def validation_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> None:
         """Validation step for GPT model.
-        
+
         Args:
             batch: Tuple of (inputs, targets)
             batch_idx: Index of current batch
@@ -277,7 +274,7 @@ class GPTDecoder(BaseLightningModule):
         x, y = batch
         y_hat = self(x)
         loss = self.loss_function(y_hat, y, x)
-        
+
         # Verify encoding/unpacking order during sanity check (first validation)
         if self.trainer.sanity_checking:
             # Re-encode the targets and compare with input
@@ -288,16 +285,16 @@ class GPTDecoder(BaseLightningModule):
                 encoded = self._unpack_by_orders_batched(encoded)
             else:
                 encoded = encoded.flatten(start_dim=1)
-            
+
             encoding_loss = nn.MSELoss()(encoded, x)
             assert encoding_loss < 1e-6, f"Encoding verification failed! Loss: {encoding_loss:.2e}"
             print(f"✓ Encoding verification passed (loss: {encoding_loss:.2e})")
-        
+
         self.log('val_loss', loss, prog_bar=True)
-    
+
     def test_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> None:
         """Test step for GPT model.
-        
+
         Args:
             batch: Tuple of (inputs, targets)
             batch_idx: Index of current batch
@@ -305,12 +302,12 @@ class GPTDecoder(BaseLightningModule):
         x, y = batch
         y_hat = self(x)
         loss = self.loss_function(y_hat, y, x)
-        
+
         self.log('test_loss', loss)
-    
+
     def predict_step(self, batch: torch.Tensor, batch_idx: int, dataloader_idx: int = 0) -> torch.Tensor:
         """Prediction step for GPT model. Return all relevant quantities for plotting.
-        
+
         Args:
             batch: Input tensor
             batch_idx: Index of current batch
@@ -330,4 +327,9 @@ class GPTDecoder(BaseLightningModule):
             encoded = encoded.flatten(start_dim=1)  # Flatten
         # reshape encoded to square to match x
         encoded = encoded.view_as(x)
-        return predictions, y, encoded, x
+
+        # Implement antisymmetry of the predictions and targets for plotting
+        full_predictions = torch.concat([-predictions, predictions[:, 1:]], dim=1)
+        full_targets = torch.concat([-y, y[:, 1:]], dim=1)
+
+        return full_predictions, full_targets, encoded, x

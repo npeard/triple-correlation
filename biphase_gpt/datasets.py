@@ -26,8 +26,8 @@ class BaseH5Dataset(Dataset):
     def __init__(
         self,
         file_path: str,
-        input_key: str = "Phi",
-        target_key: str = "phase",
+        input_key: str = "inputs",
+        target_key: str = "targets",
         transform: Optional[Callable] = None,
         target_transform: Optional[Callable] = None,
         cache_size: int = 0
@@ -141,7 +141,12 @@ class AbsPhiDataset(BaseH5Dataset):
         unpack_orders: bool = False,
         **kwargs
     ):
-        super().__init__(file_path, input_key, target_key, **kwargs)
+        super().__init__(
+            file_path,
+            input_key,
+            target_key,
+            **kwargs
+        )
         self.unpack_diagonals = unpack_diagonals
         self.unpack_orders = unpack_orders
 
@@ -187,6 +192,80 @@ class AbsPhiDataset(BaseH5Dataset):
         return inputs, targets
 
 
+class PreTrainingDataset(BaseH5Dataset):
+    """Dataset for computing Phi matrices on the fly from phases.
+
+    This dataset loads only phase data from the HDF5 file and computes
+    the corresponding Phi matrices during training using Fluorescence1D.
+    """
+
+    def __init__(
+        self,
+        file_path: str,
+        input_key: str = "absPhi",
+        target_key: str = "phase",
+        unpack_diagonals: bool = False,
+        unpack_orders: bool = False,
+        **kwargs
+    ):
+        """Initialize the dataset.
+
+        Args:
+            file_path: Path to HDF5 file containing phase data
+            transform: Optional transform to apply to computed Phi matrices
+            target_transform: Optional transform to apply to phase data
+            cache_size: Number of items to cache (0 for no caching)
+            flatten_output: If True, flatten the Phi matrices before returning
+        """
+        super().__init__(
+            file_path=file_path,
+            input_key="absPhi",
+            target_key="phase",
+            **kwargs
+        )
+
+        # Get num_pix from HDF5 file attributes
+        with h5py.File(file_path, 'r') as f:
+            self.num_pix = f.attrs['num_pix']
+
+    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Get a single item from the dataset.
+
+        Returns:
+            Tuple[torch.Tensor, torch.Tensor]: (Phi matrix, phase array)
+            If flatten_output is True, the Phi matrix will be flattened.
+        """
+        # Check cache first
+        if idx in self._cache:
+            inputs, targets = self._cache[idx]
+        else:
+            # Lazy loading of HDF5 file
+            self.open_hdf5()
+
+            # Get phase data
+            phase = self.targets[idx]
+
+            # Compute Phi matrix on the fly using only the relevant part of phase
+            inputs = Fluorescence1D.compute_Phi_from_phase(phase)
+            inputs = np.abs(inputs[1:, 1:])  # Remove zero-valued edges
+
+            # Apply transforms if specified
+            if self.transform is not None:
+                inputs = self.transform(inputs)
+            if self.target_transform is not None:
+                phase = self.target_transform(phase)
+
+            # Add to cache
+            if self.cache_size > 0:
+                self._add_to_cache(idx, (inputs, phase))
+
+        # Convert to tensors
+        inputs = torch.FloatTensor(inputs).flatten()
+        targets = torch.FloatTensor(phase)
+
+        return inputs, targets
+
+
 def create_data_loaders(
     train_path: str,
     val_path: str,
@@ -211,6 +290,11 @@ def create_data_loaders(
     train_dataset = AbsPhiDataset(train_path, **dataset_kwargs)
     val_dataset = AbsPhiDataset(val_path, **dataset_kwargs)
     test_dataset = AbsPhiDataset(test_path, **dataset_kwargs)
+
+    # Only using pretraining dataset for now
+    # train_dataset = PreTrainingDataset(train_path, **dataset_kwargs)
+    # val_dataset = PreTrainingDataset(val_path, **dataset_kwargs)
+    # test_dataset = PreTrainingDataset(test_path, **dataset_kwargs)
 
     train_loader = DataLoader(
         train_dataset,
@@ -280,11 +364,12 @@ def generate_pretraining_data(
             compression_opts=4
         )
 
+        # Only storing one quadrant of phase intentionally, redundancy by antisymmetry
         f.create_dataset(
             'phase',
-            shape=(num_samples, 2*num_pix-1),
+            shape=(num_samples, num_pix),
             dtype='float32',
-            chunks=(chunk_size, 2*num_pix-1),
+            chunks=(chunk_size, num_pix),
             compression='gzip',
             compression_opts=4
         )
@@ -297,15 +382,16 @@ def generate_pretraining_data(
             # Generate random phase, out to 2*num_pix - 1 where num_pix is the
             # number of pixels in the detector. We expect the triple correlation to
             # contain phase information out to 2*kmax or num_pix from origin.
-            phase = np.random.uniform(-np.pi, np.pi, num_pix-1)
-            phase = np.concatenate((-phase, np.zeros(1), np.flip(phase)))
+            phase = np.random.uniform(-np.pi, np.pi, num_pix)
+            # Set origin, always zero, needed in computing Phi
+            phase[0] = 0
 
             # Compute Phi matrix
-            Phi = Fluorescence1D.compute_Phi_from_phase(phase[num_pix - 1:])
+            Phi = Fluorescence1D.compute_Phi_from_phase(phase)
 
             # Store in dataset
             f['absPhi'][i] = np.abs(Phi[1:, 1:])
-            # TODO: we don't really need to store the entire phase across the origin
+            # Only storing one quadrant of phase intentionally, redundancy by antisymmetry
             f['phase'][i] = phase
 
 
