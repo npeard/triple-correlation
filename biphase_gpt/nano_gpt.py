@@ -111,6 +111,69 @@ class Block(nn.Module):
         x = x + self.mlp(self.ln_2(x))
         return x
 
+class RegressionCNN(nn.Module):
+    """
+    CNN-based regression head that takes data with n_embd channels of length in_seq_len
+    and applies convolutional layers followed by average pooling to get the final output.
+    """
+
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+
+        # First convolutional layer
+        self.conv1 = nn.Conv1d(
+            in_channels=config.n_embd,
+            out_channels=config.n_embd * 2,
+            kernel_size=3,
+            padding=1
+        )
+
+        # Second convolutional layer
+        self.conv2 = nn.Conv1d(
+            in_channels=config.n_embd * 2,
+            out_channels=config.n_embd * 2,
+            kernel_size=3,
+            padding=1
+        )
+
+        # Final convolutional layer to reduce to desired output channels
+        self.conv3 = nn.Conv1d(
+            in_channels=config.n_embd * 2,
+            out_channels=config.output_dim * config.out_seq_len,
+            kernel_size=1
+        )
+
+        # Activation function
+        self.activation = nn.GELU()
+
+        # Global average pooling will reduce the sequence length dimension
+        self.pool = nn.AdaptiveAvgPool1d(1)
+
+        # Linear layer for final output
+        self.linear = nn.Linear(config.output_dim*config.out_seq_len, config.output_dim*config.out_seq_len)
+
+    def forward(self, x):
+        # Input x has shape (batch_size, seq_len, n_embd)
+        # Reshape to (batch_size, n_embd, seq_len) for conv1d
+        x = x.transpose(1, 2)
+
+        # Apply convolutional layers with activations
+        x = self.activation(self.conv1(x))
+        x = self.activation(self.conv2(x))
+        x = self.conv3(x)
+
+        # Apply global average pooling to reduce sequence length
+        x = self.pool(x)
+
+        # Reshape to (batch_size, output_dim * out_seq_len)
+        x = x.view(x.size(0), -1)
+
+        # Apply linear layer for final output
+        x = self.linear(x)
+
+        return x
+
 @dataclass
 class GPTConfig:
     in_seq_len: int = 5*5      # input sequence length
@@ -144,7 +207,8 @@ class GPT(nn.Module):
         ))
 
         # regression and sequence reduction head
-        self.regression_head = nn.Linear(config.n_embd*config.in_seq_len, config.output_dim*config.out_seq_len)
+        #self.regression_head = nn.Linear(config.n_embd*config.in_seq_len, config.output_dim*config.out_seq_len)
+        self.regression_head = RegressionCNN(config)
         # init all weights
         self.apply(self._init_weights)
         # apply special scaled init to the residual projections, per GPT-2 paper
@@ -202,6 +266,6 @@ class GPT(nn.Module):
             x = block(x)
         x = self.transformer.ln_f(x)
 
-        predictions = self.regression_head(x.flatten(1))
+        predictions = self.regression_head(x)#.flatten(1))
 
         return predictions

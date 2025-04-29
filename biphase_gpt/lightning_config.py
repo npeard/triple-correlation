@@ -57,7 +57,6 @@ class BaseLightningModule(L.LightningModule):
 
         # Configure scheduler
         # scheduler = optim.lr_scheduler.MultiStepLR(optimizer, **self.scheduler_hparams)
-        # TODO: setup proper passing of scheduler_hparams for hyperparameter optimization
         scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, **self.scheduler_hparams)
 
         return {
@@ -67,6 +66,7 @@ class BaseLightningModule(L.LightningModule):
             }
         }
 
+    # TODO: what is this, where is it used?
     def _get_progress_bar_dict(self) -> Dict[str, Any]:
         """Modify progress bar display"""
         items = super()._get_progress_bar_dict()
