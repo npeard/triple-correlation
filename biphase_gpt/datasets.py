@@ -287,14 +287,14 @@ def create_data_loaders(
     Returns:
         Tuple of (train_loader, val_loader, test_loader)
     """
-    train_dataset = AbsPhiDataset(train_path, **dataset_kwargs)
-    val_dataset = AbsPhiDataset(val_path, **dataset_kwargs)
-    test_dataset = AbsPhiDataset(test_path, **dataset_kwargs)
+    # train_dataset = AbsPhiDataset(train_path, **dataset_kwargs)
+    # val_dataset = AbsPhiDataset(val_path, **dataset_kwargs)
+    # test_dataset = AbsPhiDataset(test_path, **dataset_kwargs)
 
     # Only using pretraining dataset for now
-    # train_dataset = PreTrainingDataset(train_path, **dataset_kwargs)
-    # val_dataset = PreTrainingDataset(val_path, **dataset_kwargs)
-    # test_dataset = PreTrainingDataset(test_path, **dataset_kwargs)
+    train_dataset = PreTrainingDataset(train_path, **dataset_kwargs)
+    val_dataset = PreTrainingDataset(val_path, **dataset_kwargs)
+    test_dataset = PreTrainingDataset(test_path, **dataset_kwargs)
 
     train_loader = DataLoader(
         train_dataset,
