@@ -18,7 +18,7 @@ training:
   devices: '1'
   use_logging: true
   wandb_project: "triple_correlation"
-  experiment_name: "numpix21_linear"
+  experiment_name: "numpix21_cnn"
   checkpoint_dir: "./biphase_gpt/checkpoints"
 
 loss:

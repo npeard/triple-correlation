@@ -207,8 +207,8 @@ class GPT(nn.Module):
         ))
 
         # regression and sequence reduction head
-        self.regression_head = nn.Linear(config.n_embd*config.in_seq_len, config.output_dim*config.out_seq_len)
-        #self.regression_head = RegressionCNN(config)
+        #self.regression_head = nn.Linear(config.n_embd*config.in_seq_len, config.output_dim*config.out_seq_len)
+        self.regression_head = RegressionCNN(config)
         # init all weights
         self.apply(self._init_weights)
         # apply special scaled init to the residual projections, per GPT-2 paper
@@ -266,6 +266,6 @@ class GPT(nn.Module):
             x = block(x)
         x = self.transformer.ln_f(x)
 
-        predictions = self.regression_head(x.flatten(1))
+        predictions = self.regression_head(x)#.flatten(1))
 
         return predictions
