@@ -43,32 +43,11 @@ class BaseH5Dataset(Dataset):
         self._cache = {}
         self._cache_keys = []
 
-        # Validate file and get dataset info
+        # Get dataset length
         with h5py.File(self.file_path, 'r') as f:
-            self._validate_file_structure(f)
             self.length = self._get_dataset_length(f)
 
         self.opened_flag = False
-
-    def _validate_file_structure(self, f: h5py.File) -> None:
-        """Validate the HDF5 file has required datasets."""
-        if self.input_key not in f:
-            raise ValueError(f"Input key '{self.input_key}' not found in file")
-        if self.target_key not in f:
-            raise ValueError(f"Target key '{self.target_key}' not found in file")
-
-        # Check that zero-valued edges of inputs have been removed already
-        input_element = f[self.input_key][0]
-        # Get edge elements and validate their sum
-        edges = [input_element[0, ...],  # first in dim 0
-                input_element[:, 0, ...]]  # first in dim 1
-        if input_element.ndim > 2:
-            edges.extend(input_element[..., 0])  # first in dim 2
-        if input_element.ndim > 3:
-            edges.extend(input_element[..., 0, :])  # first in dim 3
-        edge_sum = sum(edge.sum() for edge in edges)
-        if edge_sum < 0.1:
-            raise ValueError(f"Sum of edge elements {edge_sum:.3f} less than threshold 0.1\r\nDid you remember to remove the zero-valued edges?")
 
     def _get_dataset_length(self, f: h5py.File) -> int:
         """Get the length of the dataset."""
@@ -150,6 +129,30 @@ class AbsPhiDataset(BaseH5Dataset):
         self.unpack_diagonals = unpack_diagonals
         self.unpack_orders = unpack_orders
 
+        # Validate file and get dataset info
+        with h5py.File(self.file_path, 'r') as f:
+            self._validate_file_structure(f)
+
+    def _validate_file_structure(self, f: h5py.File) -> None:
+        """Validate the HDF5 file has required datasets."""
+        if self.input_key not in f:
+            raise ValueError(f"Input key '{self.input_key}' not found in file")
+        if self.target_key not in f:
+            raise ValueError(f"Target key '{self.target_key}' not found in file")
+
+        # Check that zero-valued edges of inputs have been removed already
+        input_element = f[self.input_key][0]
+        # Get edge elements and validate their sum
+        edges = [input_element[0, ...],  # first in dim 0
+                input_element[:, 0, ...]]  # first in dim 1
+        if input_element.ndim > 2:
+            edges.extend(input_element[..., 0])  # first in dim 2
+        if input_element.ndim > 3:
+            edges.extend(input_element[..., 0, :])  # first in dim 3
+        edge_sum = sum(edge.sum() for edge in edges)
+        if edge_sum < 0.1:
+            raise ValueError(f"Sum of edge elements {edge_sum:.3f} less than threshold 0.1\r\nDid you remember to remove the zero-valued edges?")
+
     @staticmethod
     def unpack_by_diagonals(x: torch.Tensor) -> torch.Tensor:
         """Unpack a 2D tensor by diagonals from top-right to bottom-left."""
@@ -227,6 +230,18 @@ class PreTrainingDataset(BaseH5Dataset):
         # Get num_pix from HDF5 file attributes
         with h5py.File(file_path, 'r') as f:
             self.num_pix = f.attrs['num_pix']
+
+    def open_hdf5(self):
+        """Open HDF5 file for reading. Overridden from BaseH5Dataset, 
+        no loading of inputs is required for a PreTrainingDataset.
+        Inputs are computed on-the-fly.
+
+        This is done lazily to support multiprocessing in DataLoader.
+        """
+        if not self.opened_flag:
+            self.h5_file = h5py.File(self.file_path, 'r')
+            self.targets = self.h5_file[self.target_key]
+            self.opened_flag = True
 
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
         """Get a single item from the dataset.
@@ -353,16 +368,16 @@ def generate_pretraining_data(
         f.attrs['num_pix'] = num_pix
 
         # Create datasets with chunking and compression
-        Phi_dim = (num_pix//2 + 1)
-        Phi_dim -= 1 # for removal of zero-valued row/column with no information
-        f.create_dataset(
-            'absPhi',
-            shape=(num_samples, Phi_dim, Phi_dim),
-            dtype='float32',
-            chunks=(chunk_size, Phi_dim, Phi_dim),
-            compression='gzip',
-            compression_opts=4
-        )
+        # Phi_dim = (num_pix//2 + 1)
+        # Phi_dim -= 1 # for removal of zero-valued row/column with no information
+        # f.create_dataset(
+        #     'absPhi',
+        #     shape=(num_samples, Phi_dim, Phi_dim),
+        #     dtype='float32',
+        #     chunks=(chunk_size, Phi_dim, Phi_dim),
+        #     compression='gzip',
+        #     compression_opts=4
+        # )
 
         # Only storing one quadrant of phase intentionally, redundancy by antisymmetry
         f.create_dataset(
@@ -387,10 +402,10 @@ def generate_pretraining_data(
             phase[0] = 0
 
             # Compute Phi matrix
-            Phi = Fluorescence1D.compute_Phi_from_phase(phase)
+            #Phi = Fluorescence1D.compute_Phi_from_phase(phase)
 
             # Store in dataset
-            f['absPhi'][i] = np.abs(Phi[1:, 1:])
+            #f['absPhi'][i] = np.abs(Phi[1:, 1:])
             # Only storing one quadrant of phase intentionally, redundancy by antisymmetry
             f['phase'][i] = phase
 
