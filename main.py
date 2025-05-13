@@ -6,7 +6,7 @@ import numpy as np
 import time
 from pathlib import Path
 from biphase_gpt.training import TrainingConfig, ModelTrainer
-from biphase_gpt.datasets import create_train_val_test_datasets
+from biphase_gpt.datasets import create_pretraining_datasets
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Train a new model or test from checkpoint')
@@ -33,14 +33,14 @@ def setup_random_seed(seed=None):
     if seed is None:
         # Generate a random seed between 0 and 2^32 - 1
         seed = random.randint(0, 2**32 - 1)
-    
+
     random.seed(seed)
     np.random.seed(seed)
     return seed
 
 def main():
     args = parse_args()
-    
+
     # For testing mode (checkpoint provided), config is not necessary
     if args.checkpoint:
         print("Loading from checkpoint for quick plotting...")
@@ -48,29 +48,29 @@ def main():
         model_trainer = ModelTrainer(TrainingConfig({},{},{},{}), experiment_name="checkpoint_eval")
         model_trainer.plot_predictions_from_checkpoint(checkpoint_path=args.checkpoint)
         return
-    
+
     # For training mode, load config
     if not args.config:
         raise ValueError("Config file is required for training mode")
-    
+
     config = TrainingConfig.from_yaml(args.config)
-    
+
     # Set random seed from time
     seed = setup_random_seed(int(time.time()))
-    
+
     # Convert single config to list for unified processing
     configs = config if isinstance(config, list) else [config]
     base_config = configs[0]  # Use first config for dataset generation
-    
+
     # Regenerate datasets if requested (using base config)
     if args.regenerate_datasets:
         print(f"\nRegenerating datasets with random seed: {seed}")
-        create_train_val_test_datasets(
+        create_pretraining_datasets(
             output_dir=base_config.data_config['data_dir'],
             **base_config.data_config.get('dataset_params', {})
         )
         print("Dataset regeneration complete!\n")
-    
+
     # Train with each configuration
     for idx, train_config in enumerate(configs):
         print(f"\nStarting training run {idx + 1}/{len(configs)}")

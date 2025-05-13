@@ -19,7 +19,7 @@ import random
 from itertools import product
 
 from biphase_gpt.lightning_config import BaseLightningModule, GPTDecoder
-from biphase_gpt.datasets import create_data_loaders
+from biphase_gpt.datasets import get_data_loaders
 from biphase_gpt.nano_gpt import GPTConfig, GPT
 
 
@@ -253,7 +253,7 @@ class ModelTrainer:
             unpack_orders = self.config.loss_config.get('unpack_orders', False)
         print(f"Unpacking orders in setup_data: {unpack_orders}")
 
-        self.train_loader, self.val_loader, self.test_loader = create_data_loaders(
+        self.train_loader, self.val_loader, self.test_loader = get_data_loaders(
             train_path=train_path,
             val_path=val_path,
             test_path=test_path,

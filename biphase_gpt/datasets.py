@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
-from typing import Optional, Tuple, Dict, Any, Callable
+from ast import Or
+from typing import Optional, Tuple, Dict, Any, Callable, Union
 import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader
@@ -232,7 +233,7 @@ class PreTrainingDataset(BaseH5Dataset):
             self.num_pix = f.attrs['num_pix']
 
     def open_hdf5(self):
-        """Open HDF5 file for reading. Overridden from BaseH5Dataset, 
+        """Open HDF5 file for reading. Overridden from BaseH5Dataset,
         no loading of inputs is required for a PreTrainingDataset.
         Inputs are computed on-the-fly.
 
@@ -281,7 +282,7 @@ class PreTrainingDataset(BaseH5Dataset):
         return inputs, targets
 
 
-def create_data_loaders(
+def get_data_loaders(
     train_path: str,
     val_path: str,
     test_path: str,
@@ -343,7 +344,7 @@ def create_data_loaders(
 
 def generate_pretraining_data(
     file_path: str,
-    num_pix: int,
+    num_pix: Union[int, Tuple[int, int]],
     num_samples: int,
     chunk_size: Optional[int] = None
 ) -> None:
@@ -367,24 +368,23 @@ def generate_pretraining_data(
         f.attrs['num_samples'] = num_samples
         f.attrs['num_pix'] = num_pix
 
-        # Create datasets with chunking and compression
-        # Phi_dim = (num_pix//2 + 1)
-        # Phi_dim -= 1 # for removal of zero-valued row/column with no information
-        # f.create_dataset(
-        #     'absPhi',
-        #     shape=(num_samples, Phi_dim, Phi_dim),
-        #     dtype='float32',
-        #     chunks=(chunk_size, Phi_dim, Phi_dim),
-        #     compression='gzip',
-        #     compression_opts=4
-        # )
+        # Determine the shape for the phase dataset based on num_pix type
+        if isinstance(num_pix, tuple):
+            assert len(num_pix) == 2, "num_pix must be a tuple of length 2 for 2D phase"
+            assert num_pix[0] % 2 == 1 and num_pix[1] % 2 == 1, "num_pix must be odd for 2D phase"
+            assert num_pix[0] == num_pix[1], "num_pix[0] and num_pix[1] must be equal for 2D phase"
+            phase_shape = (num_samples,) + num_pix
+            phase_chunks = (chunk_size,) + num_pix
+        else:
+            phase_shape = (num_samples, num_pix)
+            phase_chunks = (chunk_size, num_pix)
 
         # Only storing one quadrant of phase intentionally, redundancy by antisymmetry
         f.create_dataset(
             'phase',
-            shape=(num_samples, num_pix),
+            shape=phase_shape,
             dtype='float32',
-            chunks=(chunk_size, num_pix),
+            chunks=phase_chunks,
             compression='gzip',
             compression_opts=4
         )
@@ -397,22 +397,25 @@ def generate_pretraining_data(
             # Generate random phase, out to 2*num_pix - 1 where num_pix is the
             # number of pixels in the detector. We expect the triple correlation to
             # contain phase information out to 2*kmax or num_pix from origin.
-            phase = np.random.uniform(-np.pi, np.pi, num_pix)
-            # Set origin, always zero, needed in computing Phi
-            phase[0] = 0
+            if isinstance(num_pix, tuple):
+                # Generate 2D phase array
+                phase = np.random.uniform(-np.pi, np.pi, num_pix)
+                # Set origin (always zero) at the expected position for 2D
+                phase[0, 0] = 0
+            else:
+                # For 1D case, simply generate a 1D phase array
+                phase = np.random.uniform(-np.pi, np.pi, num_pix)
+                # Set origin (always zero) at the beginning for 1D
+                phase[0] = 0
 
-            # Compute Phi matrix
-            #Phi = Fluorescence1D.compute_Phi_from_phase(phase)
-
-            # Store in dataset
-            #f['absPhi'][i] = np.abs(Phi[1:, 1:])
             # Only storing one quadrant of phase intentionally, redundancy by antisymmetry
-            f['phase'][i] = phase
+            # Pre-flatten phase array so we don't do any reshaping during training
+            f['phase'][i] = phase.ravel()
 
 
-def create_train_val_test_datasets(
+def create_pretraining_datasets(
     output_dir: str,
-    num_pix: int = 21,
+    num_pix: int or tuple(int, int) = (21, 21),
     train_samples: int = int(1e6),
     val_samples: int = int(1e4),
     test_samples: int = int(1e4),
@@ -422,7 +425,9 @@ def create_train_val_test_datasets(
 
     Args:
         output_dir: Directory to save the datasets
-        num_pix: Number of pixels in each sample
+        num_pix: Number of pixels in each sample. If tuple, the first element
+        is the number of pixels in the x-direction and the second is the number of pixels in the y-direction.
+        For now we are only supporting square detector geometries.
         train_samples: Number of training samples
         val_samples: Number of validation samples
         test_samples: Number of test samples
@@ -437,6 +442,10 @@ def create_train_val_test_datasets(
         if file_path.exists():
             print(f"Removing existing dataset file: {file}")
             file_path.unlink()
+
+    if isinstance(num_pix, tuple):
+        if num_pix[0] != num_pix[1]:
+            raise ValueError("num_pix must be a square geometry")
 
     print("Generating training dataset...")
     generate_pretraining_data(
@@ -554,3 +563,11 @@ def inspect_pretraining_dataset(file_path: str) -> dict:
             }
         }
     return stats
+
+
+if __name__ == '__main__':
+    generate_pretraining_data(
+        file_path='test.h5',
+        num_pix=(6,7),
+        num_samples=100
+    )
