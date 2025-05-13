@@ -403,8 +403,12 @@ class ModelTrainer:
             ax1.set_title("Inputs")
             plt.colorbar(im1, ax=ax1)
 
-            ax2.plot(y[i, :], label="Targets")
-            ax2.plot(y_hat[i, :], label="Predictions")
+            num_pix = (y[i,:].shape[0] + 1)/2
+            num_pix -= 1
+            ax2.plot(np.arange(-num_pix, num_pix+1, 1), y[i,:], label="Targets")
+            ax2.plot(np.arange(-num_pix, num_pix+1, 1), y_hat[i,:], label="Predictions")
+            ax2.set_xlabel("Pixels")
+            ax2.set_ylabel("phase")
             ax2.legend()
 
             im3 = ax3.imshow(encoded[i, :, :], origin="lower")

@@ -329,8 +329,7 @@ class GPTDecoder(BaseLightningModule):
         encoded = encoded.view_as(x)
 
         # Implement antisymmetry of the predictions and targets for plotting
-        # TODO: is this right? Shouldn't the predictions be flipped before concatenation?
-        full_predictions = torch.concat([-predictions, predictions[:, 1:]], dim=1)
-        full_targets = torch.concat([-y, y[:, 1:]], dim=1)
+        full_predictions = torch.concat([-torch.fliplr(predictions), predictions[:, 1:]], dim=1)
+        full_targets = torch.concat([-torch.fliplr(y), y[:, 1:]], dim=1)
 
         return full_predictions, full_targets, encoded, x

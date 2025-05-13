@@ -14,11 +14,11 @@ training:
   learning_rate: 5e-4
   T_max: 500
   eta_min: 0
-  accelerator: "gpu"
+  accelerator: "cpu"
   devices: '1'
-  use_logging: true
+  use_logging: false
   wandb_project: "triple_correlation"
-  experiment_name: "numpix21_cnn"
+  experiment_name: "check_prediction_antisymmetry"
   checkpoint_dir: "./biphase_gpt/checkpoints"
 
 loss:
@@ -34,7 +34,7 @@ data:
   test_file: "test.h5"
   num_workers: 7
   dataset_params:
-    train_samples: 100000
-    val_samples: 10000
-    test_samples: 10000
-    num_pix: 21
+    train_samples: 1000
+    val_samples: 100
+    test_samples: 100
+    num_pix: 11
