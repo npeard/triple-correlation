@@ -10,6 +10,7 @@ from tqdm import tqdm
 from pathlib import Path
 import matplotlib.pyplot as plt
 from fluo.speckle1d import Fluorescence1D
+from fluo.speckle2d import Fluorescence2D
 
 
 class BaseH5Dataset(Dataset):
@@ -108,54 +109,6 @@ class BaseH5Dataset(Dataset):
         self._cache_keys.append(key)
 
 
-class AbsPhiDataset(BaseH5Dataset):
-    """Dataset for pre-computed abs(Phi) matrices.
-    The corresponding phase that generated abs(Phi) is stored as a target."""
-
-    def __init__(
-        self,
-        file_path: str,
-        input_key: str = "absPhi",
-        target_key: str = "phase",
-        **kwargs
-    ):
-        super().__init__(
-            file_path,
-            input_key,
-            target_key,
-            **kwargs
-        )
-
-        # Validate file and get dataset info
-        with h5py.File(self.file_path, 'r') as f:
-            self._validate_file_structure(f)
-
-    def _validate_file_structure(self, f: h5py.File) -> None:
-        """Validate the HDF5 file has required datasets."""
-        if self.input_key not in f:
-            raise ValueError(f"Input key '{self.input_key}' not found in file")
-        if self.target_key not in f:
-            raise ValueError(f"Target key '{self.target_key}' not found in file")
-
-        # Check that zero-valued edges of inputs have been removed already
-        input_element = f[self.input_key][0]
-        # Get edge elements and validate their sum
-        edges = [input_element[0, ...],  # first in dim 0
-                input_element[:, 0, ...]]  # first in dim 1
-        if input_element.ndim > 2:
-            edges.extend(input_element[..., 0])  # first in dim 2
-        if input_element.ndim > 3:
-            edges.extend(input_element[..., 0, :])  # first in dim 3
-        edge_sum = sum(edge.sum() for edge in edges)
-        if edge_sum < 0.1:
-            raise ValueError(f"Sum of edge elements {edge_sum:.3f} less than threshold 0.1\r\nDid you remember to remove the zero-valued edges?")
-
-    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
-        inputs, targets = super().__getitem__(idx)
-        inputs = inputs.flatten()  # Flatten
-        return inputs, targets
-
-
 class PreTrainingDataset(BaseH5Dataset):
     """Dataset for computing Phi matrices on the fly from phases.
 
@@ -166,7 +119,6 @@ class PreTrainingDataset(BaseH5Dataset):
     def __init__(
         self,
         file_path: str,
-        input_key: str = "absPhi",
         target_key: str = "phase",
         **kwargs
     ):
@@ -174,21 +126,23 @@ class PreTrainingDataset(BaseH5Dataset):
 
         Args:
             file_path: Path to HDF5 file containing phase data
-            transform: Optional transform to apply to computed Phi matrices
-            target_transform: Optional transform to apply to phase data
+            target_key: Key for phase data in the HDF5 file
             cache_size: Number of items to cache (0 for no caching)
-            flatten_output: If True, flatten the Phi matrices before returning
         """
         super().__init__(
             file_path=file_path,
-            input_key="absPhi",
-            target_key="phase",
+            input_key=None,
+            target_key=target_key,
             **kwargs
         )
 
         # Get num_pix from HDF5 file attributes
         with h5py.File(file_path, 'r') as f:
+            # will be int for 1D phase, np.ndarray for 2D phase
             self.num_pix = f.attrs['num_pix']
+            # Convert to tuple for consistency with convention in other files
+            if isinstance(self.num_pix, np.ndarray):
+                self.num_pix = tuple(self.num_pix)
 
     def open_hdf5(self):
         """Open HDF5 file for reading. Overridden from BaseH5Dataset,
@@ -203,7 +157,8 @@ class PreTrainingDataset(BaseH5Dataset):
             self.opened_flag = True
 
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Get a single item from the dataset.
+        """Get a single target from the dataset. Inputs are computed on the fly
+        to save memory (essential for 2D phases). Do not store inputs in cache.
 
         Returns:
             Tuple[torch.Tensor, torch.Tensor]: (Phi matrix, phase array)
@@ -211,7 +166,7 @@ class PreTrainingDataset(BaseH5Dataset):
         """
         # Check cache first
         if idx in self._cache:
-            inputs, targets = self._cache[idx]
+            targets = self._cache[idx]
         else:
             # Lazy loading of HDF5 file
             self.open_hdf5()
@@ -219,23 +174,28 @@ class PreTrainingDataset(BaseH5Dataset):
             # Get phase data
             phase = self.targets[idx]
 
-            # Compute Phi matrix on the fly using only the relevant part of phase
-            inputs = Fluorescence1D.compute_Phi_from_phase(phase)
-            inputs = np.abs(inputs[1:, 1:])  # Remove zero-valued edges
-
-            # Apply transforms if specified
-            if self.transform is not None:
-                inputs = self.transform(inputs)
-            if self.target_transform is not None:
-                phase = self.target_transform(phase)
+            # Determine how to generate inputs from phase target
+            if isinstance(self.num_pix, int) or isinstance(self.num_pix, np.int64):
+                # Compute Phi matrix on the fly using only the relevant part of phase
+                inputs = Fluorescence1D.compute_Phi_from_phase(phase)
+                # Remove zero-valued edges
+                inputs = np.abs(inputs[1:, 1:])
+            elif isinstance(self.num_pix, tuple):
+                # 2D phase has been flattened, so we need to reshape it to be compatible with Fluorescence2D
+                phase = phase.reshape(self.num_pix[0], self.num_pix[1])
+                # Compute Phi matrix on the fly using only the relevant part of phase
+                inputs = Fluorescence2D.compute_Phi_from_phase(phase)
+                # Remove zero-valued edges
+                inputs = np.abs(inputs[1:, 1:, 1:, 1:])
 
             # Add to cache
             if self.cache_size > 0:
-                self._add_to_cache(idx, (inputs, phase))
+                self._add_to_cache(idx, phase)
 
-        # Convert to tensors
+        # Convert to tensors and flatten
         inputs = torch.FloatTensor(inputs).flatten()
-        targets = torch.FloatTensor(phase)
+        # Flatten 2D phase array (reshaped above), 1D phase array is already flattened
+        targets = torch.FloatTensor(phase).flatten()
 
         return inputs, targets
 
@@ -331,8 +291,8 @@ def generate_pretraining_data(
             assert len(num_pix) == 2, "num_pix must be a tuple of length 2 for 2D phase"
             assert num_pix[0] % 2 == 1 and num_pix[1] % 2 == 1, "num_pix must be odd for 2D phase"
             assert num_pix[0] == num_pix[1], "num_pix[0] and num_pix[1] must be equal for 2D phase"
-            phase_shape = (num_samples,) + num_pix
-            phase_chunks = (chunk_size,) + num_pix
+            phase_shape = (num_samples, num_pix[0]*num_pix[1])
+            phase_chunks = (chunk_size, num_pix[0]*num_pix[1])
         else:
             phase_shape = (num_samples, num_pix)
             phase_chunks = (chunk_size, num_pix)
@@ -401,6 +361,9 @@ def create_pretraining_datasets(
             print(f"Removing existing dataset file: {file}")
             file_path.unlink()
 
+    if isinstance(num_pix, str):
+        # num_pix is sometimes loaded from YAML config as a string
+        num_pix = eval(num_pix)
     if isinstance(num_pix, tuple):
         if num_pix[0] != num_pix[1]:
             raise ValueError("num_pix must be a square geometry")

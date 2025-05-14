@@ -57,21 +57,38 @@ class TrainingConfig:
         self.data_config.setdefault("val_file", "val.h5")
         self.data_config.setdefault("test_file", "test.h5")
         self.data_config.setdefault("num_workers", 4)
-        self.data_config.setdefault("dataset_params", {
-            "train_samples": 10000,
-            "val_samples": 1000,
-            "test_samples": 1000,
-            "num_pix": 21
-        })
+        # self.data_config.setdefault("dataset_params", {
+        #     "train_samples": 10000,
+        #     "val_samples": 1000,
+        #     "test_samples": 1000,
+        #     "num_pix": 21
+        # })
 
     def _create_gpt_config(self) -> GPTConfig:
         """Create GPTConfig from model configuration"""
         num_pix = self.data_config.get("dataset_params", {}).get("num_pix", 21)
-        Phi_dim = num_pix // 2 + 1
-        Phi_dim -= 1 # for removal of zero-valued row/column with no information
+        if isinstance(num_pix, str):
+            num_pix = eval(num_pix)
+
+        # Determine whether we are training a 1D or 2D phase prediction model
+        # and set the sequence lengths accordingly
+        if isinstance(num_pix, tuple):
+            num_pix = num_pix[0]
+            Phi_dim = num_pix // 2 + 1
+            Phi_dim -= 1 # for removal of zero-valued row/column with no information
+            in_seq_len = Phi_dim**4
+            out_seq_len = num_pix**2
+        elif isinstance(num_pix, int):
+            Phi_dim = num_pix // 2 + 1
+            Phi_dim -= 1 # for removal of zero-valued row/column with no information
+            in_seq_len = Phi_dim**2
+            out_seq_len = num_pix
+        else:
+            raise ValueError(f"Unsupported type for num_pix in _create_gpt_config: {type(num_pix)}")
+
         return GPTConfig(
-            in_seq_len=Phi_dim**2,
-            out_seq_len=num_pix,
+            in_seq_len=in_seq_len,
+            out_seq_len=out_seq_len,
             n_layer=self.model_config.get("n_layer", 1),
             n_head=self.model_config.get("n_head", 4),
             n_embd=self.model_config.get("n_embd", 128),
@@ -257,6 +274,9 @@ class ModelTrainer:
 
     def create_lightning_module(self) -> BaseLightningModule:
         """Create lightning module based on model type"""
+        num_pix = self.config.data_config.get("dataset_params", {}).get("num_pix", 21)
+        if isinstance(num_pix, str):
+            num_pix = eval(num_pix)
         if isinstance(self.model, GPT):
             return GPTDecoder(
                 model_type='GPT',
@@ -270,7 +290,8 @@ class ModelTrainer:
                     'T_max': self.config.training_config['T_max'],
                     'eta_min': self.config.training_config['eta_min']
                 },
-                loss_hparams=self.config.loss_config
+                loss_hparams=self.config.loss_config,
+                num_pix=num_pix,
             )
         else:
             raise ValueError(f"Unknown model type, can't initialize Lightning.")
@@ -355,7 +376,12 @@ class ModelTrainer:
             )
 
     def plot_predictions_from_checkpoint(self, checkpoint_path: str):
-        """Plot predictions from a checkpoint"""
+        """Plot predictions from a checkpoint
+
+        Handles both 1D and 2D cases:
+        - 1D case: Shows 3 subplots (Inputs, Predictions/Targets, Encoded)
+        - 2D case: Shows 4 subplots (Inputs, Predictions, Targets, Encoded)
+        """
         import numpy as np
         import matplotlib.pyplot as plt
 
@@ -365,45 +391,87 @@ class ModelTrainer:
         # setup dataloaders
         self.setup_data()
 
+        # get num_pix from the test dataset so we can properly organize the prediction output
+        num_pix = self.test_loader.dataset.num_pix
+        # Cast np.int64 to int so that predict_step doesn't throw an error
+        if isinstance(num_pix, np.int64):
+            num_pix = int(num_pix)
+        model.num_pix = num_pix
+
         predictions = trainer.predict(model, self.test_loader)
 
-        print(predictions[0][0].numpy().shape)
-        print(predictions[0][2].numpy().shape)
         # y[batch_idx][return_idx], return_idx 0...3:
         # 0: Predictions, 1: Targets, 2: Encoded, 3: Inputs
-        batch_len = len(predictions[0][0].numpy()[:, 0])
+        batch_len = len(predictions[0][0].numpy())
         y_hat = predictions[0][0].numpy()
         y = predictions[0][1].numpy()
         encoded = predictions[0][2].numpy()
         inputs = predictions[0][3].numpy()
 
+        # Print shapes for debugging
+        print(f"Predictions shape: {y_hat.shape}")
+        print(f"Targets shape: {y.shape}")
+        print(f"Encoded shape: {encoded.shape}")
+        print(f"Inputs shape: {inputs.shape}")
+
+        # Determine if we're dealing with 1D or 2D data
+        is_2d = len(y_hat.shape) > 2 and y_hat.shape[-1] > 1 and y_hat.shape[-2] > 1
+
         for i in range(batch_len):
-            fig = plt.figure(figsize=(7, 7))
-            (ax1, ax2), (ax3, ax4) = fig.subplots(2, 2)
+            if is_2d:
+                # 2D case: 4 subplots (Inputs, Predictions, Targets, Encoded)
+                fig, axes = plt.subplots(2, 2, figsize=(10, 8))
+                (ax1, ax2), (ax3, ax4) = axes
 
-            im1 = ax1.imshow(inputs[i, :, :], origin="lower")
-            ax1.set_title("Inputs")
-            plt.colorbar(im1, ax=ax1)
+                # Plot inputs
+                im1 = ax1.imshow(inputs[i], origin="lower")
+                ax1.set_title("Inputs")
+                plt.colorbar(im1, ax=ax1)
 
-            num_pix = (y[i,:].shape[0] + 1)/2
-            num_pix -= 1
-            ax2.plot(np.arange(-num_pix, num_pix+1, 1), y[i,:], label="Targets")
-            ax2.plot(np.arange(-num_pix, num_pix+1, 1), y_hat[i,:], label="Predictions")
-            ax2.set_xlabel("Pixels")
-            ax2.set_ylabel("phase")
-            ax2.legend()
+                # Plot predictions
+                im2 = ax2.imshow(y_hat[i], origin="lower")
+                ax2.set_title("Predictions")
+                plt.colorbar(im2, ax=ax2)
 
-            im3 = ax3.imshow(encoded[i, :, :], origin="lower")
-            ax3.set_title("Encoded")
-            plt.colorbar(im3, ax=ax3)
+                # Plot targets
+                im3 = ax3.imshow(y[i], origin="lower")
+                ax3.set_title("Targets")
+                plt.colorbar(im3, ax=ax3)
 
-            # TODO: currently, _encode returns abs(Phi) and not the sign info
-            # So this plot shows nothing for now.
-            im4 = ax4.imshow(np.sign(encoded[i, :, :]), origin="lower")
-            ax4.set_title("Sign Encoded")
-            plt.colorbar(im4, ax=ax4)
+                # Plot encoded
+                im4 = ax4.imshow(encoded[i], origin="lower")
+                ax4.set_title("Encoded")
+                plt.colorbar(im4, ax=ax4)
+            else:
+                # 1D case: 3 subplots (Inputs, Predictions/Targets, Encoded)
+                fig = plt.figure(figsize=(10, 8))
+                gs = plt.GridSpec(2, 2, figure=fig)
 
-            # TODO: print some extra config info here
+                # Create 3 subplots: top-left, top-right, and bottom spanning both columns
+                ax1 = fig.add_subplot(gs[0, 0])  # Inputs
+                ax2 = fig.add_subplot(gs[0, 1])  # Predictions/Targets
+                ax3 = fig.add_subplot(gs[1, 0])  # Encoded (spans both columns)
 
+                # Plot inputs
+                im1 = ax1.imshow(inputs[i], origin="lower")
+                ax1.set_title("Inputs")
+                plt.colorbar(im1, ax=ax1)
+
+                # Plot predictions and targets
+                num_pix = (y[i].shape[0] + 1) / 2 - 1
+                x_range = np.arange(-num_pix, num_pix + 1, 1)
+                ax2.plot(x_range, y[i], label="Targets")
+                ax2.plot(x_range, y_hat[i], label="Predictions")
+                ax2.set_xlabel("Pixels")
+                ax2.set_ylabel("Phase")
+                ax2.legend()
+
+                # Plot encoded
+                im3 = ax3.imshow(encoded[i], origin="lower")
+                ax3.set_title("Encoded")
+                plt.colorbar(im3, ax=ax3)
+
+            # Add some config info as title
+            plt.suptitle(f"Sample {i+1}/{batch_len}")
             plt.tight_layout()
             plt.show()

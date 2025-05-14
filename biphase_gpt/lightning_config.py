@@ -1,11 +1,9 @@
 #!/usr/bin/env python
 
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple, Union
 import torch
 from torch import optim, nn
 import lightning as L
-from torch.nn import functional as F
-from biphase_gpt.datasets import AbsPhiDataset
 from biphase_gpt.nano_gpt import GPT, GPTConfig
 
 
@@ -106,6 +104,7 @@ class GPTDecoder(BaseLightningModule):
         optimizer_hparams: Optional[Dict] = None,
         scheduler_hparams: Optional[Dict] = None,
         loss_hparams: Optional[Dict] = None,
+        num_pix: Union[int, tuple] = None,
     ):
         """
         Args:
@@ -115,6 +114,8 @@ class GPTDecoder(BaseLightningModule):
             optimizer_hparams: Hyperparameters for the optimizer
             scheduler_hparams: Hyperparameters for the learning rate scheduler
             loss_hparams: Hyperparameters for the loss function
+            num_pix: Number of pixels in the phase array, used to determine how to
+            do the encoding loss, 1D vs 2D
         """
         # Create GPT model
         if model_type != 'GPT':
@@ -122,8 +123,9 @@ class GPTDecoder(BaseLightningModule):
 
         model_hparams = model_hparams or {}
         gpt_config = GPTConfig(**model_hparams)
-        print("is_causal", gpt_config.is_causal)
         model = GPT(gpt_config)
+
+        self.num_pix = num_pix
 
         super().__init__(
             model=model,
@@ -161,7 +163,7 @@ class GPTDecoder(BaseLightningModule):
         Compute loss between re-encoded abs(Phi) matrix and input abs(Phi) matrix.
 
         Args:
-            phase: Predicted phase, both quadrants included
+            phase: Predicted phase, single quadrant
             absPhi: Input absolute Phi matrix sequence, has length
             ((n//2+1)//2+1) - 1)**2 where n is the length of the predicted
             phase (nanoGPT is configured to predict the full antisymmetric
@@ -170,7 +172,16 @@ class GPTDecoder(BaseLightningModule):
         Returns:
             torch.Tensor: MSE loss between re-encoded and input abs(Phi)
         """
-        encoded = self._encode(phase).flatten(start_dim=1)
+        if isinstance(self.num_pix, tuple):
+            # 2D phase has been flattened, so we need to reshape it to be compatible with _encode_2D
+            # should have shape (batch_size, num_pix, num_pix)
+            phase = phase.view(-1, self.num_pix[0], self.num_pix[1])
+            encoded = self._encode_2D(phase).flatten(start_dim=1)
+        elif isinstance(self.num_pix, int):
+            encoded = self._encode(phase).flatten(start_dim=1)
+        else:
+            raise ValueError("num_pix must be int or tuple")
+
         loss = nn.MSELoss()(encoded, absPhi)
 
         return loss
@@ -181,7 +192,7 @@ class GPTDecoder(BaseLightningModule):
         """Re-encode abs(Phi) matrix from predicted phase.
 
         Args:
-            phase: Predicted phase, both quadrants included
+            phase: Predicted phase, single quadrant included
         Returns:
             torch.Tensor: Re-encoded abs(Phi) matrix
         """
@@ -210,7 +221,7 @@ class GPTDecoder(BaseLightningModule):
         Fluorescence2D.compute_Phi_from_phase but implemented in PyTorch.
 
         Args:
-            phase: Predicted phase tensor of shape (batch_size, nx, ny)
+            phase: Predicted phase tensor of shape (batch_size, num_pix, num_pix)
         Returns:
             torch.Tensor: Re-encoded abs(Phi) 4D tensor of shape (batch_size, half_nx, half_ny, half_nx, half_ny)
         """
@@ -236,6 +247,9 @@ class GPTDecoder(BaseLightningModule):
         half_nx = nx // 2 + 1
         half_ny = ny // 2 + 1
         Phi = Phi[:, :half_nx, :half_ny, :half_nx, :half_ny]
+
+        # Remove zero row and column
+        Phi = Phi[:, 1:, 1:, 1:, 1:]
 
         # Take absolute value for the final output
         Phi_abs = torch.abs(Phi)
@@ -269,11 +283,8 @@ class GPTDecoder(BaseLightningModule):
 
         # Verify encoding/unpacking order during sanity check (first validation)
         if self.trainer.sanity_checking:
-            # Re-encode the targets and compare with input
-            encoded = self._encode(y)
-            encoded = encoded.flatten(start_dim=1)
-
-            encoding_loss = nn.MSELoss()(encoded, x)
+            # Re-encode the targets and compare with input, they should be identical
+            encoding_loss = self.encoding_loss(y, x)
             assert encoding_loss < 1e-6, f"Encoding verification failed! Loss: {encoding_loss:.2e}"
             print(f"✓ Encoding verification passed (loss: {encoding_loss:.2e})")
 
@@ -302,12 +313,25 @@ class GPTDecoder(BaseLightningModule):
         """
         x, y = batch
         predictions = self.model(x)
-        encoded = self._encode(predictions)
-        # reshape x to square
-        x = x.view_as(encoded)
-
-        # Implement antisymmetry of the predictions and targets for plotting
-        full_predictions = torch.concat([-torch.fliplr(predictions), predictions[:, 1:]], dim=1)
-        full_targets = torch.concat([-torch.fliplr(y), y[:, 1:]], dim=1)
+        if isinstance(self.num_pix, tuple):
+            # 2D phase has been flattened, so we need to reshape it to be compatible with _encode_2D
+            # should have shape (batch_size, num_pix, num_pix)
+            predictions = predictions.view(-1, self.num_pix[0], self.num_pix[1])
+            encoded = self._encode_2D(predictions)
+            x = x.view_as(encoded)
+            # Get a 2D slice of the 4D inputs and re-encoded outputs
+            x = x[:, 1, 1, :, :]
+            encoded = encoded[:, 1, 1, :, :]
+            # TODO: implement antisymmetry of the predictions and targets for plotting
+            full_predictions = predictions
+            full_targets = y.view_as(predictions)
+        elif isinstance(self.num_pix, int):
+            encoded = self._encode(predictions)
+            x = x.view_as(encoded)
+            # Implement antisymmetry of the predictions and targets for plotting
+            full_predictions = torch.concat([-torch.fliplr(predictions), predictions[:, 1:]], dim=1)
+            full_targets = torch.concat([-torch.fliplr(y), y[:, 1:]], dim=1)
+        else:
+            raise ValueError("num_pix must be int or tuple")
 
         return full_predictions, full_targets, encoded, x
