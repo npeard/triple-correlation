@@ -24,8 +24,6 @@ training:
 loss:
   use_encoding_loss: true
   encoding_weight: 1.0
-  unpack_diagonals: false
-  unpack_orders: false
 
 data:
   data_dir: "./biphase_gpt/data"

@@ -206,8 +206,8 @@ class GPT(nn.Module):
             ln_f = LayerNorm(config.n_embd, bias=config.bias),
         ))
 
-        # regression and sequence reduction head
-        #self.regression_head = nn.Linear(config.n_embd*config.in_seq_len, config.output_dim*config.out_seq_len)
+        # regression head
+        # We use a CNN here, because a simple MLP or Linear layer would be enormous
         self.regression_head = RegressionCNN(config)
         # init all weights
         self.apply(self._init_weights)
@@ -257,8 +257,10 @@ class GPT(nn.Module):
 
         # Input sequence processing
         pos = torch.arange(0, seq_len, dtype=torch.long, device=device)
-        tok_emb = self.transformer.wte(x)  # project inputs to embedding dimension (batch_size, seq_len, n_embd)
-        pos_emb = self.transformer.wpe(pos)  # position embeddings of shape (seq_len, n_embd)
+        # project inputs to embedding dimension (batch_size, seq_len, n_embd)
+        tok_emb = self.transformer.wte(x)
+        # position embeddings of shape (seq_len, n_embd)
+        pos_emb = self.transformer.wpe(pos)
         x = self.transformer.drop(tok_emb + pos_emb)
 
         # Process through transformer blocks
@@ -266,6 +268,6 @@ class GPT(nn.Module):
             x = block(x)
         x = self.transformer.ln_f(x)
 
-        predictions = self.regression_head(x)#.flatten(1))
+        predictions = self.regression_head(x)
 
         return predictions

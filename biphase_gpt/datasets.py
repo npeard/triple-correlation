@@ -109,7 +109,7 @@ class BaseH5Dataset(Dataset):
 
 
 class AbsPhiDataset(BaseH5Dataset):
-    """Dataset for pre-computed abs(Phi) matrices with optional diagonal unpacking.
+    """Dataset for pre-computed abs(Phi) matrices.
     The corresponding phase that generated abs(Phi) is stored as a target."""
 
     def __init__(
@@ -117,8 +117,6 @@ class AbsPhiDataset(BaseH5Dataset):
         file_path: str,
         input_key: str = "absPhi",
         target_key: str = "phase",
-        unpack_diagonals: bool = False,
-        unpack_orders: bool = False,
         **kwargs
     ):
         super().__init__(
@@ -127,8 +125,6 @@ class AbsPhiDataset(BaseH5Dataset):
             target_key,
             **kwargs
         )
-        self.unpack_diagonals = unpack_diagonals
-        self.unpack_orders = unpack_orders
 
         # Validate file and get dataset info
         with h5py.File(self.file_path, 'r') as f:
@@ -154,45 +150,9 @@ class AbsPhiDataset(BaseH5Dataset):
         if edge_sum < 0.1:
             raise ValueError(f"Sum of edge elements {edge_sum:.3f} less than threshold 0.1\r\nDid you remember to remove the zero-valued edges?")
 
-    @staticmethod
-    def unpack_by_diagonals(x: torch.Tensor) -> torch.Tensor:
-        """Unpack a 2D tensor by diagonals from top-right to bottom-left."""
-        # First flip left-right
-        x = torch.fliplr(x)
-
-        # Get dimensions
-        n = x.size(-1)
-        assert x.size(-1) == x.size(-2), "Input tensor must be square"
-
-        # Extract diagonals from offset n-1 to -(n-1)
-        diagonals = [torch.diagonal(x, offset=offset) for offset in range(n-1, -(n), -1)]
-
-        # Concatenate all diagonals into single tensor
-        return torch.cat(diagonals)
-
-    @staticmethod
-    def unpack_by_orders(x: torch.Tensor) -> torch.Tensor:
-        """Unpack a 2D tensor by orders along the diagonal. Singles, doubles, triples, etc.,
-        orders of the difference equation as in Shoulga et al."""
-        orders = []
-        for n in range(x.size(0)):
-            # Get column (including diagonal)
-            col = x[n:, n]
-            # Get row (excluding diagonal to avoid double counting)
-            row = x[n, n+1:]
-            orders.append(torch.cat([col, row]))
-        return torch.cat(orders)
-
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
         inputs, targets = super().__getitem__(idx)
-
-        if self.unpack_diagonals:
-            inputs = self.unpack_by_diagonals(inputs)
-        elif self.unpack_orders:
-            inputs = self.unpack_by_orders(inputs)
-        else:
-            inputs = inputs.flatten()  # Flatten
-
+        inputs = inputs.flatten()  # Flatten
         return inputs, targets
 
 
@@ -208,8 +168,6 @@ class PreTrainingDataset(BaseH5Dataset):
         file_path: str,
         input_key: str = "absPhi",
         target_key: str = "phase",
-        unpack_diagonals: bool = False,
-        unpack_orders: bool = False,
         **kwargs
     ):
         """Initialize the dataset.

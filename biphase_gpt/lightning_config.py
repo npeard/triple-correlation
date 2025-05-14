@@ -149,18 +149,9 @@ class GPTDecoder(BaseLightningModule):
         Returns:
             torch.Tensor: MSE loss between re-encoded and input abs(Phi)
         """
-        encoded = self._encode(phase)
-
-        if self.loss_hparams.get("unpack_diagonals", False):
-            encoded = self._unpack_by_diagonals_batched(encoded)
-        elif self.loss_hparams.get("unpack_orders", False):
-            encoded = self._unpack_by_orders_batched(encoded)
-        else:
-            encoded = encoded.flatten(start_dim=1)  # Flatten
-
-        # Compare with input. Both should be flat and unpacked
-        # from square in the same order.
+        encoded = self._encode(phase).flatten(start_dim=1)
         loss = nn.MSELoss()(encoded, absPhi)
+
         return loss
 
     @staticmethod
@@ -188,67 +179,6 @@ class GPTDecoder(BaseLightningModule):
         # absolute value
         encoded = torch.abs(encoded)
         return encoded
-
-    @staticmethod
-    def _unpack_by_diagonals_batched(x: torch.Tensor) -> torch.Tensor:
-        """
-        Unpack a batch of square matrices by diagonals, similar to AbsPhiDataset.unpack_by_diagonals
-        but handles batched input.
-
-        Args:
-            x: Input tensor of shape (batch_size, n, n)
-
-        Returns:
-            torch.Tensor: Flattened tensor containing diagonals in order from top-right to bottom-left
-        """
-        # First flip left-right for each matrix in batch
-        x = torch.flip(x, dims=[-1])
-
-        # Get dimensions
-        batch_size, n, _ = x.shape
-        assert x.size(-1) == x.size(-2), "Input tensors must be square"
-
-        # Extract diagonals from offset n-1 to -(n-1) for all matrices in batch at once
-        diagonals = []
-        for offset in range(n-1, -(n), -1):
-            # Get diagonals for all batches at once
-            diag = torch.diagonal(x, offset=offset, dim1=1, dim2=2)  # Shape: (batch_size, diagonal_length)
-            diagonals.append(diag)
-
-        # Concatenate all diagonals along the second dimension
-        return torch.cat(diagonals, dim=1)
-
-    @staticmethod
-    def _unpack_by_orders_batched(x: torch.Tensor) -> torch.Tensor:
-        """
-        Unpack a batch of square matrices by orders along the diagonal, similar to AbsPhiDataset.unpack_by_orders
-        but handles batched input.
-
-        Args:
-            x: Input tensor of shape (batch_size, n, n)
-
-        Returns:
-            torch.Tensor: Flattened tensor containing orders along the diagonal
-        """
-        # Get dimensions
-        batch_size, n, _ = x.shape
-        assert x.size(-1) == x.size(-2), "Input tensors must be square"
-
-        # Extract orders for all matrices in batch at once
-        orders = []
-        for i in range(n):
-            # For each order, we need to concatenate:
-            # 1. The column from row i to the end (including diagonal)
-            # 2. The row from column i+1 to the end (excluding diagonal to avoid double counting)
-            col = x[:, i:, i]  # Shape: (batch_size, n-i)
-            row = x[:, i, i+1:]  # Shape: (batch_size, n-i-1)
-
-            # Concatenate row and column for each batch
-            order = torch.cat([col, row], dim=1)
-            orders.append(order)
-
-        # Concatenate all orders along the second dimension
-        return torch.cat(orders, dim=1)
 
     def training_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> torch.Tensor:
         """Training step for GPT model.
@@ -279,12 +209,7 @@ class GPTDecoder(BaseLightningModule):
         if self.trainer.sanity_checking:
             # Re-encode the targets and compare with input
             encoded = self._encode(y)
-            if self.loss_hparams.get("unpack_diagonals", False):
-                encoded = self._unpack_by_diagonals_batched(encoded)
-            elif self.loss_hparams.get("unpack_orders", False):
-                encoded = self._unpack_by_orders_batched(encoded)
-            else:
-                encoded = encoded.flatten(start_dim=1)
+            encoded = encoded.flatten(start_dim=1)
 
             encoding_loss = nn.MSELoss()(encoded, x)
             assert encoding_loss < 1e-6, f"Encoding verification failed! Loss: {encoding_loss:.2e}"
@@ -318,15 +243,6 @@ class GPTDecoder(BaseLightningModule):
         encoded = self._encode(predictions)
         # reshape x to square
         x = x.view_as(encoded)
-        # Use the same unpacking logic as in AbsPhiDataset
-        if self.loss_hparams.get("unpack_diagonals", False):
-            encoded = self._unpack_by_diagonals_batched(encoded)
-        elif self.loss_hparams.get("unpack_orders", False):
-            encoded = self._unpack_by_orders_batched(encoded)
-        else:
-            encoded = encoded.flatten(start_dim=1)  # Flatten
-        # reshape encoded to square to match x
-        encoded = encoded.view_as(x)
 
         # Implement antisymmetry of the predictions and targets for plotting
         full_predictions = torch.concat([-torch.fliplr(predictions), predictions[:, 1:]], dim=1)

@@ -213,7 +213,7 @@ class ModelTrainer:
             print("FlashAttention available:", torch.backends.cuda.flash_sdp_enabled())
 
 
-    def setup_data(self, unpack_diagonals: bool = None, unpack_orders: bool = None):
+    def setup_data(self):
         """Setup data loaders"""
         # Convert data_dir to absolute path
         base_dir = Path(__file__).parent.parent  # Go up two levels from training.py
@@ -238,29 +238,12 @@ class ModelTrainer:
         val_path = resolve_path(data_dir, self.config.data_config.get('val_file'))
         test_path = resolve_path(data_dir, self.config.data_config.get('test_file'))
 
-        # unpack diagonally or square
-        if unpack_diagonals is None:
-            # unpack_diagonals should only not be None during prediction where
-            # we need to setup the test data loader with correct unpacking
-            print("getting unpack_diagonals from config YAML...")
-            unpack_diagonals = self.config.loss_config.get('unpack_diagonals', False)
-        print(f"Unpacking diagonals in setup_data: {unpack_diagonals}")
-
-        if unpack_orders is None:
-            # unpack_orders should only not be None during prediction where
-            # we need to setup the test data loader with correct unpacking
-            print("getting unpack_orders from config YAML...")
-            unpack_orders = self.config.loss_config.get('unpack_orders', False)
-        print(f"Unpacking orders in setup_data: {unpack_orders}")
-
         self.train_loader, self.val_loader, self.test_loader = get_data_loaders(
             train_path=train_path,
             val_path=val_path,
             test_path=test_path,
             batch_size=self.config.training_config['batch_size'],
             num_workers=self.config.data_config['num_workers'],
-            unpack_diagonals=unpack_diagonals,
-            unpack_orders=unpack_orders
         )
 
     def create_model(self) -> BaseLightningModule:
@@ -379,9 +362,8 @@ class ModelTrainer:
         model = GPTDecoder.load_from_checkpoint(checkpoint_path)
         trainer = L.Trainer(accelerator='cpu', logger=[])
 
-        # setup dataloaders with correct unpacking
-        self.setup_data(unpack_diagonals=model.loss_hparams["unpack_diagonals"],
-                        unpack_orders=model.loss_hparams["unpack_orders"])
+        # setup dataloaders
+        self.setup_data()
 
         predictions = trainer.predict(model, self.test_loader)
 
