@@ -57,6 +57,9 @@ def test_encode_2D_equivalence():
     # Get output from Fluorescence2D.compute_Phi_from_phase
     fluo_output = Fluorescence2D.compute_Phi_from_phase(phase_np)
 
+    # Take absolute value and remove first row and column to match GPTDecoder output
+    fluo_output = np.abs(fluo_output[1:, 1:, 1:, 1:])
+
     # Get output from our PyTorch implementation
     gpt_output = GPTDecoder._encode_2D(phase_torch)
 
