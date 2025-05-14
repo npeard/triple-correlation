@@ -9,6 +9,27 @@ from biphase_gpt.datasets import AbsPhiDataset
 from biphase_gpt.nano_gpt import GPT, GPTConfig
 
 
+@torch.jit.script
+def roll2d_torch(arr: torch.Tensor, shift_x: int, shift_y: int) -> torch.Tensor:
+    """Torch-compatible implementation of np.roll for 2D arrays.
+
+    Args:
+        arr: 2D input tensor of shape (batch_size, nx, ny)
+        shift_x: Number of places to shift along first spatial dimension
+        shift_y: Number of places to shift along second spatial dimension
+
+    Returns:
+        torch.Tensor: Shifted tensor of same shape as input
+    """
+    # Get dimensions
+    batch_size, nx, ny = arr.shape
+
+    # Use torch.roll for each dimension separately
+    out = torch.roll(arr, shifts=shift_x, dims=1)  # Roll along x dimension
+    out = torch.roll(out, shifts=shift_y, dims=2)  # Roll along y dimension
+
+    return out
+
 class BaseLightningModule(L.LightningModule):
     """Base Lightning Module for all models"""
 
@@ -179,6 +200,47 @@ class GPTDecoder(BaseLightningModule):
         # absolute value
         encoded = torch.abs(encoded)
         return encoded
+
+    @staticmethod
+    @torch.jit.script
+    def _encode_2D(phase: torch.Tensor) -> torch.Tensor:
+        """Re-encode abs(Phi) matrix from predicted 2D phase.
+
+        This is a 2D version of _encode that works with 2D phase data, similar to
+        Fluorescence2D.compute_Phi_from_phase but implemented in PyTorch.
+
+        Args:
+            phase: Predicted phase tensor of shape (batch_size, nx, ny)
+        Returns:
+            torch.Tensor: Re-encoded abs(Phi) 4D tensor of shape (batch_size, half_nx, half_ny, half_nx, half_ny)
+        """
+        # Get dimensions
+        batch_size, nx, ny = phase.shape
+        assert nx == ny, "Phase must be square"
+
+        # Initialize output tensor
+        Phi = torch.zeros((batch_size, nx, ny, nx, ny), device=phase.device)
+
+        # Compute Phi using nested loops (similar to the numba implementation)
+        for nx_shift in range(nx):
+            for ny_shift in range(ny):
+                # Shift the phase array
+                shifted_phase = roll2d_torch(phase, -nx_shift, -ny_shift)
+
+                # Compute the phase difference
+                # For each batch, subtract the original phase and the phase at the shift position
+                phase_at_shift = phase[:, nx_shift, ny_shift].unsqueeze(1).unsqueeze(2)  # Add dimensions for broadcasting
+                Phi[:, nx_shift, ny_shift, :, :] = shifted_phase - phase - phase_at_shift
+
+        # Trim to match the expected output dimensions
+        half_nx = nx // 2 + 1
+        half_ny = ny // 2 + 1
+        Phi = Phi[:, :half_nx, :half_ny, :half_nx, :half_ny]
+
+        # Take absolute value for the final output
+        Phi_abs = torch.abs(Phi)
+
+        return Phi_abs
 
     def training_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> torch.Tensor:
         """Training step for GPT model.

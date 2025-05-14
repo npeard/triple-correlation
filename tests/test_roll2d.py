@@ -1,6 +1,7 @@
 import numpy as np
-import pytest
+import torch
 from fluo.speckle2d import roll2d
+from biphase_gpt.lightning_config import roll2d_torch
 
 def test_roll2d_matches_numpy():
     # Create a test array
@@ -61,3 +62,45 @@ def test_roll2d_large_shifts():
         expected,
         err_msg="Failed for large shifts"
     )
+
+def test_roll2d_equivalence():
+    """Test that roll2d_torch produces the same output as roll2d from speckle2d.py"""
+    # Set random seed for reproducibility
+    np.random.seed(42)
+    torch.manual_seed(42)
+
+    # Create a 2D array with random values
+    n = 11  # Small odd size for faster testing
+    arr_np = np.random.randn(n, n)
+
+    # Convert to torch tensor and add batch dimension
+    arr_torch = torch.from_numpy(arr_np).float().unsqueeze(0)
+
+    # Test various shift combinations
+    shift_combinations = [
+        (0, 0),    # No shift
+        (1, 0),    # Shift in x only
+        (0, 1),    # Shift in y only
+        (3, 2),    # Positive shifts in both
+        (-2, -3),  # Negative shifts in both
+        (5, -4)    # Mixed positive and negative
+    ]
+
+    for shift_x, shift_y in shift_combinations:
+        # Get output from original roll2d function
+        np_output = roll2d(arr_np, shift_x, shift_y)
+
+        # Get output from our PyTorch implementation
+        torch_output = roll2d_torch(arr_torch, shift_x, shift_y)
+
+        # Convert PyTorch output to numpy for comparison
+        torch_output_np = torch_output.squeeze().numpy()
+
+        # Compare outputs
+        np.testing.assert_allclose(
+            torch_output_np, np_output,
+            rtol=1e-5, atol=1e-5,
+            err_msg=f"Outputs differ for shifts ({shift_x}, {shift_y})"
+        )
+
+    print("All roll2d tests passed!")

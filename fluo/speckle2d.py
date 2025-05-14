@@ -441,11 +441,8 @@ class Fluorescence2D:
         Returns:
             ndarray: The signed phase difference array in 4D
         """
-        # We want to ensure that the first dimension is smaller than the second
-        # so that we have a clear convention for the indices
-        if phase.shape[0] > phase.shape[1]:
-            phase = phase.T
         nx, ny = phase.shape
+        assert nx == ny, "Phase must be square"
         Phi = np.zeros((nx, ny, nx, ny))
 
         for nx_shift in range(nx):
