@@ -150,13 +150,12 @@ class PreTrainingDataset(BaseH5Dataset):
             self.targets = self.h5_file[self.target_key]
             self.opened_flag = True
 
-    def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor]:
-        """Get a single target from the dataset. Inputs are computed on the fly
-        to save memory (essential for 2D phases). Do not store inputs in cache.
+    def __getitem__(self, idx: int) -> torch.Tensor:
+        """Get a single target (phase data) from the dataset.
+        Inputs will be computed on the fly in the model's training loop.
 
         Returns:
-            Tuple[torch.Tensor, torch.Tensor]: (Phi matrix, phase array)
-            If flatten_output is True, the Phi matrix will be flattened.
+            torch.Tensor: Phase array (flattened)
         """
         # Check cache first
         if idx in self._cache:
@@ -172,28 +171,8 @@ class PreTrainingDataset(BaseH5Dataset):
             if self.cache_size > 0:
                 self._add_to_cache(idx, phase)
 
-        # Determine how to generate inputs from phase target
-        if isinstance(self.num_pix, int) or isinstance(self.num_pix, np.int64):
-            # Compute Phi matrix on the fly using only the relevant part of phase
-            inputs = Fluorescence1D.compute_Phi_from_phase(phase)
-            # Remove zero-valued edges
-            inputs = np.abs(inputs[1:, 1:])
-        elif isinstance(self.num_pix, tuple):
-            # Make a copy of phase to avoid modifying the cached version
-            phase_copy = phase.copy()
-            # 2D phase has been flattened, so we need to reshape it to be compatible with Fluorescence2D
-            phase_copy = phase_copy.reshape(self.num_pix[0], self.num_pix[1])
-            # Compute Phi matrix on the fly using only the relevant part of phase
-            inputs = Fluorescence2D.compute_Phi_from_phase(phase_copy)
-            # Remove zero-valued edges
-            inputs = np.abs(inputs[1:, 1:, 1:, 1:])
-
-        # Convert to tensors and flatten
-        inputs = torch.FloatTensor(inputs).flatten()
-        # Flatten 2D phase array (reshaped above), 1D phase array is already flattened
-        targets = torch.FloatTensor(phase).flatten()
-
-        return inputs, targets
+        # Flatten 2D phase array if needed, 1D phase array is already flattened
+        return torch.FloatTensor(phase).flatten()
 
 
 def get_data_loaders(

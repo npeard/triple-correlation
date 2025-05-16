@@ -4,6 +4,7 @@ from typing import Any
 
 import lightning as L
 import torch
+import numpy as np
 from torch import nn, optim
 
 from biphase_gpt.nano_gpt import GPT, GPTConfig
@@ -270,39 +271,98 @@ class GPTDecoder(BaseLightningModule):
 
         return Phi_abs
 
+    def compute_inputs_from_phases(self, phases: torch.Tensor) -> torch.Tensor:
+        """Compute input Phi matrices from phase data on the fly using optimized PyTorch methods.
+        Disables gradient tracking during computation to save memory.
+        
+        Args:
+            phases: Phase data tensor of shape (batch_size, phase_length)
+            
+        Returns:
+            torch.Tensor: Computed input Phi matrices (flattened)
+        """
+        # Disable gradient tracking for input computation to save memory
+        with torch.no_grad():
+            # Process based on dimensionality
+            if isinstance(self.num_pix, int) or isinstance(self.num_pix, np.int64):
+                # 1D case - reshape if needed
+                batch_size = phases.shape[0]
+                # For 1D, we need to ensure phases has the right shape for _encode
+                # _encode expects (batch_size, phase_length)
+                if len(phases.shape) == 1:
+                    phases = phases.unsqueeze(0)  # Add batch dimension if missing
+                
+                # Use the optimized _encode method for 1D
+                inputs = self._encode(phases)
+                
+            elif isinstance(self.num_pix, tuple):
+                # 2D case - reshape flattened phase
+                batch_size = phases.shape[0]
+                # Reshape to (batch_size, height, width) for _encode_2D
+                phases_reshaped = phases.view(batch_size, self.num_pix[0], self.num_pix[1])
+                
+                # Use the optimized _encode_2D method
+                inputs = self._encode_2D(phases_reshaped)
+                
+            else:
+                raise ValueError(f"Unsupported num_pix type: {type(self.num_pix)}")
+            
+            # Flatten the inputs for the model
+            inputs_flat = inputs.flatten(start_dim=1)
+            
+        # Create a new tensor that requires grad for the model
+        # This detaches from the computation graph while preserving device and dtype
+        return inputs_flat.clone().detach()
+    
     def training_step(
-        self, batch: tuple[torch.Tensor, torch.Tensor], batch_idx: int
+        self, batch: torch.Tensor, batch_idx: int
     ) -> torch.Tensor:
         """Training step for GPT model.
 
         Args:
-            batch: Tuple of (inputs, targets)
+            batch: Phase data tensor
             batch_idx: Index of current batch
         """
-        x, y = batch
-        y_hat = self(x)
-        loss = self.loss_function(y_hat, y, x)
+        # Now batch is just the phase data
+        phases = batch
+        
+        # Compute inputs on the fly
+        inputs = self.compute_inputs_from_phases(phases)
+        
+        # Forward pass with computed inputs
+        y_hat = self(inputs)
+        
+        # Compute loss
+        loss = self.loss_function(y_hat, phases, inputs)
 
         self.log('train_loss', loss, prog_bar=True, on_epoch=True)
         return loss
 
     def validation_step(
-        self, batch: tuple[torch.Tensor, torch.Tensor], batch_idx: int
+        self, batch: torch.Tensor, batch_idx: int
     ) -> None:
         """Validation step for GPT model.
 
         Args:
-            batch: Tuple of (inputs, targets)
+            batch: Phase data tensor
             batch_idx: Index of current batch
         """
-        x, y = batch
-        y_hat = self(x)
-        loss = self.loss_function(y_hat, y, x)
+        # Now batch is just the phase data
+        phases = batch
+        
+        # Compute inputs on the fly
+        inputs = self.compute_inputs_from_phases(phases)
+        
+        # Forward pass with computed inputs
+        y_hat = self(inputs)
+        
+        # Compute loss
+        loss = self.loss_function(y_hat, phases, inputs)
 
         # Verify encoding/unpacking order during sanity check (first validation)
         if self.trainer.sanity_checking:
             # Re-encode the targets and compare with input, they should be identical
-            encoding_loss = self.encoding_loss(y, x)
+            encoding_loss = self.encoding_loss(phases, inputs)
             assert encoding_loss < 1e-6, (
                 f'Encoding verification failed! Loss: {encoding_loss:.2e}'
             )
@@ -311,17 +371,25 @@ class GPTDecoder(BaseLightningModule):
         self.log('val_loss', loss, prog_bar=True)
 
     def test_step(
-        self, batch: tuple[torch.Tensor, torch.Tensor], batch_idx: int
+        self, batch: torch.Tensor, batch_idx: int
     ) -> None:
         """Test step for GPT model.
 
         Args:
-            batch: Tuple of (inputs, targets)
+            batch: Phase data tensor
             batch_idx: Index of current batch
         """
-        x, y = batch
-        y_hat = self(x)
-        loss = self.loss_function(y_hat, y, x)
+        # Now batch is just the phase data
+        phases = batch
+        
+        # Compute inputs on the fly
+        inputs = self.compute_inputs_from_phases(phases)
+        
+        # Forward pass with computed inputs
+        y_hat = self(inputs)
+        
+        # Compute loss
+        loss = self.loss_function(y_hat, phases, inputs)
 
         self.log('test_loss', loss)
 
@@ -331,33 +399,40 @@ class GPTDecoder(BaseLightningModule):
         """Prediction step for GPT model. Return all relevant quantities for plotting.
 
         Args:
-            batch: Input tensor
+            batch: Phase data tensor
             batch_idx: Index of current batch
             dataloader_idx: Index of dataloader
         """
-        x, y = batch
-        predictions = self.model(x)
+        # Now batch is just the phase data
+        phases = batch
+        
+        # Compute inputs on the fly
+        inputs = self.compute_inputs_from_phases(phases)
+        
+        # Forward pass with computed inputs
+        predictions = self.model(inputs)
+        
         if isinstance(self.num_pix, tuple):
             # 2D phase has been flattened, so we need to reshape it to be compatible with _encode_2D
             # should have shape (batch_size, num_pix, num_pix)
             predictions = predictions.view(-1, self.num_pix[0], self.num_pix[1])
             encoded = self._encode_2D(predictions)
-            x = x.view_as(encoded)
+            inputs_reshaped = inputs.view_as(encoded)
             # Get a 2D slice of the 4D inputs and re-encoded outputs
-            x = x[:, 1, 1, :, :]
+            inputs_slice = inputs_reshaped[:, 1, 1, :, :]
             encoded = encoded[:, 1, 1, :, :]
             # TODO: implement antisymmetry of the predictions and targets for plotting
             full_predictions = predictions
-            full_targets = y.view_as(predictions)
+            full_targets = phases.view_as(predictions)
         elif isinstance(self.num_pix, int):
             encoded = self._encode(predictions)
-            x = x.view_as(encoded)
+            inputs_reshaped = inputs.view_as(encoded)
             # Implement antisymmetry of the predictions and targets for plotting
             full_predictions = torch.concat(
                 [-torch.fliplr(predictions), predictions[:, 1:]], dim=1
             )
-            full_targets = torch.concat([-torch.fliplr(y), y[:, 1:]], dim=1)
+            full_targets = torch.concat([-torch.fliplr(phases), phases[:, 1:]], dim=1)
         else:
             raise ValueError('num_pix must be int or tuple')
 
-        return full_predictions, full_targets, encoded, x
+        return full_predictions, full_targets, encoded, inputs_reshaped
