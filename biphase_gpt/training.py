@@ -1,62 +1,59 @@
 #!/usr/bin/env python
 
-from tkinter import Y
-from typing import Optional, Dict, Any, Union, List, Tuple
 import os
-from pathlib import Path
-import yaml
-import torch
-from torch.utils.data import DataLoader
-import lightning as L
-from lightning.pytorch.callbacks import (
-    ModelCheckpoint,
-    EarlyStopping,
-    LearningRateMonitor
-)
-from lightning.pytorch.loggers import WandbLogger
-from dataclasses import dataclass, asdict
 import random
+from dataclasses import asdict, dataclass
 from itertools import product
+from pathlib import Path
+from typing import Any, Union
 
-from biphase_gpt.lightning_config import BaseLightningModule, GPTDecoder
+import lightning as L
+import torch
+import yaml
+from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint
+from lightning.pytorch.loggers import WandbLogger
+
 from biphase_gpt.datasets import get_data_loaders
-from biphase_gpt.nano_gpt import GPTConfig, GPT
+from biphase_gpt.lightning_config import BaseLightningModule, GPTDecoder
+from biphase_gpt.nano_gpt import GPT, GPTConfig
 
 
 @dataclass
 class TrainingConfig:
     """Configuration class for training parameters"""
-    model_config: Dict[str, Any]
-    training_config: Dict[str, Any]
-    data_config: Dict[str, Any]
-    loss_config: Dict[str, Any]
+
+    model_config: dict[str, Any]
+    training_config: dict[str, Any]
+    data_config: dict[str, Any]
+    loss_config: dict[str, Any]
     is_hyperparameter_search: bool = False
-    search_space: Optional[Dict[str, List[Any]]] = None
+    search_space: dict[str, list[Any]] | None = None
 
     def __post_init__(self):
         """Set default values for running checkpoints. Check points do not
-        need all config variables."""
+        need all config variables.
+        """
         if self.model_config == {}:
-            print("TrainingConfig in checkpoint mode...")
+            print('TrainingConfig in checkpoint mode...')
             self._set_checkpoint_defaults()
         else:
-            print("TrainingConfig in training mode...")
-            print("Creating GPTConfig...")
+            print('TrainingConfig in training mode...')
+            print('Creating GPTConfig...')
             self.gpt_config = self._create_gpt_config()
 
     def _set_checkpoint_defaults(self):
         """Set default values for running checkpoints. Check points do not
-        need all config variables."""
-
+        need all config variables.
+        """
         # Training defaults
-        self.training_config.setdefault("batch_size", 64)
+        self.training_config.setdefault('batch_size', 64)
 
         # Data defaults
-        self.data_config.setdefault("data_dir", "./biphase_gpt/data")
-        self.data_config.setdefault("train_file", "train.h5")
-        self.data_config.setdefault("val_file", "val.h5")
-        self.data_config.setdefault("test_file", "test.h5")
-        self.data_config.setdefault("num_workers", 4)
+        self.data_config.setdefault('data_dir', './biphase_gpt/data')
+        self.data_config.setdefault('train_file', 'train.h5')
+        self.data_config.setdefault('val_file', 'val.h5')
+        self.data_config.setdefault('test_file', 'test.h5')
+        self.data_config.setdefault('num_workers', 4)
         # self.data_config.setdefault("dataset_params", {
         #     "train_samples": 10000,
         #     "val_samples": 1000,
@@ -66,7 +63,7 @@ class TrainingConfig:
 
     def _create_gpt_config(self) -> GPTConfig:
         """Create GPTConfig from model configuration"""
-        num_pix = self.data_config.get("dataset_params", {}).get("num_pix", 21)
+        num_pix = self.data_config.get('dataset_params', {}).get('num_pix', 21)
         if isinstance(num_pix, str):
             num_pix = eval(num_pix)
 
@@ -75,30 +72,34 @@ class TrainingConfig:
         if isinstance(num_pix, tuple):
             num_pix = num_pix[0]
             Phi_dim = num_pix // 2 + 1
-            Phi_dim -= 1 # for removal of zero-valued row/column with no information
+            Phi_dim -= 1  # for removal of zero-valued row/column with no information
             in_seq_len = Phi_dim**4
             out_seq_len = num_pix**2
         elif isinstance(num_pix, int):
             Phi_dim = num_pix // 2 + 1
-            Phi_dim -= 1 # for removal of zero-valued row/column with no information
+            Phi_dim -= 1  # for removal of zero-valued row/column with no information
             in_seq_len = Phi_dim**2
             out_seq_len = num_pix
         else:
-            raise ValueError(f"Unsupported type for num_pix in _create_gpt_config: {type(num_pix)}")
+            raise ValueError(
+                f'Unsupported type for num_pix in _create_gpt_config: {type(num_pix)}'
+            )
 
         return GPTConfig(
             in_seq_len=in_seq_len,
             out_seq_len=out_seq_len,
-            n_layer=self.model_config.get("n_layer", 1),
-            n_head=self.model_config.get("n_head", 4),
-            n_embd=self.model_config.get("n_embd", 128),
-            dropout=self.model_config.get("dropout", 0.1),
-            bias=self.model_config.get("bias", False),
-            is_causal=self.model_config.get("is_causal", True)
+            n_layer=self.model_config.get('n_layer', 1),
+            n_head=self.model_config.get('n_head', 4),
+            n_embd=self.model_config.get('n_embd', 128),
+            dropout=self.model_config.get('dropout', 0.1),
+            bias=self.model_config.get('bias', False),
+            is_causal=self.model_config.get('is_causal', True),
         )
 
     @classmethod
-    def from_yaml(cls, config_path: str) -> Union['TrainingConfig', List['TrainingConfig']]:
+    def from_yaml(
+        cls, config_path: str
+    ) -> Union['TrainingConfig', list['TrainingConfig']]:
         """Load configuration from YAML file.
 
         If the file is a hyperparameter search config, returns a list of configs.
@@ -107,34 +108,50 @@ class TrainingConfig:
         Args:
             config_path: Path to YAML configuration file
         """
-        with open(config_path, 'r') as f:
+        with open(config_path) as f:
             config_dict = yaml.safe_load(f)
 
         # Check if this is a hyperparameter search config
-        if any(isinstance(v, list) for v in config_dict["model"].values()) or \
-           any(isinstance(v, list) for v in config_dict["training"].values()) or \
-           any(isinstance(v, list) for v in config_dict["loss"].values()):
+        if (
+            any(isinstance(v, list) for v in config_dict['model'].values())
+            or any(isinstance(v, list) for v in config_dict['training'].values())
+            or any(isinstance(v, list) for v in config_dict['loss'].values())
+        ):
             return cls._create_search_configs(config_dict)
 
         return cls(
-            model_config=config_dict["model"],
-            training_config=config_dict["training"],
-            loss_config=config_dict["loss"],
-            data_config=config_dict["data"]
+            model_config=config_dict['model'],
+            training_config=config_dict['training'],
+            loss_config=config_dict['loss'],
+            data_config=config_dict['data'],
         )
 
     @classmethod
-    def _create_search_configs(cls, config_dict: Dict[str, Any]) -> List['TrainingConfig']:
+    def _create_search_configs(
+        cls, config_dict: dict[str, Any]
+    ) -> list['TrainingConfig']:
         """Create multiple configurations for hyperparameter search"""
         # Separate list and non-list parameters
-        model_lists = {k: v for k, v in config_dict["model"].items() if isinstance(v, list)}
-        model_fixed = {k: v for k, v in config_dict["model"].items() if not isinstance(v, list)}
+        model_lists = {
+            k: v for k, v in config_dict['model'].items() if isinstance(v, list)
+        }
+        model_fixed = {
+            k: v for k, v in config_dict['model'].items() if not isinstance(v, list)
+        }
 
-        training_lists = {k: v for k, v in config_dict["training"].items() if isinstance(v, list)}
-        training_fixed = {k: v for k, v in config_dict["training"].items() if not isinstance(v, list)}
+        training_lists = {
+            k: v for k, v in config_dict['training'].items() if isinstance(v, list)
+        }
+        training_fixed = {
+            k: v for k, v in config_dict['training'].items() if not isinstance(v, list)
+        }
 
-        loss_lists = {k: v for k, v in config_dict["loss"].items() if isinstance(v, list)}
-        loss_fixed = {k: v for k, v in config_dict["loss"].items() if not isinstance(v, list)}
+        loss_lists = {
+            k: v for k, v in config_dict['loss'].items() if isinstance(v, list)
+        }
+        loss_fixed = {
+            k: v for k, v in config_dict['loss'].items() if not isinstance(v, list)
+        }
 
         # Generate all combinations
         model_keys = list(model_lists.keys())
@@ -150,33 +167,37 @@ class TrainingConfig:
 
         # Generate model combinations
         model_combinations = list(product(*model_values)) if model_values else [()]
-        training_combinations = list(product(*training_values)) if training_values else [()]
+        training_combinations = (
+            list(product(*training_values)) if training_values else [()]
+        )
         loss_combinations = list(product(*loss_values)) if loss_values else [()]
 
         for model_combo in model_combinations:
             model_config = model_fixed.copy()
-            model_config.update(dict(zip(model_keys, model_combo)))
+            model_config.update(dict(zip(model_keys, model_combo, strict=False)))
 
             for training_combo in training_combinations:
                 training_config = training_fixed.copy()
-                training_config.update(dict(zip(training_keys, training_combo)))
+                training_config.update(dict(zip(training_keys, training_combo, strict=False)))
 
                 for loss_combo in loss_combinations:
                     loss_config = loss_fixed.copy()
-                    loss_config.update(dict(zip(loss_keys, loss_combo)))
+                    loss_config.update(dict(zip(loss_keys, loss_combo, strict=False)))
 
-                    configs.append(cls(
-                        model_config=model_config,
-                        training_config=training_config,
-                        loss_config=loss_config,
-                        data_config=config_dict["data"],
-                        is_hyperparameter_search=True,
-                        search_space={
-                            "model": model_lists,
-                            "training": training_lists,
-                            "loss": loss_lists
-                        }
-                    ))
+                    configs.append(
+                        cls(
+                            model_config=model_config,
+                            training_config=training_config,
+                            loss_config=loss_config,
+                            data_config=config_dict['data'],
+                            is_hyperparameter_search=True,
+                            search_space={
+                                'model': model_lists,
+                                'training': training_lists,
+                                'loss': loss_lists,
+                            },
+                        )
+                    )
 
         # Randomly shuffle configurations
         random.shuffle(configs)
@@ -189,23 +210,22 @@ class ModelTrainer:
     def __init__(
         self,
         config: TrainingConfig,
-        experiment_name: Optional[str] = None,
-        checkpoint_dir: Optional[str] = None
+        experiment_name: str | None = None,
+        checkpoint_dir: str | None = None,
     ):
-        """
-        Args:
-            config: Training configuration
-            experiment_name: Name for logging and checkpointing
-            checkpoint_dir: Directory for saving checkpoints
+        """Args:
+        config: Training configuration
+        experiment_name: Name for logging and checkpointing
+        checkpoint_dir: Directory for saving checkpoints
         """
         self.config = config
         self.experiment_name = experiment_name or config.model_config['type']
-        self.checkpoint_dir = checkpoint_dir or "./checkpoints"
+        self.checkpoint_dir = checkpoint_dir or './checkpoints'
 
         # Create checkpoint directory
         os.makedirs(self.checkpoint_dir, exist_ok=True)
 
-        if experiment_name != "checkpoint_eval":
+        if experiment_name != 'checkpoint_eval':
             # Setup data
             self.setup_data()
 
@@ -220,15 +240,14 @@ class ModelTrainer:
         print(torch.__version__)
 
         # Check the current CUDA version being used
-        print("CUDA Version: ", torch.version.cuda)
+        print('CUDA Version: ', torch.version.cuda)
 
         if torch.version.cuda is not None:
             # Check if CUDA is available and if so, print the device name
-            print("Device name:", torch.cuda.get_device_properties("cuda").name)
+            print('Device name:', torch.cuda.get_device_properties('cuda').name)
 
             # Check if FlashAttention is available
-            print("FlashAttention available:", torch.backends.cuda.flash_sdp_enabled())
-
+            print('FlashAttention available:', torch.backends.cuda.flash_sdp_enabled())
 
     def setup_data(self):
         """Setup data loaders"""
@@ -270,11 +289,11 @@ class ModelTrainer:
             print('Creating GPT model...')
             return GPT(self.config.gpt_config)
         else:
-            raise ValueError(f"Unknown model type: {model_type}")
+            raise ValueError(f'Unknown model type: {model_type}')
 
     def create_lightning_module(self) -> BaseLightningModule:
         """Create lightning module based on model type"""
-        num_pix = self.config.data_config.get("dataset_params", {}).get("num_pix", 21)
+        num_pix = self.config.data_config.get('dataset_params', {}).get('num_pix', 21)
         if isinstance(num_pix, str):
             num_pix = eval(num_pix)
         if isinstance(self.model, GPT):
@@ -288,17 +307,16 @@ class ModelTrainer:
                 },
                 scheduler_hparams={
                     'T_max': self.config.training_config['T_max'],
-                    'eta_min': self.config.training_config['eta_min']
+                    'eta_min': self.config.training_config['eta_min'],
                 },
                 loss_hparams=self.config.loss_config,
                 num_pix=num_pix,
             )
         else:
-            raise ValueError(f"Unknown model type, can't initialize Lightning.")
+            raise ValueError("Unknown model type, can't initialize Lightning.")
 
     def setup_trainer(self) -> L.Trainer:
         """Setup Lightning trainer with callbacks and loggers"""
-
         # Callbacks
         callbacks = [
             # ModelCheckpoint(
@@ -319,19 +337,23 @@ class ModelTrainer:
         if self.config.training_config.get('use_logging', False):
             loggers = [
                 WandbLogger(
-                    project=self.config.training_config.get('wandb_project', 'ml-template'),
+                    project=self.config.training_config.get(
+                        'wandb_project', 'ml-template'
+                    ),
                     name=self.experiment_name,
                     save_dir=self.checkpoint_dir,
                 )
             ]
             callbacks.append(LearningRateMonitor())
-            callbacks.append(ModelCheckpoint(
-                dirpath=os.path.join(self.checkpoint_dir, self.experiment_name),
-                filename=str(loggers[0].experiment.id)+'_{epoch}-{val_loss:.4f}',
-                monitor='val_loss',
-                mode='min',
-                save_top_k=1,
-            ))
+            callbacks.append(
+                ModelCheckpoint(
+                    dirpath=os.path.join(self.checkpoint_dir, self.experiment_name),
+                    filename=str(loggers[0].experiment.id) + '_{epoch}-{val_loss:.4f}',
+                    monitor='val_loss',
+                    mode='min',
+                    save_top_k=1,
+                )
+            )
         else:
             loggers = []
 
@@ -353,7 +375,7 @@ class ModelTrainer:
             logger=loggers,
             check_val_every_n_epoch=7,
             accelerator=accelerator,
-            devices=devices
+            devices=devices,
         )
 
     def train(self):
@@ -361,7 +383,7 @@ class ModelTrainer:
         self.trainer.fit(
             self.lightning_module,
             train_dataloaders=self.train_loader,
-            val_dataloaders=self.val_loader
+            val_dataloaders=self.val_loader,
         )
 
         # if self.config.training_config.get('use_logging', False):
@@ -370,10 +392,7 @@ class ModelTrainer:
     def test(self):
         """Test the model"""
         if hasattr(self, 'test_loader'):
-            self.trainer.test(
-                self.lightning_module,
-                dataloaders=self.test_loader
-            )
+            self.trainer.test(self.lightning_module, dataloaders=self.test_loader)
 
     def plot_predictions_from_checkpoint(self, checkpoint_path: str):
         """Plot predictions from a checkpoint
@@ -382,8 +401,8 @@ class ModelTrainer:
         - 1D case: Shows 3 subplots (Inputs, Predictions/Targets, Encoded)
         - 2D case: Shows 4 subplots (Inputs, Predictions, Targets, Encoded)
         """
-        import numpy as np
         import matplotlib.pyplot as plt
+        import numpy as np
 
         model = GPTDecoder.load_from_checkpoint(checkpoint_path)
         trainer = L.Trainer(accelerator='cpu', logger=[])
@@ -409,10 +428,10 @@ class ModelTrainer:
         inputs = predictions[0][3].numpy()
 
         # Print shapes for debugging
-        print(f"Predictions shape: {y_hat.shape}")
-        print(f"Targets shape: {y.shape}")
-        print(f"Encoded shape: {encoded.shape}")
-        print(f"Inputs shape: {inputs.shape}")
+        print(f'Predictions shape: {y_hat.shape}')
+        print(f'Targets shape: {y.shape}')
+        print(f'Encoded shape: {encoded.shape}')
+        print(f'Inputs shape: {inputs.shape}')
 
         # Determine if we're dealing with 1D or 2D data
         is_2d = len(y_hat.shape) > 2 and y_hat.shape[-1] > 1 and y_hat.shape[-2] > 1
@@ -424,23 +443,23 @@ class ModelTrainer:
                 (ax1, ax2), (ax3, ax4) = axes
 
                 # Plot inputs
-                im1 = ax1.imshow(inputs[i], origin="lower")
-                ax1.set_title("Inputs")
+                im1 = ax1.imshow(inputs[i], origin='lower')
+                ax1.set_title('Inputs')
                 plt.colorbar(im1, ax=ax1)
 
                 # Plot predictions
-                im2 = ax2.imshow(y_hat[i], origin="lower")
-                ax2.set_title("Predictions")
+                im2 = ax2.imshow(y_hat[i], origin='lower')
+                ax2.set_title('Predictions')
                 plt.colorbar(im2, ax=ax2)
 
                 # Plot targets
-                im3 = ax3.imshow(y[i], origin="lower")
-                ax3.set_title("Targets")
+                im3 = ax3.imshow(y[i], origin='lower')
+                ax3.set_title('Targets')
                 plt.colorbar(im3, ax=ax3)
 
                 # Plot encoded
-                im4 = ax4.imshow(encoded[i], origin="lower")
-                ax4.set_title("Encoded")
+                im4 = ax4.imshow(encoded[i], origin='lower')
+                ax4.set_title('Encoded')
                 plt.colorbar(im4, ax=ax4)
             else:
                 # 1D case: 3 subplots (Inputs, Predictions/Targets, Encoded)
@@ -453,25 +472,25 @@ class ModelTrainer:
                 ax3 = fig.add_subplot(gs[1, 0])  # Encoded (spans both columns)
 
                 # Plot inputs
-                im1 = ax1.imshow(inputs[i], origin="lower")
-                ax1.set_title("Inputs")
+                im1 = ax1.imshow(inputs[i], origin='lower')
+                ax1.set_title('Inputs')
                 plt.colorbar(im1, ax=ax1)
 
                 # Plot predictions and targets
                 num_pix = (y[i].shape[0] + 1) / 2 - 1
                 x_range = np.arange(-num_pix, num_pix + 1, 1)
-                ax2.plot(x_range, y[i], label="Targets")
-                ax2.plot(x_range, y_hat[i], label="Predictions")
-                ax2.set_xlabel("Pixels")
-                ax2.set_ylabel("Phase")
+                ax2.plot(x_range, y[i], label='Targets')
+                ax2.plot(x_range, y_hat[i], label='Predictions')
+                ax2.set_xlabel('Pixels')
+                ax2.set_ylabel('Phase')
                 ax2.legend()
 
                 # Plot encoded
-                im3 = ax3.imshow(encoded[i], origin="lower")
-                ax3.set_title("Encoded")
+                im3 = ax3.imshow(encoded[i], origin='lower')
+                ax3.set_title('Encoded')
                 plt.colorbar(im3, ax=ax3)
 
             # Add some config info as title
-            plt.suptitle(f"Sample {i+1}/{batch_len}")
+            plt.suptitle(f'Sample {i + 1}/{batch_len}')
             plt.tight_layout()
             plt.show()

@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 
+from itertools import permutations
+
+import h5py
 import numpy as np
 from scipy import optimize
-from itertools import permutations
-import h5py
-import speckle2d
 
 
 def PhiSolver(cosPhi, initial_phase=[0, 0], error_reject=-10):
@@ -27,16 +27,15 @@ def PhiSolver(cosPhi, initial_phase=[0, 0], error_reject=-10):
             error (float) - the error values associated with the solved phases
     """
     num_pix = int((cosPhi.shape[0] + 1) / 2)
-    cosPhi_sym = (cosPhi[num_pix - 1:2 * num_pix,
-                         num_pix - 1:2 * num_pix,
-                         num_pix - 1:2 * num_pix,
-                         num_pix - 1:2 * num_pix] + cosPhi[0:num_pix,
-                                                           0:num_pix,
-                                                           0:num_pix,
-                                                           0:num_pix][::-1,
-                                                                      ::-1,
-                                                                      ::-1,
-                                                                      ::-1]) / 2
+    cosPhi_sym = (
+        cosPhi[
+            num_pix - 1 : 2 * num_pix,
+            num_pix - 1 : 2 * num_pix,
+            num_pix - 1 : 2 * num_pix,
+            num_pix - 1 : 2 * num_pix,
+        ]
+        + cosPhi[0:num_pix, 0:num_pix, 0:num_pix, 0:num_pix][::-1, ::-1, ::-1, ::-1]
+    ) / 2
 
     Phi = np.arccos(cosPhi_sym)
     solved = np.zeros(2 * (num_pix,))
@@ -47,9 +46,13 @@ def PhiSolver(cosPhi, initial_phase=[0, 0], error_reject=-10):
 
     n = 3
     diagonal_flag = 0
-    suspect_num = -1  # Index for list of suspect pixels to be picked as alternates in re-solving
+    suspect_num = (
+        -1
+    )  # Index for list of suspect pixels to be picked as alternates in re-solving
     num_pixels = 1  # To re-solve
-    perm_num = -1  # The index in the list of permutations to use for alternates in re-solving
+    perm_num = (
+        -1
+    )  # The index in the list of permutations to use for alternates in re-solving
     perm = np.zeros(num_pix)
     while n < len(Phi[0, 0, 0, :]) + 1:
         # Generate list of points across the diagonal to be solved this round
@@ -77,14 +80,20 @@ def PhiSolver(cosPhi, initial_phase=[0, 0], error_reject=-10):
             A = A[:, 1:-1]
             B = B[:, 1:-1]
 
-            plus = np.empty((len(A[0, :])))
-            minus = np.empty((len(A[0, :])))
+            plus = np.empty(len(A[0, :]))
+            minus = np.empty(len(A[0, :]))
             for i in range(len(A[0, :])):
                 # Find the positive and negative solutions
-                plus[i] = Phi[A[0, i], A[1, i], B[0, i], B[1, i]] + solved[
-                    A[0, i], A[1, i]] + solved[B[0, i], B[1, i]]
-                minus[i] = -Phi[A[0, i], A[1, i], B[0, i], B[1, i]] + solved[
-                    A[0, i], A[1, i]] + solved[B[0, i], B[1, i]]
+                plus[i] = (
+                    Phi[A[0, i], A[1, i], B[0, i], B[1, i]]
+                    + solved[A[0, i], A[1, i]]
+                    + solved[B[0, i], B[1, i]]
+                )
+                minus[i] = (
+                    -Phi[A[0, i], A[1, i], B[0, i], B[1, i]]
+                    + solved[A[0, i], A[1, i]]
+                    + solved[B[0, i], B[1, i]]
+                )
 
             theta1 = np.append(plus, minus)
             theta2 = np.append(minus, plus)
@@ -96,12 +105,11 @@ def PhiSolver(cosPhi, initial_phase=[0, 0], error_reject=-10):
             # If error flag has been triggered for the next diagonal, use the alternate value for trial positions
             # next_phi, error_val = self.find_next_phi(xdata=xdata, ydata=ydata)
             if diagonal_flag == n + 1 and perm[m] == 1:
-                next_phi, error_val = find_next_phi(xdata=xdata,
-                                                    ydata=ydata,
-                                                    AltReturn=True)
+                next_phi, error_val = find_next_phi(
+                    xdata=xdata, ydata=ydata, AltReturn=True
+                )
             else:
-                next_phi, error_val = find_next_phi(xdata=xdata,
-                                                    ydata=ydata)
+                next_phi, error_val = find_next_phi(xdata=xdata, ydata=ydata)
 
             solved[current_pair[0], current_pair[1]] = next_phi
             error[current_pair[0], current_pair[1]] = error_val
@@ -112,25 +120,29 @@ def PhiSolver(cosPhi, initial_phase=[0, 0], error_reject=-10):
             # if (np.any( np.abs(np.subtract.outer(error[to_solve[0,:],
             # to_solve[1,:]], error[prev_solve[0,:], prev_solve[1,:]])) > 15)
             # and n>3):
-            print("Prev errors: ", error[prev_solve[0, :], prev_solve[1, :]])
-            print("Current errors: ", error[to_solve[0, :], to_solve[1, :]])
-            print(np.abs(
-                np.subtract.outer(error[to_solve[0, :], to_solve[1, :]],
-                                  error[prev_solve[0, :], prev_solve[1, :]])))
+            print('Prev errors: ', error[prev_solve[0, :], prev_solve[1, :]])
+            print('Current errors: ', error[to_solve[0, :], to_solve[1, :]])
+            print(
+                np.abs(
+                    np.subtract.outer(
+                        error[to_solve[0, :], to_solve[1, :]],
+                        error[prev_solve[0, :], prev_solve[1, :]],
+                    )
+                )
+            )
             diagonal_flag = n
-            print("Unacceptable Error! Re-solving previous diagonal.")
+            print('Unacceptable Error! Re-solving previous diagonal.')
             # First, attempt to change pixels adjacent to pixel in current
             # diagonal with the largest error
-            print("Errors: ", error[to_solve[0, :], to_solve[1, :]])
+            print('Errors: ', error[to_solve[0, :], to_solve[1, :]])
             err_idx = np.argmax(error[to_solve[0, :], to_solve[1, :]])
-            suspects = np.zeros((4,
-                                 diagonal_flag - 0))  # The fourth row is
+            suspects = np.zeros((4, diagonal_flag - 0))  # The fourth row is
             # just a dummy case, only need 3 permutations for a 1 pixel error
             suspects[0, err_idx] = 1
             suspects[1, err_idx - 1] = 1
-            suspects[2, err_idx - 1:err_idx + 1] = 1
+            suspects[2, err_idx - 1 : err_idx + 1] = 1
             suspect_num += 1
-            print("Suspect pixels: ", suspects)
+            print('Suspect pixels: ', suspects)
             perm = suspects[suspect_num, :]
 
             # But if that fails, sort through all possible permutations
@@ -141,7 +153,7 @@ def PhiSolver(cosPhi, initial_phase=[0, 0], error_reject=-10):
                 perms = np.asarray(list(set(permutations(elements))))
                 perm_num += 1
                 if perm_num >= len(perms[:, 0]):
-                    print("Adding additional pixel to re-solve.")
+                    print('Adding additional pixel to re-solve.')
                     num_pixels += 1
                     elements[:num_pixels] = 1
                     perms = np.asarray(list(set(permutations(elements))))
@@ -149,15 +161,17 @@ def PhiSolver(cosPhi, initial_phase=[0, 0], error_reject=-10):
                 # In case we have already been through every possible
                 # permutation and still not met the error threshold
                 if num_pixels > len(elements):
-                    print("WARNING! WARNING!")
-                    print("WARNING! WARNING!")
-                    print("WARNING! WARNING!")
-                    print("WARNING! WARNING!")
-                    print("WARNING! WARNING!")
+                    print('WARNING! WARNING!')
+                    print('WARNING! WARNING!')
+                    print('WARNING! WARNING!')
+                    print('WARNING! WARNING!')
+                    print('WARNING! WARNING!')
                     print(
-                        "Every possible permutation of alternate theta have been tested but the error threshold is still exceed.")
+                        'Every possible permutation of alternate theta have been tested but the error threshold is still exceed.'
+                    )
                     print(
-                        "The error threshold is either too stringent or intervention from the user is needed.")
+                        'The error threshold is either too stringent or intervention from the user is needed.'
+                    )
                     # Then, go back to the default case (no alternates) and proceed anyways.
                     # For now, just exit.
                     exit(1)
@@ -170,8 +184,8 @@ def PhiSolver(cosPhi, initial_phase=[0, 0], error_reject=-10):
             suspect_num = -1
             perm_num = -1
             perm = np.zeros(num_pix)
-        print("suspect_num", suspect_num)
-        print("perm_num", perm_num)
+        print('suspect_num', suspect_num)
+        print('perm_num', perm_num)
         n += 1
 
     # Solve out to q_max, at this point error resolving should not be needed
@@ -190,8 +204,8 @@ def PhiSolver(cosPhi, initial_phase=[0, 0], error_reject=-10):
             # current_pair[np.argmax(current_pair)] -=1
             # A = np.indices(current_pair)
             # B = np.indices(current_pair)
-            A = np.mgrid[0:current_pair[0] + 1, 0:current_pair[1] + 1]
-            B = np.mgrid[0:current_pair[0] + 1, 0:current_pair[1] + 1]
+            A = np.mgrid[0 : current_pair[0] + 1, 0 : current_pair[1] + 1]
+            B = np.mgrid[0 : current_pair[0] + 1, 0 : current_pair[1] + 1]
             B[0, :, :] = current_pair[0] - B[0, :, :]
             B[1, :, :] = current_pair[1] - B[1, :, :]
             # Flatten in to list of pairs and remove trivial (0,0) + (n,m)
@@ -201,14 +215,20 @@ def PhiSolver(cosPhi, initial_phase=[0, 0], error_reject=-10):
             A = A[:, 1:-1]
             B = B[:, 1:-1]
 
-            plus = np.empty((len(A[0, :])))
-            minus = np.empty((len(A[0, :])))
+            plus = np.empty(len(A[0, :]))
+            minus = np.empty(len(A[0, :]))
             for i in range(len(A[0, :])):
                 # Find the positive and negative solutions
-                plus[i] = Phi[A[0, i], A[1, i], B[0, i], B[1, i]] + solved[
-                    A[0, i], A[1, i]] + solved[B[0, i], B[1, i]]
-                minus[i] = -Phi[A[0, i], A[1, i], B[0, i], B[1, i]] + solved[
-                    A[0, i], A[1, i]] + solved[B[0, i], B[1, i]]
+                plus[i] = (
+                    Phi[A[0, i], A[1, i], B[0, i], B[1, i]]
+                    + solved[A[0, i], A[1, i]]
+                    + solved[B[0, i], B[1, i]]
+                )
+                minus[i] = (
+                    -Phi[A[0, i], A[1, i], B[0, i], B[1, i]]
+                    + solved[A[0, i], A[1, i]]
+                    + solved[B[0, i], B[1, i]]
+                )
 
             theta1 = np.append(plus, minus)
             theta2 = np.append(minus, plus)
@@ -244,7 +264,7 @@ def PhiSolver_manualSelect(cosPhi, initial_phase=[0, 0], Alt=None):
 
             error (float) - the error values associated with the solved phases
     """
-    num_pix = int((cosPhi.shape[0]))
+    num_pix = int(cosPhi.shape[0])
     # cosPhi_sym = (cosPhi[num_pix - 1:2 * num_pix, num_pix - 1:2 * num_pix,
     # 			  num_pix - 1:2 * num_pix, num_pix - 1:2 * num_pix]
     # 			  + cosPhi[0:num_pix, 0:num_pix, 0:num_pix, 0:num_pix][::-1,
@@ -281,14 +301,20 @@ def PhiSolver_manualSelect(cosPhi, initial_phase=[0, 0], Alt=None):
             A = A[:, 1:-1]
             B = B[:, 1:-1]
 
-            plus = np.empty((len(A[0, :])))
-            minus = np.empty((len(A[0, :])))
+            plus = np.empty(len(A[0, :]))
+            minus = np.empty(len(A[0, :]))
             for i in range(len(A[0, :])):
                 # Find the positive and negative solutions
-                plus[i] = Phi[A[0, i], A[1, i], B[0, i], B[1, i]] + solved[
-                    A[0, i], A[1, i]] + solved[B[0, i], B[1, i]]
-                minus[i] = -Phi[A[0, i], A[1, i], B[0, i], B[1, i]] + solved[
-                    A[0, i], A[1, i]] + solved[B[0, i], B[1, i]]
+                plus[i] = (
+                    Phi[A[0, i], A[1, i], B[0, i], B[1, i]]
+                    + solved[A[0, i], A[1, i]]
+                    + solved[B[0, i], B[1, i]]
+                )
+                minus[i] = (
+                    -Phi[A[0, i], A[1, i], B[0, i], B[1, i]]
+                    + solved[A[0, i], A[1, i]]
+                    + solved[B[0, i], B[1, i]]
+                )
 
             theta1 = np.append(plus, minus)
             theta2 = np.append(minus, plus)
@@ -300,12 +326,11 @@ def PhiSolver_manualSelect(cosPhi, initial_phase=[0, 0], Alt=None):
             # If an alternate has been requested by the user for the pixel,
             # choose the other value
             if Alt[current_pair[0], current_pair[1]] == 1:
-                next_phi, error_val = find_next_phi(xdata=xdata,
-                                                    ydata=ydata,
-                                                    AltReturn=True)
+                next_phi, error_val = find_next_phi(
+                    xdata=xdata, ydata=ydata, AltReturn=True
+                )
             else:
-                next_phi, error_val = find_next_phi(xdata=xdata,
-                                                    ydata=ydata)
+                next_phi, error_val = find_next_phi(xdata=xdata, ydata=ydata)
 
             solved[current_pair[0], current_pair[1]] = next_phi
             error[current_pair[0], current_pair[1]] = error_val
@@ -326,8 +351,8 @@ def PhiSolver_manualSelect(cosPhi, initial_phase=[0, 0], Alt=None):
             # origin and our current point
             # Find pairs of vectors which span the box and sum to the
             # current vector
-            A = np.mgrid[0:current_pair[0] + 1, 0:current_pair[1] + 1]
-            B = np.mgrid[0:current_pair[0] + 1, 0:current_pair[1] + 1]
+            A = np.mgrid[0 : current_pair[0] + 1, 0 : current_pair[1] + 1]
+            B = np.mgrid[0 : current_pair[0] + 1, 0 : current_pair[1] + 1]
             B[0, :, :] = current_pair[0] - B[0, :, :]
             B[1, :, :] = current_pair[1] - B[1, :, :]
             # Flatten in to list of pairs and remove trivial (0,0) + (n,m)
@@ -337,14 +362,20 @@ def PhiSolver_manualSelect(cosPhi, initial_phase=[0, 0], Alt=None):
             A = A[:, 1:-1]
             B = B[:, 1:-1]
 
-            plus = np.empty((len(A[0, :])))
-            minus = np.empty((len(A[0, :])))
+            plus = np.empty(len(A[0, :]))
+            minus = np.empty(len(A[0, :]))
             for i in range(len(A[0, :])):
                 # Find the positive and negative solutions
-                plus[i] = Phi[A[0, i], A[1, i], B[0, i], B[1, i]] + solved[
-                    A[0, i], A[1, i]] + solved[B[0, i], B[1, i]]
-                minus[i] = -Phi[A[0, i], A[1, i], B[0, i], B[1, i]] + solved[
-                    A[0, i], A[1, i]] + solved[B[0, i], B[1, i]]
+                plus[i] = (
+                    Phi[A[0, i], A[1, i], B[0, i], B[1, i]]
+                    + solved[A[0, i], A[1, i]]
+                    + solved[B[0, i], B[1, i]]
+                )
+                minus[i] = (
+                    -Phi[A[0, i], A[1, i], B[0, i], B[1, i]]
+                    + solved[A[0, i], A[1, i]]
+                    + solved[B[0, i], B[1, i]]
+                )
 
             theta1 = np.append(plus, minus)
             theta2 = np.append(minus, plus)
@@ -383,51 +414,64 @@ def find_next_phi(xdata=None, ydata=None, AltReturn=False):
     # Samples the error function and starts minimization near the minimum
     def logThetaError(theta):
         return np.log(
-            np.minimum((np.add.outer(xdata, -np.cos(theta)))**2,
-                       (np.add.outer(ydata, -np.sin(theta)))**2).sum(0))
+            np.minimum(
+                (np.add.outer(xdata, -np.cos(theta))) ** 2,
+                (np.add.outer(ydata, -np.sin(theta))) ** 2,
+            ).sum(0)
+        )
 
     def opt_func(theta):
         if np.abs(theta) > np.pi:
             return 1e10
         else:
-            return np.log(np.sum(np.minimum((xdata - np.cos(theta))**2,
-                                            (ydata - np.sin(theta))**2)))
+            return np.log(
+                np.sum(
+                    np.minimum(
+                        (xdata - np.cos(theta)) ** 2, (ydata - np.sin(theta)) ** 2
+                    )
+                )
+            )
 
     # Find candidate theta by doing brute force search of the 1D parameter
     # space
     theta = np.linspace(-np.pi, np.pi, 50000)
     logThetaError = logThetaError(theta)
     num_theta = 2  # Number of candidates to accept. Two is optimal.
-    mask = (np.argpartition(logThetaError, num_theta)[:num_theta])
-    print("Possible Theta = ", theta[mask])
+    mask = np.argpartition(logThetaError, num_theta)[:num_theta]
+    print('Possible Theta = ', theta[mask])
     theta0 = theta[mask]
 
     # Optimize candidate theta and choose the theta with smallest error
     fCandidate = []
     thetaCandidate = []
     for val in theta0:
-        res = optimize.minimize(opt_func, x0=val, method='CG', tol=1e-10,
-                                options={'gtol': 1e-8, 'maxiter': 10000})
+        res = optimize.minimize(
+            opt_func,
+            x0=val,
+            method='CG',
+            tol=1e-10,
+            options={'gtol': 1e-8, 'maxiter': 10000},
+        )
         fCandidate.append(res.fun)
         thetaCandidate.append(res.x)
     fCandidate = np.asarray(fCandidate)
-    print("Error = ", fCandidate)
+    print('Error = ', fCandidate)
     thetaCandidate = np.asarray(thetaCandidate)
     thetaFinal = thetaCandidate[np.argmin(fCandidate)]
     fFinal = np.min(fCandidate)
-    print("Final Theta = ", thetaFinal)
+    print('Final Theta = ', thetaFinal)
 
     if AltReturn:
         thetaFinal = thetaCandidate[np.argmax(fCandidate)]
         fFinal = np.max(fCandidate)
-        print("Alternate Triggered!")
-        print("Final Theta = ", thetaFinal)
+        print('Alternate Triggered!')
+        print('Final Theta = ', thetaFinal)
 
     # Return ideal phi and the value of the error function at that phi
     return np.arctan2(np.sin(thetaFinal), np.cos(thetaFinal)), fFinal
 
 
-def append_to_h5file(cosPhi_marginal, phase, filename="data.h5"):
+def append_to_h5file(cosPhi_marginal, phase, filename='data.h5'):
     """Appends training data consisting of the marginalized cosPhi, and the
     structure phase to a file.
 
@@ -438,36 +482,42 @@ def append_to_h5file(cosPhi_marginal, phase, filename="data.h5"):
     """
     with h5py.File(filename, 'a') as f:
         # Create datasets if they don't exist, otherwise append data
-        if "cosPhi_marginal" in f.keys():
-            f["cosPhi_marginal"].resize(
-                (f["cosPhi_marginal"].shape[0] + 1), axis=0)
+        if 'cosPhi_marginal' in f.keys():
+            f['cosPhi_marginal'].resize((f['cosPhi_marginal'].shape[0] + 1), axis=0)
             new_data = np.expand_dims(cosPhi_marginal, axis=0)
-            f["cosPhi_marginal"][-1:] = new_data
+            f['cosPhi_marginal'][-1:] = new_data
         else:
-            f.create_dataset("cosPhi_marginal",
-                             data=np.expand_dims(cosPhi_marginal, axis=0),
-                             maxshape=(None, cosPhi_marginal.shape[0],
-                                       cosPhi_marginal.shape[1],
-                                       cosPhi_marginal.shape[2],
-                                       cosPhi_marginal.shape[3]),
-                             compression="gzip", compression_opts=9,
-                             chunks=True)
+            f.create_dataset(
+                'cosPhi_marginal',
+                data=np.expand_dims(cosPhi_marginal, axis=0),
+                maxshape=(
+                    None,
+                    cosPhi_marginal.shape[0],
+                    cosPhi_marginal.shape[1],
+                    cosPhi_marginal.shape[2],
+                    cosPhi_marginal.shape[3],
+                ),
+                compression='gzip',
+                compression_opts=9,
+                chunks=True,
+            )
 
-        if "phase" in f.keys():
-            f["phase"].resize((f["phase"].shape[0] + 1),
-                              axis=0)
+        if 'phase' in f.keys():
+            f['phase'].resize((f['phase'].shape[0] + 1), axis=0)
             new_data = np.expand_dims(phase, axis=0)
-            f["phase"][-1:] = new_data
+            f['phase'][-1:] = new_data
         else:
-            f.create_dataset("phase",
-                             data=np.expand_dims(phase, axis=0),
-                             maxshape=(None, phase.shape[0], phase.shape[1]),
-                             compression="gzip", compression_opts=9,
-                             chunks=True)
+            f.create_dataset(
+                'phase',
+                data=np.expand_dims(phase, axis=0),
+                maxshape=(None, phase.shape[0], phase.shape[1]),
+                compression='gzip',
+                compression_opts=9,
+                chunks=True,
+            )
 
 
-def generate_training_data(num_data=10,
-                           file="/Users/nolanpeard/Desktop/Data2D-2.h5"):
+def generate_training_data(num_data=10, file='/Users/nolanpeard/Desktop/Data2D-2.h5'):
     """Generates training data and writes it to a file.
 
     Keyword arguments:
@@ -478,14 +528,11 @@ def generate_training_data(num_data=10,
 
             image_stack_depth (int) - the number of images that should be
             generated per stack in each data/label set
-            """
+    """
     for _ in range(num_data):
         fluo = Speckle_2D.Fluorescence2D(
-            kmax=2,
-            num_pix=11,
-            num_atoms=np.random.random_integers(
-                3,
-                high=10))
+            kmax=2, num_pix=11, num_atoms=np.random.random_integers(3, high=10)
+        )
         phase_target = fluo.coh_phase_double
         cosPhi_from_dataPhase = fluo.cosPhi_from_data(num_shots=1000)
 
@@ -493,8 +540,8 @@ def generate_training_data(num_data=10,
 
     # Check that the file opens and contains data of the expected size
     with h5py.File(file, 'r') as f:
-        cosPhi_marginal_data = f["cosPhi_marginal"][:]
-        phase_data = f["phase"][:]
+        cosPhi_marginal_data = f['cosPhi_marginal'][:]
+        phase_data = f['phase'][:]
 
-    print("cosPhi_marginal_data: ", cosPhi_marginal_data.shape)
-    print("phase_data: ", phase_data.shape)
+    print('cosPhi_marginal_data: ', cosPhi_marginal_data.shape)
+    print('phase_data: ', phase_data.shape)

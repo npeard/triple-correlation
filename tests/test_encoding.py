@@ -12,7 +12,7 @@ def test_encode_equivalence():
     torch.manual_seed(42)
 
     # Create antisymmetric phase sequence
-    n = 33 # sequence length must be odd
+    n = 33  # sequence length must be odd
     half_n = n // 2
 
     # Generate random positive half (not including center)
@@ -37,6 +37,7 @@ def test_encode_equivalence():
 
     # Compare outputs
     np.testing.assert_allclose(gpt_output, fluo_output, rtol=1e-5, atol=1e-5)
+
 
 def test_encode_2D_equivalence():
     """Test that _encode_2D produces the same output as compute_Phi_from_phase from Fluorescence2D"""
@@ -68,9 +69,11 @@ def test_encode_2D_equivalence():
 
     # Compare outputs
     np.testing.assert_allclose(
-        gpt_output_np, np.abs(fluo_output),
-        rtol=1e-5, atol=1e-5,
-        err_msg="2D encoding outputs differ"
+        gpt_output_np,
+        np.abs(fluo_output),
+        rtol=1e-5,
+        atol=1e-5,
+        err_msg='2D encoding outputs differ',
     )
 
-    print("All 2D encoding tests passed!")
+    print('All 2D encoding tests passed!')

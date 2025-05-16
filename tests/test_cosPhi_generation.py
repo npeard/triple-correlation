@@ -12,15 +12,16 @@ def test_cosPhi_1d():
     # Get cosPhi from both methods
     cosPhi_from_data = fluo.cosPhi_from_data(num_shots=10000)
     cosPhi_from_data = cosPhi_from_data[
-        fluo.num_pix - 1:3 * fluo.num_pix // 2,
-        fluo.num_pix - 1:3 * fluo.num_pix // 2
+        fluo.num_pix - 1 : 3 * fluo.num_pix // 2,
+        fluo.num_pix - 1 : 3 * fluo.num_pix // 2,
     ]
 
     cosPhi_from_phase = fluo.cosPhi_from_phase()
 
     # Verify shapes match
-    assert cosPhi_from_data.shape == cosPhi_from_phase.shape, \
+    assert cosPhi_from_data.shape == cosPhi_from_phase.shape, (
         'Shapes do not match for 1D model'
+    )
 
     # Check that values are reasonably close
     # We use a relatively high tolerance since these are statistical estimates
@@ -29,7 +30,7 @@ def test_cosPhi_1d():
         cosPhi_from_phase,
         rtol=0.0,  # 30% relative tolerance
         atol=0.5,  # 0.3 absolute tolerance
-        err_msg='1D cosPhi values differ too much between methods'
+        err_msg='1D cosPhi values differ too much between methods',
     )
 
 
@@ -43,15 +44,16 @@ def test_cosPhi_2d():
 
     cosPhi_from_data = fluo.cosPhi_from_data(num_shots=10000)
     cosPhi_from_data = cosPhi_from_data[
-        fluo.num_pix - 1:3 * fluo.num_pix // 2,
-        fluo.num_pix - 1:3 * fluo.num_pix // 2,
-        fluo.num_pix - 1:3 * fluo.num_pix // 2,
-        fluo.num_pix - 1:3 * fluo.num_pix // 2
+        fluo.num_pix - 1 : 3 * fluo.num_pix // 2,
+        fluo.num_pix - 1 : 3 * fluo.num_pix // 2,
+        fluo.num_pix - 1 : 3 * fluo.num_pix // 2,
+        fluo.num_pix - 1 : 3 * fluo.num_pix // 2,
     ]
 
     # Verify shapes match
-    assert cosPhi_from_data.shape == cosPhi_from_phase.shape, \
+    assert cosPhi_from_data.shape == cosPhi_from_phase.shape, (
         'Shapes do not match for 2D model'
+    )
 
     # Take a 2D slice for comparison (same as in plot_cosPhi)
     cosPhi_from_data = cosPhi_from_data[1, :, 1, :]
@@ -64,7 +66,7 @@ def test_cosPhi_2d():
         cosPhi_from_phase,
         rtol=0.0,  # 30% relative tolerance
         atol=0.5,  # 0.3 absolute tolerance
-        err_msg='2D cosPhi values differ too much between methods'
+        err_msg='2D cosPhi values differ too much between methods',
     )
 
 

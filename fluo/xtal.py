@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 
 import numpy as np
-import ase
 
 
 class Xtal:
@@ -13,17 +12,15 @@ class Xtal:
         Args:
             super_lattice (tuple): Size of super lattice
         """
-        import ase.lattice.cubic as alc
         import ase.lattice.hexagonal as alh
 
         # self.atoms = alc.FaceCenteredCubic(size=super_lattice,
         #                                   symbol='Cu',
         #                                   pbc=(1, 1, 1))
 
-        self.atoms = alh.HexagonalClosedPacked(size=super_lattice,
-                                               symbol='Cu',
-                                               pbc=(1, 1, 1),
-                                               latticeconstant=(2., 2))
+        self.atoms = alh.HexagonalClosedPacked(
+            size=super_lattice, symbol='Cu', pbc=(1, 1, 1), latticeconstant=(2.0, 2)
+        )
 
         # Convert positions to meters
         self.atoms.set_cell(np.identity(3) * self.atoms.get_cell())
