@@ -3,9 +3,9 @@ Simulation of fluorescence or speckle intensity correlations and phase retrieval
 
 The core simulation code to generate fluorescence intensity patterns and compute their correlations is in the "fluo" directory. Phase retrieval algorithms are in the "biphase" files.
 
-Plots of simulation data used in the paper are in the "Plots" directory. These are not yet up to date with ongoing work. 
+Plots of simulation data used in the paper are in the "Plots" directory. These are not yet up to date with ongoing work.
 
-If you use my code, please send me a note (I'd love to hear about what you are working on) and cite the paper. 
+If you use my code, please send me a note (I'd love to hear about what you are working on) and cite the paper.
 
 ## Quick Start for Contributors
 
@@ -21,10 +21,9 @@ If you use my code, please send me a note (I'd love to hear about what you are w
    source venv/bin/activate  # On Windows: venv\Scripts\activate
    ```
 
-3. Install dependencies:
+3. Install the package with development dependencies:
    ```bash
-   pip install -r requirements.txt
-   pip install -e .
+   pip install -e ".[dev]"
    ```
 
 4. Install pre-commit hooks:
@@ -38,9 +37,25 @@ If you use my code, please send me a note (I'd love to hear about what you are w
    git checkout -b feature-name
    ```
 
-6. Make your changes and run tests:
+6. Make your changes and run tasks:
    ```bash
-   pytest tests/
+   # Run tests
+   task test
+
+   # Lint your code
+   task lint
+
+   # Format your code
+   task format
+
+   # Check spelling
+   task spell
+
+   # Run pre-commit hooks manually
+   task precommit
+
+   # Run format, lint and test in sequence
+   task all
    ```
 
 7. Commit and push your changes:
