@@ -166,7 +166,7 @@ class PreTrainingDataset(BaseH5Dataset):
         """
         # Check cache first
         if idx in self._cache:
-            targets = self._cache[idx]
+            phase = self._cache[idx]
         else:
             # Lazy loading of HDF5 file
             self.open_hdf5()
@@ -174,23 +174,25 @@ class PreTrainingDataset(BaseH5Dataset):
             # Get phase data
             phase = self.targets[idx]
 
-            # Determine how to generate inputs from phase target
-            if isinstance(self.num_pix, int) or isinstance(self.num_pix, np.int64):
-                # Compute Phi matrix on the fly using only the relevant part of phase
-                inputs = Fluorescence1D.compute_Phi_from_phase(phase)
-                # Remove zero-valued edges
-                inputs = np.abs(inputs[1:, 1:])
-            elif isinstance(self.num_pix, tuple):
-                # 2D phase has been flattened, so we need to reshape it to be compatible with Fluorescence2D
-                phase = phase.reshape(self.num_pix[0], self.num_pix[1])
-                # Compute Phi matrix on the fly using only the relevant part of phase
-                inputs = Fluorescence2D.compute_Phi_from_phase(phase)
-                # Remove zero-valued edges
-                inputs = np.abs(inputs[1:, 1:, 1:, 1:])
-
-            # Add to cache
+            # Add phase to cache
             if self.cache_size > 0:
                 self._add_to_cache(idx, phase)
+
+        # Determine how to generate inputs from phase target
+        if isinstance(self.num_pix, int) or isinstance(self.num_pix, np.int64):
+            # Compute Phi matrix on the fly using only the relevant part of phase
+            inputs = Fluorescence1D.compute_Phi_from_phase(phase)
+            # Remove zero-valued edges
+            inputs = np.abs(inputs[1:, 1:])
+        elif isinstance(self.num_pix, tuple):
+            # Make a copy of phase to avoid modifying the cached version
+            phase_copy = phase.copy()
+            # 2D phase has been flattened, so we need to reshape it to be compatible with Fluorescence2D
+            phase_copy = phase_copy.reshape(self.num_pix[0], self.num_pix[1])
+            # Compute Phi matrix on the fly using only the relevant part of phase
+            inputs = Fluorescence2D.compute_Phi_from_phase(phase_copy)
+            # Remove zero-valued edges
+            inputs = np.abs(inputs[1:, 1:, 1:, 1:])
 
         # Convert to tensors and flatten
         inputs = torch.FloatTensor(inputs).flatten()
