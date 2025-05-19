@@ -405,7 +405,7 @@ class ModelTrainer:
         import numpy as np
 
         model = GPTDecoder.load_from_checkpoint(checkpoint_path)
-        trainer = L.Trainer(accelerator='cpu', logger=[])
+        trainer = L.Trainer(accelerator='gpu', devices=1, logger=[])
 
         # setup dataloaders
         self.setup_data()
@@ -421,11 +421,14 @@ class ModelTrainer:
 
         # y[batch_idx][return_idx], return_idx 0...3:
         # 0: Predictions, 1: Targets, 2: Encoded, 3: Inputs
-        batch_len = len(predictions[0][0].numpy())
-        y_hat = predictions[0][0].numpy()
-        y = predictions[0][1].numpy()
-        encoded = predictions[0][2].numpy()
-        inputs = predictions[0][3].numpy()
+        # Ensure all tensors are on CPU before conversion to numpy
+        y_hat = predictions[0][0].cpu()
+        y = predictions[0][1].cpu()
+        encoded = predictions[0][2].cpu()
+        inputs = predictions[0][3].cpu()
+        
+        # Get batch length
+        batch_len = len(y_hat)
 
         # Print shapes for debugging
         print(f'Predictions shape: {y_hat.shape}')
@@ -437,28 +440,70 @@ class ModelTrainer:
         is_2d = len(y_hat.shape) > 2 and y_hat.shape[-1] > 1 and y_hat.shape[-2] > 1
 
         for i in range(batch_len):
+            # Calculate individual loss components for this sample
+            # Extract single sample tensors and ensure correct shape
+            y_hat_sample = y_hat[i:i+1]
+            y_sample = y[i:i+1]
+            inputs_sample = inputs[i:i+1]
+            
+            # Print shapes for debugging this specific sample
+            print(f'Sample {i} shapes:')
+            print(f'  y_hat_sample: {y_hat_sample.shape}')
+            print(f'  y_sample: {y_sample.shape}')
+            print(f'  inputs_sample: {inputs_sample.shape}')
+            print(f'  encoded_sample: {encoded[i:i+1].shape}')
+            
+            # Calculate loss components using MSE
+            mse = torch.nn.MSELoss()
+            abs_target_loss = mse(torch.abs(y_hat_sample), torch.abs(y_sample)).item()
+            direct_target_loss = mse(y_hat_sample, y_sample).item()
+            
+            # Calculate encoding loss directly using the encoded output from predict_step
+            # This avoids any reshaping issues since predict_step already computed the encoding
+            encoded_sample = encoded[i:i+1]
+            encoding_loss = mse(encoded_sample, inputs_sample).item()
+            
+            # Apply encoding weight if available
+            encoding_weight = model.loss_hparams.get('encoding_weight', 1.0) if hasattr(model, 'loss_hparams') else 1.0
+            weighted_encoding_loss = encoding_weight * encoding_loss
+            
+            # Calculate total loss
+            total_loss = abs_target_loss + direct_target_loss + weighted_encoding_loss
+            
+            # Format loss values for display with 3 significant figures
+            loss_title = (f"Total Loss: {total_loss:.3g}\n"
+                         f"Abs Target Loss: {abs_target_loss:.3g}\n"
+                         f"Direct Target Loss: {direct_target_loss:.3g}\n"
+                         f"Encoding Loss: {encoding_loss:.3g}")
+            
+            # Convert tensors to numpy for plotting
+            inputs_np = inputs[i].detach().numpy()
+            y_hat_np = y_hat[i].detach().numpy()
+            y_np = y[i].detach().numpy()
+            encoded_np = encoded[i].detach().numpy()
+            
             if is_2d:
                 # 2D case: 4 subplots (Inputs, Predictions, Targets, Encoded)
                 fig, axes = plt.subplots(2, 2, figsize=(10, 8))
                 (ax1, ax2), (ax3, ax4) = axes
 
                 # Plot inputs
-                im1 = ax1.imshow(inputs[i], origin='lower')
+                im1 = ax1.imshow(inputs_np, origin='lower')
                 ax1.set_title('Inputs')
                 plt.colorbar(im1, ax=ax1)
 
                 # Plot predictions
-                im2 = ax2.imshow(y_hat[i], origin='lower')
+                im2 = ax2.imshow(y_hat_np, origin='lower')
                 ax2.set_title('Predictions')
                 plt.colorbar(im2, ax=ax2)
 
                 # Plot targets
-                im3 = ax3.imshow(y[i], origin='lower')
+                im3 = ax3.imshow(y_np, origin='lower')
                 ax3.set_title('Targets')
                 plt.colorbar(im3, ax=ax3)
 
                 # Plot encoded
-                im4 = ax4.imshow(encoded[i], origin='lower')
+                im4 = ax4.imshow(encoded_np, origin='lower')
                 ax4.set_title('Encoded')
                 plt.colorbar(im4, ax=ax4)
             else:
@@ -469,28 +514,33 @@ class ModelTrainer:
                 # Create 3 subplots: top-left, top-right, and bottom spanning both columns
                 ax1 = fig.add_subplot(gs[0, 0])  # Inputs
                 ax2 = fig.add_subplot(gs[0, 1])  # Predictions/Targets
-                ax3 = fig.add_subplot(gs[1, 0])  # Encoded (spans both columns)
+                ax3 = fig.add_subplot(gs[1, 0])  # Encoded 
 
                 # Plot inputs
-                im1 = ax1.imshow(inputs[i], origin='lower')
+                im1 = ax1.imshow(inputs_np, origin='lower')
                 ax1.set_title('Inputs')
                 plt.colorbar(im1, ax=ax1)
 
                 # Plot predictions and targets
-                num_pix = (y[i].shape[0] + 1) / 2 - 1
+                num_pix = (y_np.shape[0] + 1) / 2 - 1
                 x_range = np.arange(-num_pix, num_pix + 1, 1)
-                ax2.plot(x_range, y[i], label='Targets')
-                ax2.plot(x_range, y_hat[i], label='Predictions')
+                ax2.plot(x_range, y_np, label='Targets')
+                ax2.plot(x_range, y_hat_np, label='Predictions')
                 ax2.set_xlabel('Pixels')
                 ax2.set_ylabel('Phase')
                 ax2.legend()
 
                 # Plot encoded
-                im3 = ax3.imshow(encoded[i], origin='lower')
+                im3 = ax3.imshow(encoded_np, origin='lower')
                 ax3.set_title('Encoded')
                 plt.colorbar(im3, ax=ax3)
 
-            # Add some config info as title
-            plt.suptitle(f'Sample {i + 1}/{batch_len}')
-            plt.tight_layout()
+            # Add sample number as main title and loss information as subtitle with smaller font
+            fig.suptitle(f'Sample {i + 1}/{batch_len}', fontsize=14, fontweight='bold')
+            
+            # Add loss information as a smaller subtitle
+            plt.figtext(0.5, 0.01, loss_title, ha='center', fontsize=10, 
+                      bbox={'facecolor':'white', 'alpha':0.8, 'pad':5})
+            
+            plt.tight_layout(rect=[0, 0.1, 1, 0.95])  # Adjust layout to make room for the subtitle
             plt.show()

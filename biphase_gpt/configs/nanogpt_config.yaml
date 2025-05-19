@@ -12,11 +12,11 @@ training:
   batch_size: 128
   optimizer: "Adam"
   learning_rate: 5e-4
-  T_max: 500
+  T_max: 100
   eta_min: 0
   accelerator: "gpu"
   devices: '1'
-  use_logging: false
+  use_logging: true
   wandb_project: "triple_correlation"
   experiment_name: "test_2D_pipeline_batch_size"
   checkpoint_dir: "./biphase_gpt/checkpoints"

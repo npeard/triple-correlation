@@ -419,7 +419,7 @@ class GPTDecoder(BaseLightningModule):
             encoded = self._encode_2D(predictions)
             inputs_reshaped = inputs.view_as(encoded)
             # Get a 2D slice of the 4D inputs and re-encoded outputs
-            inputs_slice = inputs_reshaped[:, 1, 1, :, :]
+            inputs_reshaped = inputs_reshaped[:, 1, 1, :, :]
             encoded = encoded[:, 1, 1, :, :]
             # TODO: implement antisymmetry of the predictions and targets for plotting
             full_predictions = predictions
