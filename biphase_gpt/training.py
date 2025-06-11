@@ -2,6 +2,7 @@
 
 import os
 import random
+import contextlib
 from dataclasses import asdict, dataclass
 from itertools import product
 from pathlib import Path
@@ -38,8 +39,6 @@ class TrainingConfig:
             self._set_checkpoint_defaults()
         else:
             print('TrainingConfig in training mode...')
-            print('Creating GPTConfig...')
-            self.gpt_config = self._create_gpt_config()
 
     def _set_checkpoint_defaults(self):
         """Set default values for running checkpoints. Check points do not
@@ -60,41 +59,6 @@ class TrainingConfig:
         #     "test_samples": 1000,
         #     "num_pix": 21
         # })
-
-    def _create_gpt_config(self) -> GPTConfig:
-        """Create GPTConfig from model configuration"""
-        num_pix = self.data_config.get('dataset_params', {}).get('num_pix', 21)
-        if isinstance(num_pix, str):
-            num_pix = eval(num_pix)
-
-        # Determine whether we are training a 1D or 2D phase prediction model
-        # and set the sequence lengths accordingly
-        if isinstance(num_pix, tuple):
-            num_pix = num_pix[0]
-            Phi_dim = num_pix // 2 + 1
-            Phi_dim -= 1  # for removal of zero-valued row/column with no information
-            in_seq_len = Phi_dim**4
-            out_seq_len = num_pix**2
-        elif isinstance(num_pix, int):
-            Phi_dim = num_pix // 2 + 1
-            Phi_dim -= 1  # for removal of zero-valued row/column with no information
-            in_seq_len = Phi_dim**2
-            out_seq_len = num_pix
-        else:
-            raise ValueError(
-                f'Unsupported type for num_pix in _create_gpt_config: {type(num_pix)}'
-            )
-
-        return GPTConfig(
-            in_seq_len=in_seq_len,
-            out_seq_len=out_seq_len,
-            n_layer=self.model_config.get('n_layer', 1),
-            n_head=self.model_config.get('n_head', 4),
-            n_embd=self.model_config.get('n_embd', 128),
-            dropout=self.model_config.get('dropout', 0.1),
-            bias=self.model_config.get('bias', False),
-            is_causal=self.model_config.get('is_causal', True),
-        )
 
     @classmethod
     def from_yaml(
@@ -229,8 +193,7 @@ class ModelTrainer:
             # Setup data
             self.setup_data()
 
-            # Create model and lightning module
-            self.model = self.create_model()
+            # Create Lightning module
             self.lightning_module = self.create_lightning_module()
 
             # Setup training
@@ -282,35 +245,39 @@ class ModelTrainer:
             num_workers=self.config.data_config['num_workers'],
         )
 
-    def create_model(self) -> BaseLightningModule:
-        """Create model instance based on config"""
-        model_type = self.config.model_config.get('type')
-        if model_type == 'GPT':
-            print('Creating GPT model...')
-            return GPT(self.config.gpt_config)
-        else:
-            raise ValueError(f'Unknown model type: {model_type}')
-
     def create_lightning_module(self) -> BaseLightningModule:
         """Create lightning module based on model type"""
         num_pix = self.config.data_config.get('dataset_params', {}).get('num_pix', 21)
         if isinstance(num_pix, str):
             num_pix = eval(num_pix)
-        if isinstance(self.model, GPT):
+
+        optimizer_hparams={
+            'name': self.config.training_config.get('optimizer', 'Adam'),
+            # TODO: why is this loaded as a string?
+            'lr': eval(self.config.training_config.get('learning_rate', 5e-4)),
+            'momentum': self.config.training_config.get('momentum', 0.9)
+        }
+
+        # Common scheduler hyperparameters
+        max_epochs = self.config.training_config.get('max_epochs', 500)
+        warmup_epochs = int(0.1 * max_epochs)
+        cosine_epochs = max_epochs - warmup_epochs
+        target_lr = eval(self.config.training_config.get('learning_rate', 1e-3))
+
+        scheduler_hparams = {
+            'warmup_epochs': warmup_epochs,
+            'cosine_epochs': cosine_epochs,
+            'target_lr': target_lr,
+            'T_max': cosine_epochs,  # For CosineAnnealingLR
+            'eta_min': self.config.training_config.get('eta_min', 0),
+        }
+        
+        if self.config.model_config['type'] == 'GPT':
             return GPTDecoder(
-                model_type='GPT',
-                model_hparams=asdict(self.config.gpt_config),
-                optimizer_name=self.config.training_config['optimizer'],
-                optimizer_hparams={
-                    # TODO: why is this loaded as a string?
-                    'lr': eval(self.config.training_config['learning_rate'])
-                },
-                scheduler_hparams={
-                    'T_max': self.config.training_config['T_max'],
-                    'eta_min': self.config.training_config['eta_min'],
-                },
+                model_hparams=self.config.model_config,
+                optimizer_hparams=optimizer_hparams,
+                scheduler_hparams=scheduler_hparams,
                 loss_hparams=self.config.loss_config,
-                num_pix=num_pix,
             )
         else:
             raise ValueError("Unknown model type, can't initialize Lightning.")
@@ -318,21 +285,7 @@ class ModelTrainer:
     def setup_trainer(self) -> L.Trainer:
         """Setup Lightning trainer with callbacks and loggers"""
         # Callbacks
-        callbacks = [
-            # ModelCheckpoint(
-            #     dirpath=os.path.join(self.checkpoint_dir, self.experiment_name),
-            #     filename='{epoch}-{val_loss:.4f}',
-            #     monitor='val_loss',
-            #     mode='min',
-            #     save_top_k=-1,
-            # ),
-            # EarlyStopping(
-            #     monitor='val_loss',
-            #     patience=10,
-            #     mode='min'
-            # ),
-        ]
-
+        callbacks = []
         # Add WandB logger if configured
         if self.config.training_config.get('use_logging', False):
             loggers = [
@@ -347,9 +300,10 @@ class ModelTrainer:
             callbacks.append(LearningRateMonitor())
             callbacks.append(
                 ModelCheckpoint(
-                    dirpath=os.path.join(self.checkpoint_dir, self.experiment_name),
-                    filename=str(loggers[0].experiment.id) + '_{epoch}-{val_loss:.4f}',
-                    monitor='val_loss',
+                    dirpath=Path(self.checkpoint_dir) / self.experiment_name,
+                    filename=str(loggers[0].experiment.id)
+                    + '_{epoch}-{val_total_loss:.4f}',
+                    monitor='val_total_loss',
                     mode='min',
                     save_top_k=1,
                 )
@@ -363,11 +317,8 @@ class ModelTrainer:
 
         # Convert devices to proper type if it's a string
         if isinstance(devices, str):
-            try:
+            with contextlib.suppress(ValueError):
                 devices = int(devices)
-            except ValueError:
-                # If it can't be converted to int, keep as string (e.g. for specific GPU like '0')
-                pass
 
         return L.Trainer(
             max_epochs=self.config.training_config['max_epochs'],

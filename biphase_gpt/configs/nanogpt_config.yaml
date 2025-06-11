@@ -1,28 +1,28 @@
 model:
   type: "GPT"
-  n_layer: 2
+  n_layer: [1,2,4]
   n_head: 4
-  n_embd: 64
+  n_embd: [16,32,64]
   dropout: 0.1
   bias: false
   is_causal: true  # Whether to use causal masking in self-attention
+  num_pix: (11,11)
 
 training:
   max_epochs: 500
-  batch_size: 128
-  optimizer: "Adam"
+  batch_size: 512
+  optimizer: ["SGD", "Adam"]
   learning_rate: 5e-4
-  T_max: 100
   eta_min: 0
   accelerator: "gpu"
   devices: '1'
   use_logging: true
   wandb_project: "triple_correlation"
-  experiment_name: "test_2D_pipeline_batch_size"
+  experiment_name: "2D_modelsearch_no_encoding_sgd_adam"
   checkpoint_dir: "./biphase_gpt/checkpoints"
 
 loss:
-  use_encoding_loss: true
+  use_encoding_loss: false
   encoding_weight: 1.0
 
 data:
@@ -32,7 +32,6 @@ data:
   test_file: "test.h5"
   num_workers: 7
   dataset_params:
-    train_samples: 10000
+    train_samples: 100000
     val_samples: 1000
     test_samples: 1000
-    num_pix: (21,21)

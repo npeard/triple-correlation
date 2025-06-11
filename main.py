@@ -75,7 +75,8 @@ def main():
         print(f'\nRegenerating datasets with random seed: {seed}')
         create_pretraining_datasets(
             output_dir=base_config.data_config['data_dir'],
-            **base_config.data_config.get('dataset_params', {}),
+            num_pix=base_config.model_config['num_pix'],
+            **base_config.data_config['dataset_params'],
         )
         print('Dataset regeneration complete!\n')
 

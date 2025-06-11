@@ -37,50 +37,110 @@ class BaseLightningModule(L.LightningModule):
 
     def __init__(
         self,
-        model: torch.nn.Module | None = None,
-        optimizer_name: str = 'Adam',
-        optimizer_hparams: dict | None = None,
-        scheduler_hparams: dict | None = None,
-        loss_hparams: dict | None = None,
+        model_hparams: dict,
+        optimizer_hparams: dict,
+        scheduler_hparams: dict,
+        loss_hparams: dict,
     ):
         """Args:
         model: PyTorch model to train
-        optimizer_name: Name of the optimizer to use
         optimizer_hparams: Hyperparameters for the optimizer
         scheduler_hparams: Hyperparameters for the learning rate scheduler
         loss_hparams: Hyperparameters for the loss function
         """
         super().__init__()
-        self.save_hyperparameters(ignore=['model'])
-        self.model = model
+        self.model_hparams = model_hparams
 
         # Set default optimizer hyperparameters if none provided
-        self.optimizer_hparams = optimizer_hparams or {'lr': 1e-3, 'weight_decay': 1e-5}
-        self.scheduler_hparams = scheduler_hparams or {
-            'milestones': [250, 450],
-            'gamma': 0.1,
-        }
-        self.loss_hparams = loss_hparams or {}
+        self.optimizer_hparams = optimizer_hparams
+        self.scheduler_hparams = scheduler_hparams
+        self.loss_hparams = loss_hparams
+        self.save_hyperparameters(ignore=['model'])
+        self.model = self.create_model()
 
         torch.set_float32_matmul_precision('high')
+
+    def _create_gpt_config(self) -> GPTConfig:
+        """Create GPTConfig from model configuration"""
+        num_pix = self.model_hparams['num_pix']
+        if isinstance(num_pix, str):
+            num_pix = eval(num_pix)
+
+        # Determine whether we are training a 1D or 2D phase prediction model
+        # and set the sequence lengths accordingly
+        if isinstance(num_pix, tuple):
+            num_pix = num_pix[0]
+            Phi_dim = num_pix // 2 + 1
+            Phi_dim -= 1  # for removal of zero-valued row/column with no information
+            in_seq_len = Phi_dim**4
+            out_seq_len = num_pix**2
+        elif isinstance(num_pix, int):
+            Phi_dim = num_pix // 2 + 1
+            Phi_dim -= 1  # for removal of zero-valued row/column with no information
+            in_seq_len = Phi_dim**2
+            out_seq_len = num_pix
+        else:
+            raise ValueError(
+                f'Unsupported type for num_pix in _create_gpt_config: {type(num_pix)}'
+            )
+
+        return GPTConfig(
+            in_seq_len=in_seq_len,
+            out_seq_len=out_seq_len,
+            n_layer=self.model_hparams['n_layer'],
+            n_head=self.model_hparams['n_head'],
+            n_embd=self.model_hparams['n_embd'],
+            dropout=self.model_hparams.get('dropout', 0.1),
+            bias=self.model_hparams.get('bias', False),
+            is_causal=self.model_hparams.get('is_causal', True),
+        )
+
+    def create_model(self) -> GPT:
+        """Create model instance based on config"""
+        model_type = self.model_hparams.pop('type')
+        if model_type == 'GPT':
+            print('Creating GPT model...')
+            return GPT(self._create_gpt_config())
+        else:
+            raise ValueError(f'Unknown model type: {model_type}')
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.model(x)
 
-    def configure_optimizers(self):
-        """Configure optimizer and learning rate scheduler"""
+    def configure_optimizers(self) -> dict[str, Any]:
+        """Configure optimizer and learning rate scheduler."""
         # Configure optimizer
-        if self.hparams.optimizer_name == 'Adam':
+        optimizer_name = self.optimizer_hparams.pop('name')
+        if optimizer_name == 'Adam':
+            # Discard momentum hyperparameter for Adam optimizer
+            _ = self.optimizer_hparams.pop('momentum', None)
             optimizer = optim.AdamW(self.parameters(), **self.optimizer_hparams)
-        elif self.hparams.optimizer_name == 'SGD':
+        elif optimizer_name == 'SGD':
             optimizer = optim.SGD(self.parameters(), **self.optimizer_hparams)
         else:
-            raise ValueError(f'Unknown optimizer: {self.hparams.optimizer_name}')
+            raise ValueError(f'Unknown optimizer: {optimizer_name}')
 
-        # Configure scheduler
-        # scheduler = optim.lr_scheduler.MultiStepLR(optimizer, **self.scheduler_hparams)
-        scheduler = optim.lr_scheduler.CosineAnnealingLR(
-            optimizer, **self.scheduler_hparams
+        # Configure multi-stage scheduler: linear warmup then cosine annealing
+        warmup_epochs = self.scheduler_hparams.get('warmup_epochs', 0)
+        cosine_epochs = self.scheduler_hparams.get('cosine_epochs', 0)
+        eta_min = self.scheduler_hparams.get('eta_min', 0)
+        T_max = self.scheduler_hparams.get('T_max', cosine_epochs)
+
+        # LambdaLR for linear warmup
+        def warmup_lambda(epoch):
+            if warmup_epochs == 0:
+                return 1.0
+            return float(epoch + 1) / float(warmup_epochs)
+
+        warmup_scheduler = optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=warmup_lambda)
+        cosine_scheduler = optim.lr_scheduler.CosineAnnealingLR(
+            optimizer, T_max=T_max, eta_min=eta_min
+        )
+
+        scheduler = optim.lr_scheduler.SequentialLR(
+            optimizer,
+            schedulers=[warmup_scheduler, cosine_scheduler],
+            milestones=[warmup_epochs],
         )
 
         return {'optimizer': optimizer, 'lr_scheduler': {'scheduler': scheduler}}
@@ -98,37 +158,27 @@ class GPTDecoder(BaseLightningModule):
 
     def __init__(
         self,
-        model_type: str = 'GPT',
         model_hparams: dict | None = None,
-        optimizer_name: str = 'Adam',
         optimizer_hparams: dict | None = None,
         scheduler_hparams: dict | None = None,
         loss_hparams: dict | None = None,
-        num_pix: int | tuple = None,
     ):
         """Args:
-        model_type: Name of the model (should be "GPT")
         model_hparams: Hyperparameters for the GPT model
-        optimizer_name: Name of the optimizer to use
         optimizer_hparams: Hyperparameters for the optimizer
         scheduler_hparams: Hyperparameters for the learning rate scheduler
         loss_hparams: Hyperparameters for the loss function
         num_pix: Number of pixels in the phase array, used to determine how to
         do the encoding loss, 1D vs 2D
         """
-        # Create GPT model
-        if model_type != 'GPT':
-            raise ValueError("model_type must be 'GPT' for GPTDecoder")
 
-        model_hparams = model_hparams or {}
-        gpt_config = GPTConfig(**model_hparams)
-        model = GPT(gpt_config)
-
-        self.num_pix = num_pix
+        # Number of pixels in the phase array, used to determine how to
+        # do the encoding loss, 1D vs 2D
+        self.num_pix = eval(model_hparams['num_pix'])
+        print("self.num_pix", self.num_pix)
 
         super().__init__(
-            model=model,
-            optimizer_name=optimizer_name,
+            model_hparams=model_hparams,
             optimizer_hparams=optimizer_hparams,
             scheduler_hparams=scheduler_hparams,
             loss_hparams=loss_hparams,
