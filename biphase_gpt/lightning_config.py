@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from typing import Any
+from typing import Any, override
 
 import lightning as L
 import numpy as np
@@ -27,13 +27,11 @@ def roll2d_torch(arr: torch.Tensor, shift_x: int, shift_y: int) -> torch.Tensor:
 
     # Use torch.roll for each dimension separately
     out = torch.roll(arr, shifts=shift_x, dims=1)  # Roll along x dimension
-    out = torch.roll(out, shifts=shift_y, dims=2)  # Roll along y dimension
-
-    return out
+    return torch.roll(out, shifts=shift_y, dims=2)  # Roll along y dimension
 
 
 class BaseLightningModule(L.LightningModule):
-    """Base Lightning Module for all models"""
+    """Base Lightning Module for all models."""
 
     def __init__(
         self,
@@ -46,7 +44,7 @@ class BaseLightningModule(L.LightningModule):
         model: PyTorch model to train
         optimizer_hparams: Hyperparameters for the optimizer
         scheduler_hparams: Hyperparameters for the learning rate scheduler
-        loss_hparams: Hyperparameters for the loss function
+        loss_hparams: Hyperparameters for the loss function.
         """
         super().__init__()
         self.model_hparams = model_hparams
@@ -61,7 +59,7 @@ class BaseLightningModule(L.LightningModule):
         torch.set_float32_matmul_precision('high')
 
     def _create_gpt_config(self) -> GPTConfig:
-        """Create GPTConfig from model configuration"""
+        """Create GPTConfig from model configuration."""
         num_pix = self.model_hparams['num_pix']
         if isinstance(num_pix, str):
             num_pix = eval(num_pix)
@@ -80,7 +78,7 @@ class BaseLightningModule(L.LightningModule):
             in_seq_len = Phi_dim**2
             out_seq_len = num_pix
         else:
-            raise ValueError(
+            raise TypeError(
                 f'Unsupported type for num_pix in _create_gpt_config: {type(num_pix)}'
             )
 
@@ -96,10 +94,9 @@ class BaseLightningModule(L.LightningModule):
         )
 
     def create_model(self) -> GPT:
-        """Create model instance based on config"""
+        """Create model instance based on config."""
         model_type = self.model_hparams.pop('type')
         if model_type == 'GPT':
-            print('Creating GPT model...')
             return GPT(self._create_gpt_config())
         else:
             raise ValueError(f'Unknown model type: {model_type}')
@@ -127,7 +124,7 @@ class BaseLightningModule(L.LightningModule):
         T_max = self.scheduler_hparams.get('T_max', cosine_epochs)
 
         # LambdaLR for linear warmup
-        def warmup_lambda(epoch):
+        def warmup_lambda(epoch: int) -> float:
             if warmup_epochs == 0:
                 return 1.0
             return float(epoch + 1) / float(warmup_epochs)
@@ -149,14 +146,14 @@ class BaseLightningModule(L.LightningModule):
 
     # TODO: what is this, where is it used?
     def _get_progress_bar_dict(self) -> dict[str, Any]:
-        """Modify progress bar display"""
+        """Modify progress bar display."""
         items = super()._get_progress_bar_dict()
         items.pop('v_num', None)
         return items
 
 
 class GPTDecoder(BaseLightningModule):
-    """Lightning Module for training GPT models"""
+    """Lightning Module for training GPT models."""
 
     def __init__(
         self,
@@ -171,12 +168,11 @@ class GPTDecoder(BaseLightningModule):
         scheduler_hparams: Hyperparameters for the learning rate scheduler
         loss_hparams: Hyperparameters for the loss function
         num_pix: Number of pixels in the phase array, used to determine how to
-        do the encoding loss, 1D vs 2D
+        do the encoding loss, 1D vs 2D.
         """
         # Number of pixels in the phase array, used to determine how to
         # do the encoding loss, 1D vs 2D
         self.num_pix = eval(model_hparams['num_pix'])
-        print('self.num_pix', self.num_pix)
 
         super().__init__(
             model_hparams=model_hparams,
@@ -190,8 +186,8 @@ class GPTDecoder(BaseLightningModule):
         y_hat: torch.Tensor,
         targets: torch.Tensor,
         x: torch.Tensor | None = None,
-        *args,
-        **kwargs,
+        *_args,
+        **_kwargs,
     ) -> torch.Tensor:
         """Custom loss function for GPT training.
 
@@ -230,18 +226,16 @@ class GPTDecoder(BaseLightningModule):
             torch.Tensor: MSE loss between re-encoded and input abs(Phi)
         """
         if isinstance(self.num_pix, tuple):
-            # 2D phase has been flattened, so we need to reshape it to be compatible with _encode_2D
+            # 2D phase has been flattened, reshape for _encode_2D compatibility
             # should have shape (batch_size, num_pix, num_pix)
             phase = phase.view(-1, self.num_pix[0], self.num_pix[1])
             encoded = self._encode_2D(phase).flatten(start_dim=1)
         elif isinstance(self.num_pix, int):
             encoded = self._encode(phase).flatten(start_dim=1)
         else:
-            raise ValueError('num_pix must be int or tuple')
+            raise TypeError('num_pix must be int or tuple')
 
-        loss = nn.MSELoss()(encoded, absPhi)
-
-        return loss
+        return nn.MSELoss()(encoded, absPhi)
 
     @staticmethod
     @torch.jit.script
@@ -294,7 +288,8 @@ class GPTDecoder(BaseLightningModule):
             phase: Predicted phase tensor of shape (batch_size, num_pix, num_pix)
 
         Returns:
-            torch.Tensor: Re-encoded abs(Phi) 4D tensor of shape (batch_size, half_nx-1, half_ny-1, half_nx-1, half_ny-1)
+            torch.Tensor: Re-encoded abs(Phi) 4D tensor of shape
+                (batch_size, half_nx-1, half_ny-1, half_nx-1, half_ny-1)
         """
         # Get dimensions
         batch_size, nx, ny = phase.shape
@@ -333,7 +328,7 @@ class GPTDecoder(BaseLightningModule):
         return Phi_abs
 
     def compute_inputs_from_phases(self, phases: torch.Tensor) -> torch.Tensor:
-        """Compute input Phi matrices from phase data on the fly using optimized PyTorch methods.
+        """Compute input Phi matrices from phase data using optimized PyTorch methods.
         Disables gradient tracking during computation to save memory.
 
         Args:
@@ -345,7 +340,7 @@ class GPTDecoder(BaseLightningModule):
         # Disable gradient tracking for input computation to save memory
         with torch.no_grad():
             # Process based on dimensionality
-            if isinstance(self.num_pix, int) or isinstance(self.num_pix, np.int64):
+            if isinstance(self.num_pix, int | np.int64):
                 # 1D case - reshape if needed
                 batch_size = phases.shape[0]
                 # For 1D, we need to ensure phases has the right shape for _encode
@@ -368,7 +363,7 @@ class GPTDecoder(BaseLightningModule):
                 inputs = self._encode_2D(phases_reshaped)
 
             else:
-                raise ValueError(f'Unsupported num_pix type: {type(self.num_pix)}')
+                raise TypeError(f'Unsupported num_pix type: {type(self.num_pix)}')
 
             # Flatten the inputs for the model
             inputs_flat = inputs.flatten(start_dim=1)
@@ -377,7 +372,8 @@ class GPTDecoder(BaseLightningModule):
         # This detaches from the computation graph while preserving device and dtype
         return inputs_flat.clone().detach()
 
-    def training_step(self, batch: torch.Tensor, batch_idx: int) -> torch.Tensor:
+    @override
+    def training_step(self, batch: torch.Tensor, batch_idx: int) -> torch.Tensor:  # noqa: ARG002
         """Training step for GPT model.
 
         Args:
@@ -399,7 +395,7 @@ class GPTDecoder(BaseLightningModule):
         self.log('train_loss', loss, prog_bar=True, on_epoch=True)
         return loss
 
-    def validation_step(self, batch: torch.Tensor, batch_idx: int) -> None:
+    def validation_step(self, batch: torch.Tensor, batch_idx: int) -> None:  # noqa: ARG002
         """Validation step for GPT model.
 
         Args:
@@ -425,11 +421,11 @@ class GPTDecoder(BaseLightningModule):
             assert encoding_loss < 1e-6, (
                 f'Encoding verification failed! Loss: {encoding_loss:.2e}'
             )
-            print(f'✓ Encoding verification passed (loss: {encoding_loss:.2e})')
 
         self.log('val_loss', loss, prog_bar=True)
 
-    def test_step(self, batch: torch.Tensor, batch_idx: int) -> None:
+    @override
+    def test_step(self, batch: torch.Tensor, batch_idx: int) -> None:  # noqa: ARG002
         """Test step for GPT model.
 
         Args:
@@ -450,8 +446,12 @@ class GPTDecoder(BaseLightningModule):
 
         self.log('test_loss', loss)
 
+    @override
     def predict_step(
-        self, batch: torch.Tensor, batch_idx: int, dataloader_idx: int = 0
+        self,
+        batch: torch.Tensor,
+        batch_idx: int,
+        dataloader_idx: int = 0,  # noqa: ARG002
     ) -> torch.Tensor:
         """Prediction step for GPT model. Return all relevant quantities for plotting.
 
@@ -470,7 +470,7 @@ class GPTDecoder(BaseLightningModule):
         predictions = self.model(inputs)
 
         if isinstance(self.num_pix, tuple):
-            # 2D phase has been flattened, so we need to reshape it to be compatible with _encode_2D
+            # 2D phase has been flattened, reshape for _encode_2D compatibility
             # should have shape (batch_size, num_pix, num_pix)
             predictions = predictions.view(-1, self.num_pix[0], self.num_pix[1])
             encoded = self._encode_2D(predictions)
@@ -490,6 +490,6 @@ class GPTDecoder(BaseLightningModule):
             )
             full_targets = torch.concat([-torch.fliplr(phases), phases[:, 1:]], dim=1)
         else:
-            raise ValueError('num_pix must be int or tuple')
+            raise TypeError('num_pix must be int or tuple')
 
         return full_predictions, full_targets, encoded, inputs_reshaped

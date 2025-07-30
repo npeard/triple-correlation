@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 
 import contextlib
-import os
 import random
 from dataclasses import dataclass
 from itertools import product
@@ -20,7 +19,7 @@ from biphase_gpt.lightning_config import BaseLightningModule, GPTDecoder
 
 @dataclass
 class TrainingConfig:
-    """Configuration class for training parameters"""
+    """Configuration class for training parameters."""
 
     model_config: dict[str, Any]
     training_config: dict[str, Any]
@@ -34,10 +33,10 @@ class TrainingConfig:
         need all config variables.
         """
         if self.model_config == {}:
-            print('TrainingConfig in checkpoint mode...')
+            print('TrainingConfig in checkpoint mode...')  # noqa: T201
             self._set_checkpoint_defaults()
         else:
-            print('TrainingConfig in training mode...')
+            print('TrainingConfig in training mode...')  # noqa: T201
 
     def _set_checkpoint_defaults(self):
         """Set default values for running checkpoints. Check points do not
@@ -71,7 +70,7 @@ class TrainingConfig:
         Args:
             config_path: Path to YAML configuration file
         """
-        with open(config_path) as f:
+        with Path(config_path).open() as f:
             config_dict = yaml.safe_load(f)
 
         # Check if this is a hyperparameter search config
@@ -93,7 +92,7 @@ class TrainingConfig:
     def _create_search_configs(
         cls, config_dict: dict[str, Any]
     ) -> list['TrainingConfig']:
-        """Create multiple configurations for hyperparameter search"""
+        """Create multiple configurations for hyperparameter search."""
         # Separate list and non-list parameters
         model_lists = {
             k: v for k, v in config_dict['model'].items() if isinstance(v, list)
@@ -170,7 +169,7 @@ class TrainingConfig:
 
 
 class ModelTrainer:
-    """Main trainer class for managing model training"""
+    """Main trainer class for managing model training."""
 
     def __init__(
         self,
@@ -181,14 +180,14 @@ class ModelTrainer:
         """Args:
         config: Training configuration
         experiment_name: Name for logging and checkpointing
-        checkpoint_dir: Directory for saving checkpoints
+        checkpoint_dir: Directory for saving checkpoints.
         """
         self.config = config
         self.experiment_name = experiment_name or config.model_config['type']
         self.checkpoint_dir = checkpoint_dir or './checkpoints'
 
         # Create checkpoint directory
-        os.makedirs(self.checkpoint_dir, exist_ok=True)
+        Path(self.checkpoint_dir).mkdir(parents=True, exist_ok=True)
 
         if experiment_name != 'checkpoint_eval':
             # Setup data
@@ -201,31 +200,31 @@ class ModelTrainer:
             self.trainer = self.setup_trainer()
 
         # Check what version of PyTorch is installed
-        print(torch.__version__)
+        print(f'PyTorch version: {torch.__version__}')  # noqa: T201
 
         # Check the current CUDA version being used
-        print('CUDA Version: ', torch.version.cuda)
+        print(f'Current CUDA version: {torch.version.cuda}')  # noqa: T201
 
         if torch.version.cuda is not None:
             # Check if CUDA is available and if so, print the device name
-            print('Device name:', torch.cuda.get_device_properties('cuda').name)
+            print(f'GPU device name: {torch.cuda.get_device_name(0)}')  # noqa: T201
 
             # Check if FlashAttention is available
-            print('FlashAttention available:', torch.backends.cuda.flash_sdp_enabled())
+            print('FlashAttention available:', torch.backends.cuda.flash_sdp_enabled())  # noqa: T201
 
     def setup_data(self):
-        """Setup data loaders"""
+        """Setup data loaders."""
         # Convert data_dir to absolute path
         base_dir = Path(__file__).parent.parent  # Go up two levels from training.py
 
-        def resolve_path(data_dir: str, filename: str = None) -> str:
-            """Resolve path relative to project root, optionally joining with filename"""
+        def resolve_path(data_dir: str, filename: str | None = None) -> str:
+            """Resolve path relative to project root, joining with filename."""
             # Remove leading './' if present
             data_dir = str(data_dir).lstrip('./')
             abs_dir = base_dir / data_dir
 
             # Create directory if it doesn't exist
-            os.makedirs(abs_dir, exist_ok=True)
+            Path(abs_dir).mkdir(parents=True, exist_ok=True)
 
             # If filename is provided, join it with the directory
             return str(abs_dir / filename) if filename else str(abs_dir)
@@ -247,7 +246,7 @@ class ModelTrainer:
         )
 
     def create_lightning_module(self) -> BaseLightningModule:
-        """Create lightning module based on model type"""
+        """Create lightning module based on model type."""
         num_pix = self.config.data_config.get('dataset_params', {}).get('num_pix', 21)
         if isinstance(num_pix, str):
             num_pix = eval(num_pix)
@@ -330,7 +329,7 @@ class ModelTrainer:
         )
 
     def train(self):
-        """Train the model"""
+        """Train the model."""
         self.trainer.fit(
             self.lightning_module,
             train_dataloaders=self.train_loader,
@@ -341,12 +340,12 @@ class ModelTrainer:
         #     self.trainer.loggers[0].experiment.finish()
 
     def test(self):
-        """Test the model"""
+        """Test the model."""
         if hasattr(self, 'test_loader'):
             self.trainer.test(self.lightning_module, dataloaders=self.test_loader)
 
-    def plot_predictions_from_checkpoint(self, checkpoint_path: str):
-        """Plot predictions from a checkpoint
+    def plot_predictions_from_checkpoint(self, checkpoint_path: str):  # noqa: PLR0915
+        """Plot predictions from a checkpoint.
 
         Handles both 1D and 2D cases:
         - 1D case: Shows 3 subplots (Inputs, Predictions/Targets, Encoded)
@@ -361,7 +360,7 @@ class ModelTrainer:
         # setup dataloaders
         self.setup_data()
 
-        # get num_pix from the test dataset so we can properly organize the prediction output
+        # get num_pix from test dataset for prediction output organization
         num_pix = self.test_loader.dataset.num_pix
         # Cast np.int64 to int so that predict_step doesn't throw an error
         if isinstance(num_pix, np.int64):
@@ -382,10 +381,6 @@ class ModelTrainer:
         batch_len = len(y_hat)
 
         # Print shapes for debugging
-        print(f'Predictions shape: {y_hat.shape}')
-        print(f'Targets shape: {y.shape}')
-        print(f'Encoded shape: {encoded.shape}')
-        print(f'Inputs shape: {inputs.shape}')
 
         # Determine if we're dealing with 1D or 2D data
         is_2d = len(y_hat.shape) > 2 and y_hat.shape[-1] > 1 and y_hat.shape[-2] > 1
@@ -398,19 +393,14 @@ class ModelTrainer:
             inputs_sample = inputs[i : i + 1]
 
             # Print shapes for debugging this specific sample
-            print(f'Sample {i} shapes:')
-            print(f'  y_hat_sample: {y_hat_sample.shape}')
-            print(f'  y_sample: {y_sample.shape}')
-            print(f'  inputs_sample: {inputs_sample.shape}')
-            print(f'  encoded_sample: {encoded[i : i + 1].shape}')
 
             # Calculate loss components using MSE
             mse = torch.nn.MSELoss()
             abs_target_loss = mse(torch.abs(y_hat_sample), torch.abs(y_sample)).item()
             direct_target_loss = mse(y_hat_sample, y_sample).item()
 
-            # Calculate encoding loss directly using the encoded output from predict_step
-            # This avoids any reshaping issues since predict_step already computed the encoding
+            # Calculate encoding loss using encoded output from predict_step
+            # Avoids reshaping issues since predict_step computed the encoding
             encoded_sample = encoded[i : i + 1]
             encoding_loss = mse(encoded_sample, inputs_sample).item()
 
@@ -468,7 +458,7 @@ class ModelTrainer:
                 fig = plt.figure(figsize=(10, 8))
                 gs = plt.GridSpec(2, 2, figure=fig)
 
-                # Create 3 subplots: top-left, top-right, and bottom spanning both columns
+                # Create 3 subplots: top-left, top-right, and bottom span
                 ax1 = fig.add_subplot(gs[0, 0])  # Inputs
                 ax2 = fig.add_subplot(gs[0, 1])  # Predictions/Targets
                 ax3 = fig.add_subplot(gs[1, 0])  # Encoded
@@ -492,7 +482,7 @@ class ModelTrainer:
                 ax3.set_title('Encoded')
                 plt.colorbar(im3, ax=ax3)
 
-            # Add sample number as main title and loss information as subtitle with smaller font
+            # Add sample number as main title and loss info as subtitle
             fig.suptitle(f'Sample {i + 1}/{batch_len}', fontsize=14, fontweight='bold')
 
             # Add loss information as a smaller subtitle

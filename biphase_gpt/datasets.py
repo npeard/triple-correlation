@@ -65,7 +65,7 @@ class BaseH5Dataset(Dataset):
             self.targets = self.h5_file[self.target_key]
             self.opened_flag = True
 
-    def __len__(self):
+    def __len__(self) -> int:
         return self.length
 
     def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor]:
@@ -261,9 +261,8 @@ def generate_pretraining_data(
         # Determine the shape for the phase dataset based on num_pix type
         if isinstance(num_pix, tuple):
             assert len(num_pix) == 2, 'num_pix must be a tuple of length 2 for 2D phase'
-            assert num_pix[0] % 2 == 1 and num_pix[1] % 2 == 1, (
-                'num_pix must be odd for 2D phase'
-            )
+            assert num_pix[0] % 2 == 1, 'num_pix[0] must be odd for 2D phase'
+            assert num_pix[1] % 2 == 1, 'num_pix[1] must be odd for 2D phase'
             assert num_pix[0] == num_pix[1], (
                 'num_pix[0] and num_pix[1] must be equal for 2D phase'
             )
@@ -286,23 +285,25 @@ def generate_pretraining_data(
         # Generate data
         # TODO: make a test case that compares the output dims of this block
         # to the output dims of plot_cosPhi (the from_data method therein)
-        print(f'\nGenerating {num_samples} samples...')
+        # Generate samples with random phase data
         for i in tqdm(range(num_samples)):
             # Generate random phase, out to 2*num_pix - 1 where num_pix is the
             # number of pixels in the detector. We expect the triple correlation to
             # contain phase information out to 2*kmax or num_pix from origin.
             if isinstance(num_pix, tuple):
                 # Generate 2D phase array
-                phase = np.random.uniform(-np.pi, np.pi, num_pix)
+                rng = np.random.default_rng()
+                phase = rng.uniform(-np.pi, np.pi, num_pix)
                 # Set origin (always zero) at the expected position for 2D
                 phase[0, 0] = 0
             else:
                 # For 1D case, simply generate a 1D phase array
-                phase = np.random.uniform(-np.pi, np.pi, num_pix)
+                rng = np.random.default_rng()
+                phase = rng.uniform(-np.pi, np.pi, num_pix)
                 # Set origin (always zero) at the beginning for 1D
                 phase[0] = 0
 
-            # Only storing one quadrant of phase intentionally, redundancy by antisymmetry
+            # Store one quadrant of phase (redundancy by antisymmetry)
             # Pre-flatten phase array so we don't do any reshaping during training
             f['phase'][i] = phase.ravel()
 
@@ -320,8 +321,8 @@ def create_pretraining_datasets(
     Args:
         output_dir: Directory to save the datasets
         num_pix: Number of pixels in each sample. If tuple, the first element
-        is the number of pixels in the x-direction and the second is the number of pixels in the y-direction.
-        For now we are only supporting square detector geometries.
+        is the number of pixels in the x-direction and the second is the
+        number of pixels in the y-direction. Only square geometries supported.
         train_samples: Number of training samples
         val_samples: Number of validation samples
         test_samples: Number of test samples
@@ -334,17 +335,16 @@ def create_pretraining_datasets(
     for file in dataset_files:
         file_path = output_dir / file
         if file_path.exists():
-            print(f'Removing existing dataset file: {file}')
+            # Remove existing file
             file_path.unlink()
 
     if isinstance(num_pix, str):
         # num_pix is sometimes loaded from YAML config as a string
         num_pix = eval(num_pix)
-    if isinstance(num_pix, tuple):
-        if num_pix[0] != num_pix[1]:
-            raise ValueError('num_pix must be a square geometry')
+    if isinstance(num_pix, tuple) and num_pix[0] != num_pix[1]:
+        raise ValueError('num_pix must be a square geometry')
 
-    print('Generating training dataset...')
+    # Generate training dataset
     generate_pretraining_data(
         file_path=str(output_dir / 'train.h5'),
         num_pix=num_pix,
@@ -352,7 +352,7 @@ def create_pretraining_datasets(
         **kwargs,
     )
 
-    print('\nGenerating validation dataset...')
+    # Generate validation dataset
     generate_pretraining_data(
         file_path=str(output_dir / 'val.h5'),
         num_pix=num_pix,
@@ -360,7 +360,7 @@ def create_pretraining_datasets(
         **kwargs,
     )
 
-    print('\nGenerating test dataset...')
+    # Generate test dataset
     generate_pretraining_data(
         file_path=str(output_dir / 'test.h5'),
         num_pix=num_pix,
@@ -384,12 +384,14 @@ def visualize_pretraining_dataset(
         save_path: Optional path to save the visualization
     """
     if random_seed is not None:
-        np.random.seed(random_seed)
+        rng = np.random.default_rng(random_seed)
+    else:
+        rng = np.random.default_rng()
 
     with h5py.File(file_path, 'r') as f:
         # Get dataset info
         total_samples = f['Phi'].shape[0]
-        indices = np.random.choice(total_samples, num_samples, replace=False)
+        indices = rng.choice(total_samples, num_samples, replace=False)
         indices.sort()  # Sort indices for HDF5 compatibility
 
         # Load selected samples
@@ -411,7 +413,7 @@ def visualize_pretraining_dataset(
             plt.colorbar(im_phi, ax=axes[0, i])
 
             # Plot phase
-            im_phase = axes[1, i].plot(phase_samples[i])
+            axes[1, i].plot(phase_samples[i])
             axes[1, i].set_title(f'Phase {i + 1}')
             axes[1, i].set_ylim(-np.pi, np.pi)
             axes[1, i].grid(True)
@@ -445,7 +447,7 @@ def inspect_pretraining_dataset(file_path: str) -> dict:
         phase = f['phase'][:]
         metadata = dict(f.attrs)
 
-        stats = {
+        return {
             'num_samples': Phi.shape[0],
             'num_pix': metadata['num_pix'],
             'Phi_stats': {
@@ -461,7 +463,6 @@ def inspect_pretraining_dataset(file_path: str) -> dict:
                 'std': float(phase.std()),
             },
         }
-    return stats
 
 
 if __name__ == '__main__':
