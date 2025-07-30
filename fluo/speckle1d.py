@@ -5,7 +5,13 @@ from numba import jit
 
 
 class Fluorescence1D:
-    def __init__(self, kmax=10, num_pix=201, num_atoms=4, x=None):
+    def __init__(
+        self,
+        kmax: int = 10,
+        num_pix: int = 201,
+        num_atoms: int = 4,
+        x: np.ndarray | None = None,
+    ):
         """Simulate fluorescence speckle from a 1D array of atoms and compute
         various correlation functions.
 
@@ -57,7 +63,7 @@ class Fluorescence1D:
 
     @staticmethod
     @jit(nopython=True, parallel=False)
-    def compute_weights_2d(num_pix=1):
+    def compute_weights_2d(num_pix: int = 1) -> np.ndarray:
         """Calculate the 2D weights using explicit for-loops.
 
         Keyword arguments:
@@ -100,7 +106,8 @@ class Fluorescence1D:
         diffraction quantities.
         """
         # Set spatial extent of real space object here
-        self.coords = np.random.random(self.num_atoms) * 2 - 1
+        rng = np.random.default_rng()
+        self.coords = rng.random(self.num_atoms) * 2 - 1
 
         # Define the coherent diffraction
         self.kr_product = np.outer(self.k_pix, self.coords)
@@ -110,18 +117,18 @@ class Fluorescence1D:
         self.coh_ft_double = np.exp(-1j * self.qr_product * 2 * np.pi).mean(1)
         self.coh_phase_double = np.angle(self.coh_ft_double)
 
-    def get_incoh_intens(self):
+    def get_incoh_intens(self) -> np.ndarray:
         """Get the fluorescence intensity in a single shot.
 
         Returns:
             float: The fluorescence intensity (1d array) across the detector
         """
-        random_values = np.random.random(self.num_atoms)
+        rng = np.random.default_rng()
+        random_values = rng.random(self.num_atoms)
         phase_factor = np.exp(-1j * (self.kr_product + random_values) * 2 * np.pi)
-        intensity = np.abs(phase_factor.mean(1)) ** 2
-        return intensity
+        return np.abs(phase_factor.mean(1)) ** 2
 
-    def get_g2(self, num_shots=1000):
+    def get_g2(self, num_shots: int = 1000) -> np.ndarray:
         """Get the second-order correlation function computed from the
         specified number of incoherent shots.
 
@@ -135,7 +142,7 @@ class Fluorescence1D:
         if self.g2 is not None:
             return self.g2
 
-        print('Performing second-order intensity correlation using outer product...')
+        # Computing second-order intensity correlation using outer product
 
         ave_intens = np.zeros(self.num_pix)
         self.g2 = np.zeros((self.num_pix, self.num_pix))
@@ -147,10 +154,10 @@ class Fluorescence1D:
 
         self.g2 *= num_shots / np.outer(ave_intens, ave_intens)
 
-        print('Finished correlation...')
+        # Finished correlation
         return self.g2
 
-    def marginalize_g2(self, num_shots=1000):
+    def marginalize_g2(self, num_shots: int = 1000) -> np.ndarray:
         """Reduce the dimensionality of the double correlation by writing it as a
         function of q instead of k in reciprocal space.
 
@@ -175,7 +182,7 @@ class Fluorescence1D:
 
         return self.g2_1d
 
-    def get_g3(self, num_shots=1000):
+    def get_g3(self, num_shots: int = 1000) -> np.ndarray:
         """Compute the third-order correlation function.
 
         Args:
@@ -187,20 +194,20 @@ class Fluorescence1D:
         if self.g3 is not None:
             return self.g3
 
-        print('Performing third-order correlation using outer product...')
+        # Performing third-order correlation using outer product
         ave_intens = np.zeros(self.num_pix)
         self.g3 = np.zeros(3 * (self.num_pix,))
-        for i in range(num_shots):
+        for _ in range(num_shots):
             incoh = self.get_incoh_intens()
             self.g3 += np.multiply.outer(np.outer(incoh, incoh), incoh)
             ave_intens += incoh
         self.g3 *= num_shots**2 / np.multiply.outer(
             np.outer(ave_intens, ave_intens), ave_intens
         )
-        print('Finished correlation...')
+        # Finished correlation
         return self.g3
 
-    def marginalize_g3(self, num_shots=1000):
+    def marginalize_g3(self, num_shots: int = 1000) -> np.ndarray:
         """Reduce the dimensionality of the triple correlation by writing it as a
         function of q instead of k in reciprocal space.
 
@@ -223,7 +230,7 @@ class Fluorescence1D:
 
     @staticmethod
     @jit(nopython=True, parallel=False)
-    def compute_marginalized_g3(g3, num_pix=1):
+    def compute_marginalized_g3(g3: np.ndarray, num_pix: int = 1) -> np.ndarray:
         """Compute the marginalized triple correlation function by summing the
                 3D array of triple correlations.
 
@@ -246,7 +253,7 @@ class Fluorescence1D:
 
         return g3_2d
 
-    def closure_from_structure(self, return_phase=False):
+    def closure_from_structure(self, return_phase: bool = False) -> np.ndarray:
         """Compute the closure from the structure coherent diffraction.
 
         Args:
@@ -269,17 +276,17 @@ class Fluorescence1D:
             if self.weights_2d is None:
                 self.init_weights_2d()
             c = 2.0 * np.real(coh_12 * coh_1plus2)
-            c = c / self.num_atoms**3 * (self.weights_2d > 0)
-            return c
+            return c / self.num_atoms**3 * (self.weights_2d > 0)
 
-    def closure_from_data(self, num_shots=1000):
+    def closure_from_data(self, num_shots: int = 1000) -> np.ndarray:
         """Compute the closure from correlations of incoherent fluorescence data.
 
         Args:
             num_shots (int): number of shots to compute the correlation
 
         Returns:
-            float: the 2d array of the closure computed from the correlations of the fluorescence data
+            float: the 2d array of the closure computed from the correlations of the
+            fluorescence data
         """
         if self.g3_2d is None:
             self.marginalize_g3(num_shots=num_shots)
@@ -295,12 +302,11 @@ class Fluorescence1D:
 
         weights = self.weights_2d
 
-        c = (
+        return (
             self.g3_2d
             - (1 - 3 / n + 4 / n**2)
             - (1 - 2 / n) * (np.add.outer(g1sq, g1sq) + g1sq[q12])
         ) * (weights > 0)
-        return c
 
     def cosPhi_from_structure(self) -> np.ndarray:
         """Get the cosine of the closure phase from the structure coherent
@@ -321,13 +327,11 @@ class Fluorescence1D:
         # true_phase = self.coh_phase[self.num_pix//2:]
         true_phase = self.coh_phase_double[self.num_pix - 1 :]
         Phi = self.compute_Phi_from_phase(true_phase)
-        cosPhi = np.cos(Phi)
-
-        return cosPhi
+        return np.cos(Phi)
 
     @staticmethod
     @jit(nopython=True, parallel=False)
-    def compute_Phi_from_phase(phase):
+    def compute_Phi_from_phase(phase: np.ndarray) -> np.ndarray:
         """Computes the phase difference array, Phi.
 
         Parameters:
@@ -339,11 +343,9 @@ class Fluorescence1D:
         Phi = np.zeros((phase.shape[0], phase.shape[0]))
         for n in range(phase.shape[0]):
             Phi[n, :] = np.roll(phase, -n) - phase - phase[n]
-        Phi = Phi[: phase.shape[0] // 2 + 1, : phase.shape[0] // 2 + 1]
+        return Phi[: phase.shape[0] // 2 + 1, : phase.shape[0] // 2 + 1]
 
-        return Phi
-
-    def cosPhi_from_data(self, num_shots=1000) -> np.ndarray:
+    def cosPhi_from_data(self, num_shots: int = 1000) -> np.ndarray:
         """Compute the cosine of the closure phase from correlations of
         incoherent fluorescence data.
 
@@ -369,6 +371,4 @@ class Fluorescence1D:
         clos = clos / (np.multiply.outer(g1, g1) * g1[q12])
         clos[np.abs(clos) > 1] = np.sign(clos[np.abs(clos) > 1])
 
-        cosPhi = clos
-
-        return cosPhi
+        return clos

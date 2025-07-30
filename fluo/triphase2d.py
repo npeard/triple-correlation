@@ -7,7 +7,7 @@ import numpy as np
 from scipy import optimize
 
 
-def PhiSolver(cosPhi, initial_phase=[0, 0], error_reject=-10):
+def PhiSolver(cosPhi, initial_phase=None, error_reject=-10):  # noqa: PLR0915,PLR0912,C901
     """Solves the phase for a given cosPhi from data and guesstimate of the
     first phase value. Uses all rows of Phi to solve the sign problem and
     obtain the correct phase slope.
@@ -36,6 +36,9 @@ def PhiSolver(cosPhi, initial_phase=[0, 0], error_reject=-10):
         ]
         + cosPhi[0:num_pix, 0:num_pix, 0:num_pix, 0:num_pix][::-1, ::-1, ::-1, ::-1]
     ) / 2
+
+    if initial_phase is None:
+        initial_phase = [0, 0]
 
     Phi = np.arccos(cosPhi_sym)
     solved = np.zeros(2 * (num_pix,))
@@ -174,7 +177,9 @@ def PhiSolver(cosPhi, initial_phase=[0, 0], error_reject=-10):
                     )
                     # Then, go back to the default case (no alternates) and proceed anyways.
                     # For now, just exit.
-                    exit(1)
+                    import sys
+
+                    sys.exit(1)
 
                 print(perms)
                 perm = perms[perm_num, :]
@@ -245,7 +250,7 @@ def PhiSolver(cosPhi, initial_phase=[0, 0], error_reject=-10):
     return solved, error
 
 
-def PhiSolver_manualSelect(cosPhi, initial_phase=[0, 0], Alt=None):
+def PhiSolver_manualSelect(cosPhi, initial_phase=None, Alt=None):  # noqa: PLR0915
     """Solves the phase for a given cosPhi from data and guesstimate of the
     first phase value. Uses all rows of Phi to solve the sign problem and
     obtain the correct phase slope. Here, the user selects where resolving is used.
@@ -269,6 +274,9 @@ def PhiSolver_manualSelect(cosPhi, initial_phase=[0, 0], Alt=None):
     # 			  num_pix - 1:2 * num_pix, num_pix - 1:2 * num_pix]
     # 			  + cosPhi[0:num_pix, 0:num_pix, 0:num_pix, 0:num_pix][::-1,
     # 				::-1, ::-1, ::-1]) / 2
+    if initial_phase is None:
+        initial_phase = [0, 0]
+
     Phi = np.arccos(cosPhi)
 
     solved = np.zeros(2 * (num_pix,))
@@ -482,7 +490,7 @@ def append_to_h5file(cosPhi_marginal, phase, filename='data.h5'):
     """
     with h5py.File(filename, 'a') as f:
         # Create datasets if they don't exist, otherwise append data
-        if 'cosPhi_marginal' in f.keys():
+        if 'cosPhi_marginal' in f:
             f['cosPhi_marginal'].resize((f['cosPhi_marginal'].shape[0] + 1), axis=0)
             new_data = np.expand_dims(cosPhi_marginal, axis=0)
             f['cosPhi_marginal'][-1:] = new_data
@@ -502,7 +510,7 @@ def append_to_h5file(cosPhi_marginal, phase, filename='data.h5'):
                 chunks=True,
             )
 
-        if 'phase' in f.keys():
+        if 'phase' in f:
             f['phase'].resize((f['phase'].shape[0] + 1), axis=0)
             new_data = np.expand_dims(phase, axis=0)
             f['phase'][-1:] = new_data
@@ -531,7 +539,7 @@ def generate_training_data(num_data=10, file='/Users/nolanpeard/Desktop/Data2D-2
     """
     for _ in range(num_data):
         fluo = Speckle_2D.Fluorescence2D(
-            kmax=2, num_pix=11, num_atoms=np.random.random_integers(3, high=10)
+            kmax=2, num_pix=11, num_atoms=np.random.default_rng().integers(3, 11)
         )
         phase_target = fluo.coh_phase_double
         cosPhi_from_dataPhase = fluo.cosPhi_from_data(num_shots=1000)

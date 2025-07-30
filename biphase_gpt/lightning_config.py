@@ -373,7 +373,7 @@ class GPTDecoder(BaseLightningModule):
         return inputs_flat.clone().detach()
 
     @override
-    def training_step(self, batch: torch.Tensor, batch_idx: int) -> torch.Tensor:  # noqa: ARG002
+    def training_step(self, batch: torch.Tensor, batch_idx: int) -> torch.Tensor:
         """Training step for GPT model.
 
         Args:
@@ -425,7 +425,7 @@ class GPTDecoder(BaseLightningModule):
         self.log('val_loss', loss, prog_bar=True)
 
     @override
-    def test_step(self, batch: torch.Tensor, batch_idx: int) -> None:  # noqa: ARG002
+    def test_step(self, batch: torch.Tensor, batch_idx: int) -> None:
         """Test step for GPT model.
 
         Args:
@@ -451,7 +451,7 @@ class GPTDecoder(BaseLightningModule):
         self,
         batch: torch.Tensor,
         batch_idx: int,
-        dataloader_idx: int = 0,  # noqa: ARG002
+        dataloader_idx: int = 0,
     ) -> torch.Tensor:
         """Prediction step for GPT model. Return all relevant quantities for plotting.
 

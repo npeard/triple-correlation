@@ -33,7 +33,7 @@ def simple_PhiSolver(cosPhi, initial_phase=0):
 
     solved = np.zeros(num_pix // 2)
     solved[1] = initial_phase
-    print(Phi[:, 2])
+    # print(Phi[:, 2])
     for p in range(2, num_pix // 2):
         sum = 0
         for k in range(1, p):
@@ -43,7 +43,7 @@ def simple_PhiSolver(cosPhi, initial_phase=0):
     return solved
 
 
-def PhiSolver(cosPhi, initial_phase=0):
+def PhiSolver(cosPhi, initial_phase=0):  # noqa: PLR0915
     """Solves the phase for a given cosPhi from data and guesstimate of the
     first phase value. Uses all rows of Phi to solve the sign problem and
     obtain the correct phase slope.
@@ -239,7 +239,7 @@ def append_to_h5file(cosPhi_marginal, Phi_marginal, phase, filename='data.h5'):
     with h5py.File(filename, 'a') as f:
         # Create datasets if they don't exist, otherwise append data
 
-        if 'cosPhi_marginal' in f.keys():
+        if 'cosPhi_marginal' in f:
             f['cosPhi_marginal'].resize((f['cosPhi_marginal'].shape[0] + 1), axis=0)
             new_data = np.expand_dims(cosPhi_marginal, axis=0)
             f['cosPhi_marginal'][-1:] = new_data
@@ -251,7 +251,7 @@ def append_to_h5file(cosPhi_marginal, Phi_marginal, phase, filename='data.h5'):
                 chunks=True,
             )
 
-        if 'Phi_marginal' in f.keys():
+        if 'Phi_marginal' in f:
             f['Phi_marginal'].resize((f['Phi_marginal'].shape[0] + 1), axis=0)
             new_data = np.expand_dims(Phi_marginal, axis=0)
             f['Phi_marginal'][-1:] = new_data
@@ -263,7 +263,7 @@ def append_to_h5file(cosPhi_marginal, Phi_marginal, phase, filename='data.h5'):
                 chunks=True,
             )
 
-        if 'phase' in f.keys():
+        if 'phase' in f:
             f['phase'].resize((f['phase'].shape[0] + 1), axis=0)
             new_data = np.expand_dims(phase, axis=0)
             f['phase'][-1:] = new_data
@@ -292,7 +292,7 @@ def generate_training_set_from_data(
     """
     for _ in range(num_data):
         fluo = Speckle_1D.Fluorescence1D(
-            kmax=3, num_pix=51, num_atoms=np.random.random_integers(3, high=10)
+            kmax=3, num_pix=51, num_atoms=np.random.default_rng().integers(3, 11)
         )
         phase_target = fluo.coh_phase_double
         cosPhi_from_dataPhase = fluo.cosPhi_from_data(num_shots=1000)
@@ -329,7 +329,7 @@ def generate_training_set_from_reverse(
     """
     for _ in tqdm(range(num_data)):
         fluo = speckle1d.Fluorescence1D(
-            kmax=3, num_pix=51, num_atoms=np.random.random_integers(3, high=20)
+            kmax=3, num_pix=51, num_atoms=np.random.default_rng().integers(3, 21)
         )
         phase_target = fluo.coh_phase_double
         cosPhi_from_phase, Phi_from_phase = fluo.cosPhi_from_phase()
