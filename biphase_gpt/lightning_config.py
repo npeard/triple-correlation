@@ -3,8 +3,8 @@
 from typing import Any
 
 import lightning as L
-import torch
 import numpy as np
+import torch
 from torch import nn, optim
 
 from biphase_gpt.nano_gpt import GPT, GPTConfig
@@ -132,7 +132,9 @@ class BaseLightningModule(L.LightningModule):
                 return 1.0
             return float(epoch + 1) / float(warmup_epochs)
 
-        warmup_scheduler = optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=warmup_lambda)
+        warmup_scheduler = optim.lr_scheduler.LambdaLR(
+            optimizer, lr_lambda=warmup_lambda
+        )
         cosine_scheduler = optim.lr_scheduler.CosineAnnealingLR(
             optimizer, T_max=T_max, eta_min=eta_min
         )
@@ -171,11 +173,10 @@ class GPTDecoder(BaseLightningModule):
         num_pix: Number of pixels in the phase array, used to determine how to
         do the encoding loss, 1D vs 2D
         """
-
         # Number of pixels in the phase array, used to determine how to
         # do the encoding loss, 1D vs 2D
         self.num_pix = eval(model_hparams['num_pix'])
-        print("self.num_pix", self.num_pix)
+        print('self.num_pix', self.num_pix)
 
         super().__init__(
             model_hparams=model_hparams,
@@ -245,7 +246,10 @@ class GPTDecoder(BaseLightningModule):
     @staticmethod
     @torch.jit.script
     def _encode(phase: torch.Tensor) -> torch.Tensor:
-        """Re-encode abs(Phi) matrix from predicted phase.
+        """Memory-efficient re-encode abs(Phi) matrix from predicted phase.
+        
+        This version computes only the required output elements without creating
+        the full-size intermediate tensor, saving memory and improving performance.
 
         Args:
             phase: Predicted phase, single quadrant included
@@ -253,81 +257,78 @@ class GPTDecoder(BaseLightningModule):
             torch.Tensor: Re-encoded abs(Phi) matrix
         """
         batch_size = phase.size(0)
-        Phi_dim = phase.size(1) // 2 + 1
+        phase_len = phase.size(1)
+        Phi_dim = phase_len // 2 + 1
+        
+        # Calculate output dimensions (after trimming and removing zero row/column)
+        out_dim = Phi_dim - 1  # Remove zero row and column
 
-        # Re-encode abs(Phi) matrix from predicted phase
-        encoded = torch.zeros(
-            (batch_size, phase.size(1), phase.size(1)), device=phase.device
-        )
+        # Initialize output tensor with the final size
+        encoded = torch.zeros((batch_size, out_dim, out_dim), device=phase.device)
 
-        for i in range(phase.size(1)):
-            encoded[:, i, :] = (
-                torch.roll(phase, -i, dims=-1) - phase - phase[:, i].unsqueeze(-1)
-            )
+        # Compute only the required elements directly
+        for i in range(1, Phi_dim):  # Start from 1 to skip zero row
+            # Compute the rolled phase and phase differences for the output region only
+            rolled_phase = torch.roll(phase, -i, dims=-1)
+            phase_diff = rolled_phase[:, 1:Phi_dim] - phase[:, 1:Phi_dim] - phase[:, i].unsqueeze(-1)
+            
+            # Store the absolute value directly
+            encoded[:, i-1, :] = torch.abs(phase_diff)
 
-        encoded = encoded[:, :Phi_dim, :Phi_dim]
-        # Remove zero row and column
-        encoded = encoded[:, 1:, 1:]
-        # absolute value
-        encoded = torch.abs(encoded)
         return encoded
 
     @staticmethod
     @torch.jit.script
     def _encode_2D(phase: torch.Tensor) -> torch.Tensor:
-        """Re-encode abs(Phi) matrix from predicted 2D phase.
-
-        This is a 2D version of _encode that works with 2D phase data, similar to
-        Fluorescence2D.compute_Phi_from_phase but implemented in PyTorch.
+        """Memory-efficient re-encode abs(Phi) matrix from predicted 2D phase.
+        
+        This version computes only the required output elements without creating
+        the full-size intermediate Phi tensor, saving memory and improving
+        performance for large arrays.
 
         Args:
             phase: Predicted phase tensor of shape (batch_size, num_pix, num_pix)
 
         Returns:
-            torch.Tensor: Re-encoded abs(Phi) 4D tensor of shape (batch_size, half_nx, half_ny, half_nx, half_ny)
+            torch.Tensor: Re-encoded abs(Phi) 4D tensor of shape (batch_size, half_nx-1, half_ny-1, half_nx-1, half_ny-1)
         """
         # Get dimensions
         batch_size, nx, ny = phase.shape
         assert nx == ny, 'Phase must be square'
 
-        # Initialize output tensor
-        Phi = torch.zeros((batch_size, nx, ny, nx, ny), device=phase.device)
-
-        # Compute Phi using nested loops (similar to the numba implementation)
-        for nx_shift in range(nx):
-            for ny_shift in range(ny):
-                # Shift the phase array
-                shifted_phase = roll2d_torch(phase, -nx_shift, -ny_shift)
-
-                # Compute the phase difference
-                # For each batch, subtract the original phase and the phase at the shift position
-                phase_at_shift = (
-                    phase[:, nx_shift, ny_shift].unsqueeze(1).unsqueeze(2)
-                )  # Add dimensions for broadcasting
-                Phi[:, nx_shift, ny_shift, :, :] = (
-                    shifted_phase - phase - phase_at_shift
-                )
-
-        # Trim to match the expected output dimensions
+        # Calculate output dimensions (after trimming and removing zero row/column)
         half_nx = nx // 2 + 1
         half_ny = ny // 2 + 1
-        Phi = Phi[:, :half_nx, :half_ny, :half_nx, :half_ny]
+        out_nx = half_nx - 1  # Remove zero row
+        out_ny = half_ny - 1  # Remove zero column
 
-        # Remove zero row and column
-        Phi = Phi[:, 1:, 1:, 1:, 1:]
+        # Initialize output tensor with the final size
+        Phi_abs = torch.zeros((batch_size, out_nx, out_ny, out_nx, out_ny), device=phase.device)
 
-        # Take absolute value for the final output
-        Phi_abs = torch.abs(Phi)
+        # Compute only the required elements directly
+        for nx_shift in range(1, half_nx):  # Start from 1 to skip zero row
+            for ny_shift in range(1, half_ny):  # Start from 1 to skip zero column
+                # Shift the phase array
+                shifted_phase = roll2d_torch(phase, -nx_shift, -ny_shift)
+                
+                # Get the phase at the shift position for broadcasting
+                phase_at_shift = phase[:, nx_shift, ny_shift].unsqueeze(1).unsqueeze(2)
+                
+                # Compute phase difference for the output region only
+                phase_diff = shifted_phase[:, 1:half_nx, 1:half_ny] - phase[:, 1:half_nx, 1:half_ny] - phase_at_shift
+                
+                # Store the absolute value directly
+                Phi_abs[:, nx_shift-1, ny_shift-1, :, :] = torch.abs(phase_diff)
 
         return Phi_abs
 
     def compute_inputs_from_phases(self, phases: torch.Tensor) -> torch.Tensor:
         """Compute input Phi matrices from phase data on the fly using optimized PyTorch methods.
         Disables gradient tracking during computation to save memory.
-        
+
         Args:
             phases: Phase data tensor of shape (batch_size, phase_length)
-            
+
         Returns:
             torch.Tensor: Computed input Phi matrices (flattened)
         """
@@ -341,32 +342,32 @@ class GPTDecoder(BaseLightningModule):
                 # _encode expects (batch_size, phase_length)
                 if len(phases.shape) == 1:
                     phases = phases.unsqueeze(0)  # Add batch dimension if missing
-                
+
                 # Use the optimized _encode method for 1D
                 inputs = self._encode(phases)
-                
+
             elif isinstance(self.num_pix, tuple):
                 # 2D case - reshape flattened phase
                 batch_size = phases.shape[0]
                 # Reshape to (batch_size, height, width) for _encode_2D
-                phases_reshaped = phases.view(batch_size, self.num_pix[0], self.num_pix[1])
-                
+                phases_reshaped = phases.view(
+                    batch_size, self.num_pix[0], self.num_pix[1]
+                )
+
                 # Use the optimized _encode_2D method
                 inputs = self._encode_2D(phases_reshaped)
-                
+
             else:
-                raise ValueError(f"Unsupported num_pix type: {type(self.num_pix)}")
-            
+                raise ValueError(f'Unsupported num_pix type: {type(self.num_pix)}')
+
             # Flatten the inputs for the model
             inputs_flat = inputs.flatten(start_dim=1)
-            
+
         # Create a new tensor that requires grad for the model
         # This detaches from the computation graph while preserving device and dtype
         return inputs_flat.clone().detach()
-    
-    def training_step(
-        self, batch: torch.Tensor, batch_idx: int
-    ) -> torch.Tensor:
+
+    def training_step(self, batch: torch.Tensor, batch_idx: int) -> torch.Tensor:
         """Training step for GPT model.
 
         Args:
@@ -375,22 +376,20 @@ class GPTDecoder(BaseLightningModule):
         """
         # Now batch is just the phase data
         phases = batch
-        
+
         # Compute inputs on the fly
         inputs = self.compute_inputs_from_phases(phases)
-        
+
         # Forward pass with computed inputs
         y_hat = self(inputs)
-        
+
         # Compute loss
         loss = self.loss_function(y_hat, phases, inputs)
 
         self.log('train_loss', loss, prog_bar=True, on_epoch=True)
         return loss
 
-    def validation_step(
-        self, batch: torch.Tensor, batch_idx: int
-    ) -> None:
+    def validation_step(self, batch: torch.Tensor, batch_idx: int) -> None:
         """Validation step for GPT model.
 
         Args:
@@ -399,13 +398,13 @@ class GPTDecoder(BaseLightningModule):
         """
         # Now batch is just the phase data
         phases = batch
-        
+
         # Compute inputs on the fly
         inputs = self.compute_inputs_from_phases(phases)
-        
+
         # Forward pass with computed inputs
         y_hat = self(inputs)
-        
+
         # Compute loss
         loss = self.loss_function(y_hat, phases, inputs)
 
@@ -420,9 +419,7 @@ class GPTDecoder(BaseLightningModule):
 
         self.log('val_loss', loss, prog_bar=True)
 
-    def test_step(
-        self, batch: torch.Tensor, batch_idx: int
-    ) -> None:
+    def test_step(self, batch: torch.Tensor, batch_idx: int) -> None:
         """Test step for GPT model.
 
         Args:
@@ -431,13 +428,13 @@ class GPTDecoder(BaseLightningModule):
         """
         # Now batch is just the phase data
         phases = batch
-        
+
         # Compute inputs on the fly
         inputs = self.compute_inputs_from_phases(phases)
-        
+
         # Forward pass with computed inputs
         y_hat = self(inputs)
-        
+
         # Compute loss
         loss = self.loss_function(y_hat, phases, inputs)
 
@@ -455,13 +452,13 @@ class GPTDecoder(BaseLightningModule):
         """
         # Now batch is just the phase data
         phases = batch
-        
+
         # Compute inputs on the fly
         inputs = self.compute_inputs_from_phases(phases)
-        
+
         # Forward pass with computed inputs
         predictions = self.model(inputs)
-        
+
         if isinstance(self.num_pix, tuple):
             # 2D phase has been flattened, so we need to reshape it to be compatible with _encode_2D
             # should have shape (batch_size, num_pix, num_pix)

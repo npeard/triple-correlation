@@ -290,7 +290,11 @@ def Figure_1():
     r = 0.25 * np.ones_like(fluo.coords[1, :])
     n = 500
     for xi, yi, zi, ri in zip(
-        np.zeros_like(fluo.coords[0, :]), fluo.coords[0, :], fluo.coords[1, :], r, strict=False
+        np.zeros_like(fluo.coords[0, :]),
+        fluo.coords[0, :],
+        fluo.coords[1, :],
+        r,
+        strict=False,
     ):
         (xs, ys, zs) = draw_sphere(xi, yi, zi, ri)
         ax1.plot_surface(xs, ys, zs, color='purple', zorder=n)

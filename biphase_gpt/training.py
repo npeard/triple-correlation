@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 
+import contextlib
 import os
 import random
-import contextlib
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from itertools import product
 from pathlib import Path
 from typing import Any, Union
@@ -16,7 +16,6 @@ from lightning.pytorch.loggers import WandbLogger
 
 from biphase_gpt.datasets import get_data_loaders
 from biphase_gpt.lightning_config import BaseLightningModule, GPTDecoder
-from biphase_gpt.nano_gpt import GPT, GPTConfig
 
 
 @dataclass
@@ -142,7 +141,9 @@ class TrainingConfig:
 
             for training_combo in training_combinations:
                 training_config = training_fixed.copy()
-                training_config.update(dict(zip(training_keys, training_combo, strict=False)))
+                training_config.update(
+                    dict(zip(training_keys, training_combo, strict=False))
+                )
 
                 for loss_combo in loss_combinations:
                     loss_config = loss_fixed.copy()
@@ -251,11 +252,11 @@ class ModelTrainer:
         if isinstance(num_pix, str):
             num_pix = eval(num_pix)
 
-        optimizer_hparams={
+        optimizer_hparams = {
             'name': self.config.training_config.get('optimizer', 'Adam'),
             # TODO: why is this loaded as a string?
             'lr': eval(self.config.training_config.get('learning_rate', 5e-4)),
-            'momentum': self.config.training_config.get('momentum', 0.9)
+            'momentum': self.config.training_config.get('momentum', 0.9),
         }
 
         # Common scheduler hyperparameters
@@ -271,7 +272,7 @@ class ModelTrainer:
             'T_max': cosine_epochs,  # For CosineAnnealingLR
             'eta_min': self.config.training_config.get('eta_min', 0),
         }
-        
+
         if self.config.model_config['type'] == 'GPT':
             return GPTDecoder(
                 model_hparams=self.config.model_config,
@@ -283,7 +284,7 @@ class ModelTrainer:
             raise ValueError("Unknown model type, can't initialize Lightning.")
 
     def setup_trainer(self) -> L.Trainer:
-        """Setup Lightning trainer with callbacks and loggers"""
+        """Setup Lightning trainer with callbacks and loggers."""
         # Callbacks
         callbacks = []
         # Add WandB logger if configured
@@ -301,8 +302,7 @@ class ModelTrainer:
             callbacks.append(
                 ModelCheckpoint(
                     dirpath=Path(self.checkpoint_dir) / self.experiment_name,
-                    filename=str(loggers[0].experiment.id)
-                    + '_{epoch}-{val_loss:.4f}',
+                    filename=str(loggers[0].experiment.id) + '_{epoch}-{val_loss:.4f}',
                     monitor='val_loss',
                     mode='min',
                     save_top_k=1,
@@ -377,7 +377,7 @@ class ModelTrainer:
         y = predictions[0][1].cpu()
         encoded = predictions[0][2].cpu()
         inputs = predictions[0][3].cpu()
-        
+
         # Get batch length
         batch_len = len(y_hat)
 
@@ -393,46 +393,52 @@ class ModelTrainer:
         for i in range(batch_len):
             # Calculate individual loss components for this sample
             # Extract single sample tensors and ensure correct shape
-            y_hat_sample = y_hat[i:i+1]
-            y_sample = y[i:i+1]
-            inputs_sample = inputs[i:i+1]
-            
+            y_hat_sample = y_hat[i : i + 1]
+            y_sample = y[i : i + 1]
+            inputs_sample = inputs[i : i + 1]
+
             # Print shapes for debugging this specific sample
             print(f'Sample {i} shapes:')
             print(f'  y_hat_sample: {y_hat_sample.shape}')
             print(f'  y_sample: {y_sample.shape}')
             print(f'  inputs_sample: {inputs_sample.shape}')
-            print(f'  encoded_sample: {encoded[i:i+1].shape}')
-            
+            print(f'  encoded_sample: {encoded[i : i + 1].shape}')
+
             # Calculate loss components using MSE
             mse = torch.nn.MSELoss()
             abs_target_loss = mse(torch.abs(y_hat_sample), torch.abs(y_sample)).item()
             direct_target_loss = mse(y_hat_sample, y_sample).item()
-            
+
             # Calculate encoding loss directly using the encoded output from predict_step
             # This avoids any reshaping issues since predict_step already computed the encoding
-            encoded_sample = encoded[i:i+1]
+            encoded_sample = encoded[i : i + 1]
             encoding_loss = mse(encoded_sample, inputs_sample).item()
-            
+
             # Apply encoding weight if available
-            encoding_weight = model.loss_hparams.get('encoding_weight', 1.0) if hasattr(model, 'loss_hparams') else 1.0
+            encoding_weight = (
+                model.loss_hparams.get('encoding_weight', 1.0)
+                if hasattr(model, 'loss_hparams')
+                else 1.0
+            )
             weighted_encoding_loss = encoding_weight * encoding_loss
-            
+
             # Calculate total loss
             total_loss = abs_target_loss + direct_target_loss + weighted_encoding_loss
-            
+
             # Format loss values for display with 3 significant figures
-            loss_title = (f"Total Loss: {total_loss:.3g}\n"
-                         f"Abs Target Loss: {abs_target_loss:.3g}\n"
-                         f"Direct Target Loss: {direct_target_loss:.3g}\n"
-                         f"Encoding Loss: {encoding_loss:.3g}")
-            
+            loss_title = (
+                f'Total Loss: {total_loss:.3g}\n'
+                f'Abs Target Loss: {abs_target_loss:.3g}\n'
+                f'Direct Target Loss: {direct_target_loss:.3g}\n'
+                f'Encoding Loss: {encoding_loss:.3g}'
+            )
+
             # Convert tensors to numpy for plotting
             inputs_np = inputs[i].detach().numpy()
             y_hat_np = y_hat[i].detach().numpy()
             y_np = y[i].detach().numpy()
             encoded_np = encoded[i].detach().numpy()
-            
+
             if is_2d:
                 # 2D case: 4 subplots (Inputs, Predictions, Targets, Encoded)
                 fig, axes = plt.subplots(2, 2, figsize=(10, 8))
@@ -465,7 +471,7 @@ class ModelTrainer:
                 # Create 3 subplots: top-left, top-right, and bottom spanning both columns
                 ax1 = fig.add_subplot(gs[0, 0])  # Inputs
                 ax2 = fig.add_subplot(gs[0, 1])  # Predictions/Targets
-                ax3 = fig.add_subplot(gs[1, 0])  # Encoded 
+                ax3 = fig.add_subplot(gs[1, 0])  # Encoded
 
                 # Plot inputs
                 im1 = ax1.imshow(inputs_np, origin='lower')
@@ -488,10 +494,18 @@ class ModelTrainer:
 
             # Add sample number as main title and loss information as subtitle with smaller font
             fig.suptitle(f'Sample {i + 1}/{batch_len}', fontsize=14, fontweight='bold')
-            
+
             # Add loss information as a smaller subtitle
-            plt.figtext(0.5, 0.01, loss_title, ha='center', fontsize=10, 
-                      bbox={'facecolor':'white', 'alpha':0.8, 'pad':5})
-            
-            plt.tight_layout(rect=[0, 0.1, 1, 0.95])  # Adjust layout to make room for the subtitle
+            plt.figtext(
+                0.5,
+                0.01,
+                loss_title,
+                ha='center',
+                fontsize=10,
+                bbox={'facecolor': 'white', 'alpha': 0.8, 'pad': 5},
+            )
+
+            plt.tight_layout(
+                rect=[0, 0.1, 1, 0.95]
+            )  # Adjust layout to make room for the subtitle
             plt.show()

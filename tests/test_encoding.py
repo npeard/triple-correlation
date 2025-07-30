@@ -39,6 +39,39 @@ def test_encode_equivalence():
     np.testing.assert_allclose(gpt_output, fluo_output, rtol=1e-5, atol=1e-5)
 
 
+def test_encode_multiple_sizes():
+    """Test that _encode works correctly for different array sizes."""
+    sizes = [17, 21, 33, 45]
+    
+    for n in sizes:
+        # Set consistent seed for each size
+        np.random.seed(42)
+        torch.manual_seed(42)
+        
+        # Create antisymmetric phase sequence
+        half_n = n // 2
+        pos_half = np.random.randn(half_n)
+        phase = np.concatenate(([0], pos_half))
+        
+        # Convert to torch tensor and add batch dimension
+        phase_tensor = torch.from_numpy(phase).float().unsqueeze(0)
+        
+        # Get outputs
+        gpt_output = GPTDecoder._encode(phase_tensor).squeeze().numpy()
+        fluo_output = np.abs(Fluorescence1D.compute_Phi_from_phase(phase)[1:, 1:])
+        
+        # Compare
+        np.testing.assert_allclose(
+            gpt_output,
+            fluo_output,
+            rtol=1e-5,
+            atol=1e-5,
+            err_msg=f'1D encoding methods differ for size {n}',
+        )
+    
+    print(f'All 1D encoding size tests passed for sizes: {sizes}')
+
+
 def test_encode_2D_equivalence():
     """Test that _encode_2D produces the same output as compute_Phi_from_phase from Fluorescence2D"""
     # Set random seed for reproducibility
@@ -77,3 +110,35 @@ def test_encode_2D_equivalence():
     )
 
     print('All 2D encoding tests passed!')
+
+
+def test_encode_2D_multiple_sizes():
+    """Test that _encode_2D works correctly for different array sizes."""
+    sizes = [5, 7, 9, 11, 13, 15, 17, 19]  # Keep all sizes < 21
+    
+    for n in sizes:
+        # Set consistent seed for each size
+        np.random.seed(42)
+        torch.manual_seed(42)
+        
+        # Create a 2D phase array with random values
+        phase_np = np.random.uniform(-np.pi, np.pi, (n, n))
+        phase_np[0, 0] = 0  # Set origin to zero
+        
+        # Convert to torch tensor and add batch dimension
+        phase_torch = torch.from_numpy(phase_np).float().unsqueeze(0)
+        
+        # Get outputs
+        gpt_output = GPTDecoder._encode_2D(phase_torch).squeeze().numpy()
+        fluo_output = np.abs(Fluorescence2D.compute_Phi_from_phase(phase_np)[1:, 1:, 1:, 1:])
+        
+        # Compare
+        np.testing.assert_allclose(
+            gpt_output,
+            fluo_output,
+            rtol=1e-5,
+            atol=1e-5,
+            err_msg=f'2D encoding methods differ for size {n}x{n}',
+        )
+    
+    print(f'All 2D encoding size tests passed for sizes: {sizes}')

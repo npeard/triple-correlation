@@ -116,8 +116,7 @@ class Fluorescence2D:
         return weights_4d
 
     def digitize_coords(self) -> None:
-        """Digitize the atomic coordinates into a real space object for plotting.
-        """
+        """Digitize the atomic coordinates into a real space object for plotting."""
         if self.x is not None:
             self.coords = self.x
 

@@ -11,9 +11,6 @@ import torch
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
-from fluo.speckle1d import Fluorescence1D
-from fluo.speckle2d import Fluorescence2D
-
 
 class BaseH5Dataset(Dataset):
     """Base class for HDF5 datasets.
