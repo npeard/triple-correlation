@@ -247,7 +247,7 @@ class GPTDecoder(BaseLightningModule):
     @torch.jit.script
     def _encode(phase: torch.Tensor) -> torch.Tensor:
         """Memory-efficient re-encode abs(Phi) matrix from predicted phase.
-        
+
         This version computes only the required output elements without creating
         the full-size intermediate tensor, saving memory and improving performance.
 
@@ -259,7 +259,7 @@ class GPTDecoder(BaseLightningModule):
         batch_size = phase.size(0)
         phase_len = phase.size(1)
         Phi_dim = phase_len // 2 + 1
-        
+
         # Calculate output dimensions (after trimming and removing zero row/column)
         out_dim = Phi_dim - 1  # Remove zero row and column
 
@@ -270,10 +270,14 @@ class GPTDecoder(BaseLightningModule):
         for i in range(1, Phi_dim):  # Start from 1 to skip zero row
             # Compute the rolled phase and phase differences for the output region only
             rolled_phase = torch.roll(phase, -i, dims=-1)
-            phase_diff = rolled_phase[:, 1:Phi_dim] - phase[:, 1:Phi_dim] - phase[:, i].unsqueeze(-1)
-            
+            phase_diff = (
+                rolled_phase[:, 1:Phi_dim]
+                - phase[:, 1:Phi_dim]
+                - phase[:, i].unsqueeze(-1)
+            )
+
             # Store the absolute value directly
-            encoded[:, i-1, :] = torch.abs(phase_diff)
+            encoded[:, i - 1, :] = torch.abs(phase_diff)
 
         return encoded
 
@@ -281,7 +285,7 @@ class GPTDecoder(BaseLightningModule):
     @torch.jit.script
     def _encode_2D(phase: torch.Tensor) -> torch.Tensor:
         """Memory-efficient re-encode abs(Phi) matrix from predicted 2D phase.
-        
+
         This version computes only the required output elements without creating
         the full-size intermediate Phi tensor, saving memory and improving
         performance for large arrays.
@@ -303,22 +307,28 @@ class GPTDecoder(BaseLightningModule):
         out_ny = half_ny - 1  # Remove zero column
 
         # Initialize output tensor with the final size
-        Phi_abs = torch.zeros((batch_size, out_nx, out_ny, out_nx, out_ny), device=phase.device)
+        Phi_abs = torch.zeros(
+            (batch_size, out_nx, out_ny, out_nx, out_ny), device=phase.device
+        )
 
         # Compute only the required elements directly
         for nx_shift in range(1, half_nx):  # Start from 1 to skip zero row
             for ny_shift in range(1, half_ny):  # Start from 1 to skip zero column
                 # Shift the phase array
                 shifted_phase = roll2d_torch(phase, -nx_shift, -ny_shift)
-                
+
                 # Get the phase at the shift position for broadcasting
                 phase_at_shift = phase[:, nx_shift, ny_shift].unsqueeze(1).unsqueeze(2)
-                
+
                 # Compute phase difference for the output region only
-                phase_diff = shifted_phase[:, 1:half_nx, 1:half_ny] - phase[:, 1:half_nx, 1:half_ny] - phase_at_shift
-                
+                phase_diff = (
+                    shifted_phase[:, 1:half_nx, 1:half_ny]
+                    - phase[:, 1:half_nx, 1:half_ny]
+                    - phase_at_shift
+                )
+
                 # Store the absolute value directly
-                Phi_abs[:, nx_shift-1, ny_shift-1, :, :] = torch.abs(phase_diff)
+                Phi_abs[:, nx_shift - 1, ny_shift - 1, :, :] = torch.abs(phase_diff)
 
         return Phi_abs
 

@@ -57,14 +57,14 @@ def test_roll2d_large_shifts():
 
 
 def test_roll2d_equivalence():
-    """Test that roll2d_torch produces the same output as roll2d from speckle2d.py"""
+    """Test roll2d_torch produces same output as roll2d from speckle2d.py."""
     # Set random seed for reproducibility
-    np.random.seed(42)
+    rng = np.random.default_rng(42)
     torch.manual_seed(42)
 
     # Create a 2D array with random values
     n = 11  # Small odd size for faster testing
-    arr_np = np.random.randn(n, n)
+    arr_np = rng.standard_normal((n, n))
 
     # Convert to torch tensor and add batch dimension
     arr_torch = torch.from_numpy(arr_np).float().unsqueeze(0)
@@ -98,4 +98,4 @@ def test_roll2d_equivalence():
             err_msg=f'Outputs differ for shifts ({shift_x}, {shift_y})',
         )
 
-    print('All roll2d tests passed!')
+    # Test passes - roll2d equivalence verified

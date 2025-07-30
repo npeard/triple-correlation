@@ -5,7 +5,7 @@ from fluo import Fluorescence1D, Fluorescence2D
 
 
 def test_cosPhi_1d():
-    """Test that cosPhi_from_phase and cosPhi_from_data produce similar results in 1D."""
+    """Test cosPhi_from_phase and cosPhi_from_data produce similar results in 1D."""
     # Initialize model with small parameters for faster testing
     fluo = Fluorescence1D(kmax=3, num_pix=21, num_atoms=5)
 
@@ -35,7 +35,7 @@ def test_cosPhi_1d():
 
 
 def test_cosPhi_2d():
-    """Test that cosPhi_from_phase and cosPhi_from_data produce similar results in 2D."""
+    """Test cosPhi_from_phase and cosPhi_from_data produce similar results in 2D."""
     # Initialize model with small parameters for faster testing
     fluo = Fluorescence2D(kmax=3, num_pix=11, num_atoms=5)
 

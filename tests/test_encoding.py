@@ -8,7 +8,7 @@ from fluo.speckle2d import Fluorescence2D
 
 def test_encode_equivalence():
     # Set random seed for reproducibility
-    np.random.seed(42)
+    rng = np.random.default_rng(42)
     torch.manual_seed(42)
 
     # Create antisymmetric phase sequence
@@ -16,7 +16,7 @@ def test_encode_equivalence():
     half_n = n // 2
 
     # Generate random positive half (not including center)
-    pos_half = np.random.randn(half_n)
+    pos_half = rng.standard_normal(half_n)
     phase = np.concatenate(([0], pos_half))
 
     # Convert to torch tensor and add batch dimension
@@ -42,24 +42,24 @@ def test_encode_equivalence():
 def test_encode_multiple_sizes():
     """Test that _encode works correctly for different array sizes."""
     sizes = [17, 21, 33, 45]
-    
+
     for n in sizes:
         # Set consistent seed for each size
-        np.random.seed(42)
+        rng = np.random.default_rng(42)
         torch.manual_seed(42)
-        
+
         # Create antisymmetric phase sequence
         half_n = n // 2
-        pos_half = np.random.randn(half_n)
+        pos_half = rng.standard_normal(half_n)
         phase = np.concatenate(([0], pos_half))
-        
+
         # Convert to torch tensor and add batch dimension
         phase_tensor = torch.from_numpy(phase).float().unsqueeze(0)
-        
+
         # Get outputs
         gpt_output = GPTDecoder._encode(phase_tensor).squeeze().numpy()
         fluo_output = np.abs(Fluorescence1D.compute_Phi_from_phase(phase)[1:, 1:])
-        
+
         # Compare
         np.testing.assert_allclose(
             gpt_output,
@@ -68,19 +68,19 @@ def test_encode_multiple_sizes():
             atol=1e-5,
             err_msg=f'1D encoding methods differ for size {n}',
         )
-    
-    print(f'All 1D encoding size tests passed for sizes: {sizes}')
+
+    # Test passes - all sizes verified
 
 
 def test_encode_2D_equivalence():
-    """Test that _encode_2D produces the same output as compute_Phi_from_phase from Fluorescence2D"""
+    """Test _encode_2D produces same output as compute_Phi_from_phase."""
     # Set random seed for reproducibility
-    np.random.seed(42)
+    rng = np.random.default_rng(42)
     torch.manual_seed(42)
 
     # Create a 2D phase array with random values
     n = 11  # Small odd size for faster testing
-    phase_np = np.random.uniform(-np.pi, np.pi, (n, n))
+    phase_np = rng.uniform(-np.pi, np.pi, (n, n))
 
     # Set origin to zero as required
     phase_np[0, 0] = 0
@@ -109,29 +109,31 @@ def test_encode_2D_equivalence():
         err_msg='2D encoding outputs differ',
     )
 
-    print('All 2D encoding tests passed!')
+    # Test passes - 2D encoding verified
 
 
 def test_encode_2D_multiple_sizes():
     """Test that _encode_2D works correctly for different array sizes."""
     sizes = [5, 7, 9, 11, 13, 15, 17, 19]  # Keep all sizes < 21
-    
+
     for n in sizes:
         # Set consistent seed for each size
-        np.random.seed(42)
+        rng = np.random.default_rng(42)
         torch.manual_seed(42)
-        
+
         # Create a 2D phase array with random values
-        phase_np = np.random.uniform(-np.pi, np.pi, (n, n))
+        phase_np = rng.uniform(-np.pi, np.pi, (n, n))
         phase_np[0, 0] = 0  # Set origin to zero
-        
+
         # Convert to torch tensor and add batch dimension
         phase_torch = torch.from_numpy(phase_np).float().unsqueeze(0)
-        
+
         # Get outputs
         gpt_output = GPTDecoder._encode_2D(phase_torch).squeeze().numpy()
-        fluo_output = np.abs(Fluorescence2D.compute_Phi_from_phase(phase_np)[1:, 1:, 1:, 1:])
-        
+        fluo_output = np.abs(
+            Fluorescence2D.compute_Phi_from_phase(phase_np)[1:, 1:, 1:, 1:]
+        )
+
         # Compare
         np.testing.assert_allclose(
             gpt_output,
@@ -140,5 +142,5 @@ def test_encode_2D_multiple_sizes():
             atol=1e-5,
             err_msg=f'2D encoding methods differ for size {n}x{n}',
         )
-    
-    print(f'All 2D encoding size tests passed for sizes: {sizes}')
+
+    # Test passes - all 2D sizes verified
