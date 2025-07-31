@@ -1,24 +1,24 @@
 model:
   type: "GPT"
-  n_layer: 1
-  n_head: 4
+  n_layer: 2
+  n_head: 2
   n_embd: 16
   dropout: 0.1
   bias: false
   is_causal: true  # Whether to use causal masking in self-attention
-  num_pix: "11"
+  num_pix: (21, 21) # Tuple for 2D phase prediction
 
 training:
   max_epochs: 500
-  batch_size: 16
-  optimizer: "SGD"
+  batch_size: 256
+  optimizer: "Adam"
   learning_rate: 5e-4
   eta_min: 0
-  accelerator: "cpu"
+  accelerator: "gpu"
   devices: '1'
-  use_logging: false
+  use_logging: true
   wandb_project: "triple_correlation"
-  experiment_name: "updated_encoding"
+  experiment_name: "updated_encoding_2D"
   checkpoint_dir: "./biphase/transformer/checkpoints"
 
 loss:
@@ -31,6 +31,6 @@ data:
   test_file: "test.h5"
   num_workers: 7
   dataset_params:
-    train_samples: 100
-    val_samples: 100
-    test_samples: 100
+    train_samples: 10000
+    val_samples: 1000
+    test_samples: 1000

@@ -205,11 +205,25 @@ class GPTDecoder(BaseLightningModule):
         loss += nn.MSELoss()(y_hat, targets)
 
         # Add encoding loss if enabled and x is provided
+        encoding_loss = 0
         if self.loss_hparams.get('encoding_weight', 0) > 0 and x is not None:
             encoding_weight = self.loss_hparams['encoding_weight']
-            loss += encoding_weight * self.encoding_loss(y_hat, x)
+            encoding_loss += encoding_weight * self.encoding_loss(y_hat, x)
 
-        return loss
+        # Create a dictionary of unweighted loss components
+        loss_dict = {
+            'target': loss,
+            'encoding': encoding_loss,
+            'total_unweighted': loss + encoding_loss,
+            # Add more loss components as needed
+        }
+
+        # Add a total loss entry with loss components weighted by loss weights
+        loss_dict['total'] = (
+            self.loss_hparams['encoding_weight'] * encoding_loss + loss
+        )
+
+        return loss_dict
 
     def encoding_loss(self, phase: torch.Tensor, absPhi: torch.Tensor) -> torch.Tensor:
         """Compute loss between re-encoded abs(Phi) matrix and input abs(Phi) matrix.
@@ -390,12 +404,22 @@ class GPTDecoder(BaseLightningModule):
         y_hat = self(inputs)
 
         # Compute loss
-        loss = self.loss_function(y_hat, phases, inputs)
+        loss_dict = self.loss_function(y_hat, phases, inputs)
 
-        self.log('train_loss', loss, prog_bar=True, on_epoch=True)
-        return loss
+        # Log each loss component with train_ prefix
+        for loss_name, loss_value in loss_dict.items():
+            self.log(
+                f'train_{loss_name}_loss',
+                loss_value,
+                prog_bar=(loss_name == 'total'),  # Only show total loss in progress bar
+                on_epoch=True,
+            )
 
-    def validation_step(self, batch: torch.Tensor, batch_idx: int) -> None:  # noqa: ARG002
+        # Return the total loss for backpropagation
+        return loss_dict['total']
+
+    @override
+    def validation_step(self, batch: torch.Tensor, batch_idx: int) -> None:
         """Validation step for GPT model.
 
         Args:
@@ -412,7 +436,7 @@ class GPTDecoder(BaseLightningModule):
         y_hat = self(inputs)
 
         # Compute loss
-        loss = self.loss_function(y_hat, phases, inputs)
+        loss_dict = self.loss_function(y_hat, phases, inputs)
 
         # Verify encoding/unpacking order during sanity check (first validation)
         if self.trainer.sanity_checking:
@@ -422,7 +446,14 @@ class GPTDecoder(BaseLightningModule):
                 f'Encoding verification failed! Loss: {encoding_loss:.2e}'
             )
 
-        self.log('val_loss', loss, prog_bar=True)
+        # Log each loss component with val_ prefix
+        for loss_name, loss_value in loss_dict.items():
+            self.log(
+                f'val_{loss_name}_loss',
+                loss_value,
+                prog_bar=(loss_name == 'total'),  # Only show total loss in progress bar
+                sync_dist=True,
+            )
 
     @override
     def test_step(self, batch: torch.Tensor, batch_idx: int) -> None:
@@ -442,9 +473,11 @@ class GPTDecoder(BaseLightningModule):
         y_hat = self(inputs)
 
         # Compute loss
-        loss = self.loss_function(y_hat, phases, inputs)
+        loss_dict = self.loss_function(y_hat, phases, inputs)
 
-        self.log('test_loss', loss)
+        # Log each loss component with test_ prefix
+        for loss_name, loss_value in loss_dict.items():
+            self.log(f'test_{loss_name}_loss', loss_value, sync_dist=True)
 
     @override
     def predict_step(
