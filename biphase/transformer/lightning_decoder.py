@@ -205,8 +205,8 @@ class GPTDecoder(BaseLightningModule):
         loss += nn.MSELoss()(y_hat, targets)
 
         # Add encoding loss if enabled and x is provided
-        if self.loss_hparams.get('use_encoding_loss', False) and x is not None:
-            encoding_weight = self.loss_hparams.get('encoding_weight', 1.0)
+        if self.loss_hparams.get('encoding_weight', 0) > 0 and x is not None:
+            encoding_weight = self.loss_hparams['encoding_weight']
             loss += encoding_weight * self.encoding_loss(y_hat, x)
 
         return loss
