@@ -2,7 +2,6 @@
 
 from itertools import permutations
 
-import h5py
 import numpy as np
 from scipy import optimize
 

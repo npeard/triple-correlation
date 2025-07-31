@@ -1,9 +1,7 @@
 #!/usr/bin/env python
 
-import h5py
 import numpy as np
 from scipy import optimize
-from tqdm import tqdm
 
 
 def simple_PhiSolver(cosPhi, initial_phase=0):
