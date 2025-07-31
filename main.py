@@ -1,12 +1,32 @@
 #!/usr/bin/env python
 
 import argparse
+import logging
 import random
 import time
 
 import numpy as np
-from biphase_gpt.datasets import create_pretraining_datasets
-from biphase_gpt.training import ModelTrainer, TrainingConfig
+
+from biphase.transformer.datasets import create_pretraining_datasets
+from biphase.transformer.training import ModelTrainer, TrainingConfig
+
+
+def setup_logging(verbosity: str) -> None:
+    """Setup logging configuration based on verbosity level."""
+    level_map = {
+        'DEBUG': logging.DEBUG,
+        'INFO': logging.INFO,
+        'WARNING': logging.WARNING,
+        'ERROR': logging.ERROR,
+    }
+
+    level = level_map.get(verbosity.upper(), logging.INFO)
+
+    logging.basicConfig(
+        level=level,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S',
+    )
 
 
 def parse_args():
@@ -16,7 +36,7 @@ def parse_args():
     parser.add_argument(
         '--config',
         type=str,
-        default='./biphase_gpt/configs/nanogpt_config.yaml',
+        default='./biphase/transformer/configs/nanogpt_config.yaml',
         help='Path to YAML config file. Required for training, optional for testing.',
     )
     parser.add_argument(
@@ -29,27 +49,38 @@ def parse_args():
         action='store_true',
         help='Regenerate training, validation, and test datasets',
     )
+    parser.add_argument(
+        '--verbosity',
+        type=str,
+        choices=['DEBUG', 'INFO', 'WARNING', 'ERROR'],
+        default='INFO',
+        help='Set logging verbosity level (default: INFO)',
+    )
     return parser.parse_args()
 
 
-def setup_random_seed(seed=None):
+def setup_random_seed(seed: int | None = None) -> int:
     """Set random seed for reproducibility."""
     if seed is None:
         # Generate a random seed between 0 and 2^32 - 1
         seed = random.randint(0, 2**32 - 1)
 
     random.seed(seed)
-    np.random.seed(seed)
+    np.random.default_rng(seed)
     return seed
 
 
 def main():
     args = parse_args()
 
+    # Setup logging based on verbosity argument
+    setup_logging(args.verbosity)
+    logger = logging.getLogger(__name__)
+
     # For testing mode (checkpoint provided), config is not necessary
     if args.checkpoint:
-        print('Loading from checkpoint for quick plotting...')
-        print(args.checkpoint)
+        logger.info('Loading from checkpoint for quick plotting...')
+        logger.info(f'Checkpoint path: {args.checkpoint}')
         model_trainer = ModelTrainer(
             TrainingConfig({}, {}, {}, {}), experiment_name='checkpoint_eval'
         )
@@ -71,17 +102,17 @@ def main():
 
     # Regenerate datasets if requested (using base config)
     if args.regenerate_datasets:
-        print(f'\nRegenerating datasets with random seed: {seed}')
+        logger.info(f'Regenerating datasets with random seed: {seed}')
         create_pretraining_datasets(
             output_dir=base_config.data_config['data_dir'],
             num_pix=base_config.model_config['num_pix'],
             **base_config.data_config['dataset_params'],
         )
-        print('Dataset regeneration complete!\n')
+        logger.info('Dataset regeneration complete!')
 
     # Train with each configuration
     for idx, train_config in enumerate(configs):
-        print(f'\nStarting training run {idx + 1}/{len(configs)}')
+        logger.info(f'Starting training run {idx + 1}/{len(configs)}')
         # Create trainer
         trainer = ModelTrainer(
             config=train_config,
@@ -90,8 +121,11 @@ def main():
         )
 
         # Start training
+        logger.debug('Beginning model training...')
         trainer.train()
+        logger.debug('Training completed, starting testing...')
         trainer.test()
+        logger.info(f'Training run {idx + 1} completed successfully')
         # Close the wandb logger if it was configured
         if trainer.config.training_config.get('use_logging', False):
             trainer.trainer.loggers[0].experiment.finish()

@@ -46,7 +46,7 @@ class TrainingConfig:
         self.training_config.setdefault('batch_size', 64)
 
         # Data defaults
-        self.data_config.setdefault('data_dir', './biphase_gpt/data')
+        self.data_config.setdefault('data_dir', './biphase/transformer/data')
         self.data_config.setdefault('train_file', 'train.h5')
         self.data_config.setdefault('val_file', 'val.h5')
         self.data_config.setdefault('test_file', 'test.h5')
@@ -215,7 +215,8 @@ class ModelTrainer:
     def setup_data(self):
         """Setup data loaders."""
         # Convert data_dir to absolute path
-        base_dir = Path(__file__).parent.parent  # Go up two levels from training.py
+        # Go up three levels from training.py
+        base_dir = Path(__file__).parent.parent.parent
 
         def resolve_path(data_dir: str, filename: str | None = None) -> str:
             """Resolve path relative to project root, joining with filename."""

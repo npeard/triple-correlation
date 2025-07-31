@@ -6,7 +6,7 @@ model:
   dropout: 0.1
   bias: false
   is_causal: true  # Whether to use causal masking in self-attention
-  num_pix: 11
+  num_pix: "11"
 
 training:
   max_epochs: 500
@@ -19,18 +19,18 @@ training:
   use_logging: false
   wandb_project: "triple_correlation"
   experiment_name: "updated_encoding"
-  checkpoint_dir: "./biphase_gpt/checkpoints"
+  checkpoint_dir: "./biphase/transformer/checkpoints"
 
 loss:
   encoding_weight: 1.0
 
 data:
-  data_dir: "./biphase_gpt/data"
+  data_dir: "./biphase/transformer/data"
   train_file: "train.h5"
   val_file: "val.h5"
   test_file: "test.h5"
   num_workers: 7
   dataset_params:
-    train_samples: 100000
-    val_samples: 1000
-    test_samples: 1000
+    train_samples: 100
+    val_samples: 100
+    test_samples: 100
