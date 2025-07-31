@@ -13,8 +13,8 @@ import yaml
 from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint
 from lightning.pytorch.loggers import WandbLogger
 
-from biphase_gpt.datasets import get_data_loaders
-from biphase_gpt.lightning_config import BaseLightningModule, GPTDecoder
+from biphase.transformer.datasets import get_data_loaders
+from biphase.transformer.lightning_decoder import BaseLightningModule, GPTDecoder
 
 
 @dataclass

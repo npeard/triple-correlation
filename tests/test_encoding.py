@@ -1,9 +1,8 @@
 import numpy as np
 import torch
 
-from biphase_gpt.lightning_config import GPTDecoder
-from fluo import Fluorescence1D
-from fluo.speckle2d import Fluorescence2D
+from biphase.transformer.lightning_decoder import GPTDecoder
+from fluo import Fluorescence1D, Fluorescence2D
 
 
 def test_encode_equivalence():

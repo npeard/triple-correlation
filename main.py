@@ -5,7 +5,6 @@ import random
 import time
 
 import numpy as np
-
 from biphase_gpt.datasets import create_pretraining_datasets
 from biphase_gpt.training import ModelTrainer, TrainingConfig
 

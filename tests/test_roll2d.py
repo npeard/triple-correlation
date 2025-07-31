@@ -1,8 +1,8 @@
 import numpy as np
 import torch
 
-from biphase_gpt.lightning_config import roll2d_torch
-from fluo.speckle2d import roll2d
+from biphase.transformer.lightning_decoder import roll2d_torch
+from fluo.fluo2d import roll2d
 
 
 def test_roll2d_matches_numpy():

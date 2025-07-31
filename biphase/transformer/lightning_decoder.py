@@ -7,7 +7,7 @@ import numpy as np
 import torch
 from torch import nn, optim
 
-from biphase_gpt.nano_gpt import GPT, GPTConfig
+from biphase.transformer.nano_gpt import GPT, GPTConfig
 
 
 @torch.jit.script
@@ -448,10 +448,7 @@ class GPTDecoder(BaseLightningModule):
 
     @override
     def predict_step(
-        self,
-        batch: torch.Tensor,
-        batch_idx: int,
-        dataloader_idx: int = 0,
+        self, batch: torch.Tensor, batch_idx: int, dataloader_idx: int = 0
     ) -> torch.Tensor:
         """Prediction step for GPT model. Return all relevant quantities for plotting.
 
