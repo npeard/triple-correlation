@@ -18,7 +18,7 @@ training:
   devices: '1'
   use_logging: true
   wandb_project: "triple_correlation"
-  experiment_name: "updated_encoding_2D"
+  experiment_name: "updated_encoding_2D_sherlock"
   checkpoint_dir: "./biphase/transformer/checkpoints"
 
 loss:
