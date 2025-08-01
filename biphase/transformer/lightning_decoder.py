@@ -219,9 +219,7 @@ class GPTDecoder(BaseLightningModule):
         }
 
         # Add a total loss entry with loss components weighted by loss weights
-        loss_dict['total'] = (
-            self.loss_hparams['encoding_weight'] * encoding_loss + loss
-        )
+        loss_dict['total'] = self.loss_hparams['encoding_weight'] * encoding_loss + loss
 
         return loss_dict
 

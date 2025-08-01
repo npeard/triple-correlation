@@ -1,17 +1,24 @@
 #!/usr/bin/env python
 
-# from mpl_point_clicker import clicker
 import matplotlib.pyplot as P
 import matplotlib.ticker
 import numpy as np
 from matplotlib import gridspec
+from mpl_point_clicker import clicker
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
+from biphase.solver.iterative import IterativeSolver
 from fluo import Fluorescence2D
 
 
 class OOMFormatter(matplotlib.ticker.ScalarFormatter):
-    def __init__(self, order=0, fformat='%1.1f', offset=True, mathText=True):
+    def __init__(
+        self,
+        order: int = 0,
+        fformat: str = '%1.1f',
+        offset: bool = True,
+        mathText: bool = True,
+    ):
         self.oom = order
         self.fformat = fformat
         matplotlib.ticker.ScalarFormatter.__init__(
@@ -21,16 +28,16 @@ class OOMFormatter(matplotlib.ticker.ScalarFormatter):
     def _set_order_of_magnitude(self):
         self.orderOfMagnitude = self.oom
 
-    def _set_format(self, vmin=None, vmax=None):
+    def _set_format(self, vmin=None, vmax=None):  # noqa: ARG002, ANN001
         self.format = self.fformat
         if self._useMathText:
-            self.format = r'$\mathdefault{%s}$' % self.format
+            self.format = rf'$\mathdefault{self.format}$'
 
 
 class Plot2D:
-    def __init__(self, num_atoms=3, num_pix=201, kmax=25):
+    def __init__(self, num_atoms: int = 3, num_pix: int = 201, kmax: float = 25):
         """Instantiate a Fluorescence_1D object with the given parameters. Use
-        this object to run simulations and plot results.
+        this object to run some common simulations and plot results.
 
         Keyword arguments:
             kmax (float) - maximum coordinate in reciprocal space
@@ -171,7 +178,7 @@ class Plot2D:
         P.tight_layout()
         P.show()
 
-    def plot_Intensities(self, num_shots=10000):
+    def plot_Intensities(self, num_shots: int = 10000):
         """Plot the coherent diffraction intensity and compare it to the
         intensity pattern computed from the double correlation. Compare both
         to the sum of speckle patterns (white noise).
@@ -201,7 +208,7 @@ class Plot2D:
         s = fig.add_subplot(223)
         s.set_title('Sum of Speckle Intensities')
         incoh_sum = np.zeros(2 * (self.fluo.num_pix,))
-        for n in range(num_shots):
+        for _n in range(num_shots):
             incoh_sum += self.fluo.get_incoh_intens()
         im = s.imshow(
             incoh_sum / num_shots, cmap=colormap, vmax=1, vmin=0, origin='lower'
@@ -225,7 +232,7 @@ class Plot2D:
         P.tight_layout()
         P.show()
 
-    def plot_Closure(self, num_shots=10000):
+    def plot_Closure(self, num_shots: int = 10000):
         """Plot the closure computed from the structure and from the
         simulated data and compare. The two closures have different domains
         in k-space, however.
@@ -256,7 +263,7 @@ class Plot2D:
         P.tight_layout()
         P.show()
 
-    def plot_ClosurePhase(self, num_shots=10000):
+    def plot_ClosurePhase(self, num_shots: int = 10000):
         """Plot a slice of the closure phase from the structure and simulated
         data.
 
@@ -288,7 +295,7 @@ class Plot2D:
         P.tight_layout()
         P.show()
 
-    def plot_cosPhi(self, num_shots=10000):
+    def plot_cosPhi(self, num_shots: int = 10000):
         """Plot a slice of the cosine of the closure phase from the structure and
         simulated data.
 
@@ -326,7 +333,9 @@ class Plot2D:
         P.tight_layout()
         P.show()
 
-    def plot_PhiSolver_manualSelect(self, num_shots=1000, altLabel=False):
+    def plot_PhiSolver_manualSelect(  # noqa: PLR0915, PLR0912, C901
+        self, num_shots: int = 1000, altLabel: bool = False
+    ):
         """Plot the phase retrieved using sign information from all
         constraints of Phi and perform re-solving using user input.
 
@@ -383,8 +392,9 @@ class Plot2D:
         yAlt = 0  # Y position of user-labeled alternates
         while (xAlt is not None) & (yAlt is not None):
             X0 = [quad1_real_phase[0, 1], quad1_real_phase[1, 0]]
-            quad1_solved, quad1_error = TriPhase_2D.PhiSolver_manualSelect(
-                cosPhi=quad1_cosPhi, initial_phase=X0, Alt=quad1_alternates
+            solver = IterativeSolver(quad1_cosPhi)
+            quad1_solved, quad1_error = solver.manual_solve(
+                initial_phase=X0, alt_pixels=quad1_alternates
             )
 
             fig = P.figure(figsize=(7, 7))
@@ -430,8 +440,9 @@ class Plot2D:
         yAlt = 0  # Y position of user-labeled alternates
         while (xAlt is not None) & (yAlt is not None):
             X0 = [quad2_real_phase[0, 1], quad2_real_phase[1, 0]]
-            quad2_solved, quad2_error = TriPhase_2D.PhiSolver_manualSelect(
-                cosPhi=quad2_cosPhi, initial_phase=X0, Alt=quad2_alternates
+            solver = IterativeSolver(quad2_cosPhi)
+            quad2_solved, quad2_error = solver.manual_solve(
+                initial_phase=X0, alt_pixels=quad2_alternates
             )
 
             fig = P.figure(figsize=(7, 7))
@@ -440,7 +451,7 @@ class Plot2D:
             ax1 = fig.add_subplot(221)
             im = ax1.imshow(quad2_error, cmap='coolwarm', origin='lower')
             P.colorbar(im, ax=ax1)
-            klicker = clicker(ax1, ['event'], markers=['x'])
+            # klicker = clicker(ax1, ['event'], markers=['x'])  # clicker not available
             ax1.set_title('Error ' + str(int(np.sum(quad2_error))))
             # Plot the alternates
             ax2 = fig.add_subplot(222)
@@ -504,11 +515,11 @@ class Plot2D:
                 np.fft.ifftn(np.fft.fftshift(measured_amplitude * np.exp(1j * solved)))
             )
         )
-        obj_true = np.abs(
-            np.fft.fftshift(
-                np.fft.ifftn(np.fft.fftshift(measured_amplitude * np.exp(1j * true)))
-            )
-        )
+        # obj_true = np.abs(
+        #     np.fft.fftshift(
+        #         np.fft.ifftn(np.fft.fftshift(measured_amplitude * np.exp(1j * true)))
+        #     )
+        # )
 
         outer = gridspec.GridSpec(1, 2, width_ratios=[3.7, 1], wspace=0.4)
         gs1 = gridspec.GridSpecFromSubplotSpec(1, 3, subplot_spec=outer[0], wspace=0.4)
@@ -723,7 +734,8 @@ class Plot2D:
         ax5.set_ylabel(r'$Y$ $[\mathrm{Length}]$')
         if not altLabel:
             ax5.set_title(
-                r'$ \tilde{\mathcal{F}} \left\{ \left|g^{(1)} \right| e^{i \phi_{\mathrm{Solved}}} \right\}$'
+                r'$ \tilde{\mathcal{F}} \left\{ \left|g^{(1)} \right| '
+                r'e^{i \phi_{\mathrm{Solved}}} \right\}$'
             )
         ax5.set_xticks([-1, 0, 1])
         ax5.set_yticks([-1, 0, 1])
@@ -750,7 +762,7 @@ class Plot2D:
         # P.tight_layout(pad = 0)
         P.show()
 
-    def plot_PhiSolver(self, num_shots=1000):
+    def plot_PhiSolver(self, num_shots: int = 1000):
         """Plot the phase retrieved using sign information from all
         constraints of Phi.
 
@@ -767,9 +779,8 @@ class Plot2D:
         #              self.num_pix - 1:3 * self.num_pix // 2]
         initial_phase = [real_phase[0, 1], real_phase[1, 0]]
         cosPhi = self.fluo.cosPhi_from_data(num_shots=num_shots)
-        solved, error = TriPhase_2D.PhiSolver(
-            cosPhi, initial_phase=initial_phase, error_reject=-10
-        )
+        solver = IterativeSolver(cosPhi)
+        solved, error = solver.solve(initial_phase=initial_phase[0], error_reject=-10)
 
         fig = P.figure(figsize=(10, 10))
         P.rcParams.update({'font.size': 22})
@@ -812,4 +823,4 @@ class Plot2D:
 
 if __name__ == '__main__':
     plotter = Plot2D(num_pix=11, num_atoms=4, kmax=3)
-    plotter.plot_cosPhi(num_shots=10000)
+    plotter.plot_PhiSolver_manualSelect(num_shots=1000)

@@ -1,9 +1,11 @@
 #!/usr/bin/env python
 
 import copy
+from typing import Any
 
 import harminv
 import matplotlib
+import matplotlib.pyplot as plt
 import matplotlib.ticker
 import numpy as np
 import pylab as P
@@ -11,8 +13,13 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 from PIL import Image
 from skimage.restoration import unwrap_phase
 
+from biphase.solver.iterative import IterativeSolver
+from fluo import Fluorescence1D, Fluorescence2D
 
-def highlight_cell(x, y, ax=None, **kwargs):
+
+def highlight_cell(
+    x: float, y: float, ax: plt.Axes | None = None, **kwargs: Any
+) -> plt.Rectangle:
     """Highlights a cell in a given plot.
 
     Parameters:
@@ -48,7 +55,7 @@ def highlight_cell(x, y, ax=None, **kwargs):
 
 
 class OOMFormatter(matplotlib.ticker.ScalarFormatter):
-    """CustomFormatter class inherits from ScalarFormatter class
+    """CustomFormatter class inherits from ScalarFormatter class.
 
     Args:
         order (int): The order of magnitude for the tick labels (default: 0).
@@ -57,29 +64,38 @@ class OOMFormatter(matplotlib.ticker.ScalarFormatter):
         mathText (bool): Whether to use math text for the tick labels (default: True).
     """
 
-    def __init__(self, order=0, fformat='%1.1f', offset=True, mathText=True):
+    def __init__(
+        self,
+        order: int = 0,
+        fformat: str = '%1.1f',
+        offset: bool = True,
+        mathText: bool = True,
+    ):
         """Initializes a CustomFormatter object.
 
         Args:
             order (int): The order of magnitude for the tick labels (default: 0).
             fformat (str): The format string for the tick labels (default: "%1.1f").
             offset (bool): Whether to use an offset for the tick labels (default: True).
-            mathText (bool): Whether to use math text for the tick labels (default: True).
+            mathText (bool): Whether to use math text for the tick labels
+                            (default: True).
         """
         self.oom = order
         self.fformat = fformat
         super().__init__(useOffset=offset, useMathText=mathText)
 
 
-def Figure_1():
+def Figure_1() -> None:  # noqa: PLR0915
     """Plot a schematic of diffraction from a group of atoms in the forward
     direction (coherent diffraction) and a set of incoherent frames collected
     from the side (incoherent diffraction).
     """
     np.random.seed(0x5EED)
-    fluo = Speckle_2D.Fluorescence2D(kmax=5, num_pix=201, num_atoms=19)
+    fluo = Fluorescence2D(kmax=5, num_pix=201, num_atoms=19)
 
-    def draw_sphere(x_center, y_center, z_center, radius):
+    def draw_sphere(
+        x_center: float, y_center: float, z_center: float, radius: float
+    ) -> tuple:
         """Draw a sphere centered at (x_center, y_center, z_center) with the given
         radius.
 
@@ -313,7 +329,7 @@ def Figure_1():
     P.show()
 
 
-def Figure_S1():
+def Figure_S1():  # noqa: PLR0915
     """Show how the inverse Fourier transform loses fidelity when the phases
     from the Fourier transform of two images are swapped.
     """
@@ -410,12 +426,12 @@ def Figure_S1():
     P.show()
 
 
-def BiSpectrumClosure():
+def BiSpectrumClosure():  # noqa: PLR0915
     """Plot the bispectrum, closure, closure phase, and a non-redundant
     region of Phi to illustrate what experimental data we are using to
     retrieve the phase.
     """
-    fluo = Speckle_1D.Fluorescence1D(kmax=5, num_pix=101, num_atoms=3)
+    fluo = Fluorescence1D(kmax=5, num_pix=101, num_atoms=3)
     num_shots = 10000
 
     cmap = copy.copy(matplotlib.cm.get_cmap('viridis'))
@@ -601,17 +617,18 @@ def BiSpectrumClosure():
     P.show()
 
 
-def Figure_2():
+def Figure_2() -> None:
     """Show how when the phase is retrieved from the first-order difference
     equation in Phi without the sign information, the phase solution has
     contours at the expected locations but the sign of the slope is incorrect.
     """
     np.random.seed(0x5EED + 1)
-    fluo = Speckle_1D.Fluorescence1D(kmax=5, num_pix=201, num_atoms=3)
+    fluo = Fluorescence1D(kmax=5, num_pix=201, num_atoms=3)
     cosPhi = fluo.cosPhi_from_data(num_shots=10000)
     initialPhase = fluo.coh_phase[fluo.num_pix // 2 :][0]
 
-    solved = TriPhase_1D.simple_PhiSolver(cosPhi=cosPhi, initial_phase=initialPhase)
+    solver = IterativeSolver(cosPhi)
+    solved = solver.naive_solve(initial_phase=initialPhase)
     solved = unwrap_phase(solved)
     real_phase = fluo.coh_phase[fluo.num_pix // 2 :]
     real_phase = unwrap_phase(real_phase)
@@ -620,13 +637,13 @@ def Figure_2():
     P.rcParams.update({'font.size': 22})
     # Plot the solved phase branch
     s = fig.add_subplot(111)
-    plot_1 = P.plot(
+    P.plot(
         fluo.k_pix[fluo.num_pix // 2 :],
         real_phase,
         'o--',
         label=r'$\phi_{\mathrm{true}}$',
     )
-    plot_2 = P.plot(
+    P.plot(
         fluo.k_pix[fluo.num_pix // 2 : fluo.num_pix - 1],
         solved,
         'o--',
@@ -654,17 +671,17 @@ def Figure_3():
     for the optimization.
     """
     np.random.seed(0x5EED)
-    fluo = Speckle_1D.Fluorescence1D(kmax=5, num_pix=51, num_atoms=3)
+    # fluo = Fluorescence1D(kmax=5, num_pix=51, num_atoms=3)  # Unused variable
     # This code was previously a commented section in PhiSolver. This needs
     # to be retrieved from a previous commit.
 
 
-def Figure_ResolvingDemo():
+def Figure_ResolvingDemo():  # noqa: PLR0915
     """Show how the use of resolving to minimize the total error leads to a
     correct phase solution.
     """
     np.random.seed(0x5EED)
-    fluo = Speckle_2D.Fluorescence2D(kmax=3, num_pix=11, num_atoms=3)
+    fluo = Fluorescence2D(kmax=3, num_pix=11, num_atoms=3)
     real_phase = fluo.coh_phase_double[
         fluo.num_pix - 1 : 2 * fluo.num_pix - 1, fluo.num_pix - 1 : 2 * fluo.num_pix - 1
     ]
@@ -672,9 +689,8 @@ def Figure_ResolvingDemo():
     num_shots = 1000
     cosPhi = fluo.cosPhi_from_data(num_shots=num_shots)
     initialPhase = [real_phase[0, 1], real_phase[1, 0]]
-    solved, error = TriPhase_2D.PhiSolver(
-        cosPhi, initial_phase=initialPhase, error_reject=50
-    )
+    solver = IterativeSolver(cosPhi)
+    solved, error = solver.solve(initial_phase=initialPhase[0], error_reject=50)
 
     solved = solved
     box_extent = 2 * fluo.kmax
@@ -811,12 +827,11 @@ def Figure_ResolvingDemo():
     # Secondly, with resolving
     cosPhi = fluo.cosPhi_from_data(num_shots=num_shots)
     initialPhase = [real_phase[0, 1], real_phase[1, 0]]
-    solved, error = TriPhase_2D.PhiSolver(
-        cosPhi, initial_phase=initialPhase, error_reject=-1
-    )
+    solver = IterativeSolver(cosPhi)
+    solved, error = solver.solve(initial_phase=initialPhase, error_reject=-1)
     # Plot the solved phase branch
     ax1 = fig.add_subplot(243)
-    im = ax1.imshow(
+    ax1.imshow(
         solved,
         cmap='twilight_shifted',
         origin='lower',
@@ -845,7 +860,7 @@ def Figure_ResolvingDemo():
     )
 
     ax2 = fig.add_subplot(244)
-    im = ax2.imshow(
+    ax2.imshow(
         real_phase,
         cmap='twilight_shifted',
         origin='lower',
@@ -959,7 +974,9 @@ def Figure_4_Rows():
     using manual (user-input) resolving to minimize the total error.
     """
     np.random.seed(0x5EED)
-    plot = Plot_2D.Plot2D(num_pix=11, num_atoms=7, kmax=2)
+    from plots.plot2d import Plot2D
+
+    plot = Plot2D(num_pix=11, num_atoms=7, kmax=2)
 
     # First, user should do manual resolving to generate subfigures A-D
     plot.plot_PhiSolver_manualSelect(num_shots=20000)
@@ -968,12 +985,12 @@ def Figure_4_Rows():
     plot.plot_PhiSolver_manualSelect(num_shots=20000, altLabel=True)
 
 
-def Figure_S2():
+def Figure_S2():  # noqa: PLR0915
     """Show how the double correlation may be used to obtain scattering
     intensities outside the detector area despite the sum of shots giving noise.
     """
     np.random.seed(0x5EED + 1)
-    fluo = Speckle_2D.Fluorescence2D(kmax=5, num_pix=101, num_atoms=7)
+    fluo = Fluorescence2D(kmax=5, num_pix=101, num_atoms=7)
 
     # Changing this will affect colorbar placement for the whole figure, be
     # careful
@@ -982,7 +999,7 @@ def Figure_S2():
     # Plot shots
     ax1 = fig.add_subplot(231)
     box_extent = fluo.kmax
-    im = ax1.imshow(
+    ax1.imshow(
         fluo.get_incoh_intens(),
         cmap='coolwarm',
         origin='lower',
@@ -1009,7 +1026,7 @@ def Figure_S2():
     num_shots = 1000
     box_extent = 2 * fluo.kmax
     measured = fluo.marginalize_g2(num_shots=num_shots) - 1 + 1.0 / fluo.num_atoms
-    im = ax2.imshow(
+    ax2.imshow(
         measured,
         cmap='coolwarm',
         origin='lower',
@@ -1050,7 +1067,7 @@ def Figure_S2():
     # IFT = Autocorrelation enhanced
     measured_ift = np.abs(np.fft.fftshift(np.fft.ifftn(np.fft.fftshift(measured))))
     measured_ift = measured_ift / np.max(measured_ift)
-    im = ax3.imshow(
+    ax3.imshow(
         measured_ift,
         cmap='binary',
         origin='lower',
@@ -1077,7 +1094,7 @@ def Figure_S2():
     incoh_sum = np.zeros(2 * (fluo.num_pix,))
     for n in range(num_shots):
         incoh_sum += fluo.get_incoh_intens()
-    im = ax4.imshow(
+    ax4.imshow(
         incoh_sum / num_shots,
         cmap='coolwarm',
         origin='lower',
@@ -1102,7 +1119,7 @@ def Figure_S2():
     # Plot true, non-extended intensity
     box_extent = fluo.kmax
     true = np.abs(fluo.coh_ft) ** 2
-    im = ax5.imshow(
+    ax5.imshow(
         true,
         cmap='coolwarm',
         origin='lower',
@@ -1130,7 +1147,7 @@ def Figure_S2():
     # IFT = Autocorrelation non-enhanced
     true_ift = np.abs(np.fft.fftshift(np.fft.ifftn(np.fft.fftshift(true))))
     true_ift = true_ift / np.max(true_ift)
-    im = ax6.imshow(
+    ax6.imshow(
         true_ift,
         cmap='binary',
         origin='lower',
@@ -1162,12 +1179,12 @@ def Figure_S2():
     P.show()
 
 
-def Figure_S3():
+def Figure_S3():  # noqa: PLR0915
     """Show how having extra k-space gives better real space resolution with
-    and without phase information
+    and without phase information.
     """
     np.random.seed(0x5EED + 2)
-    fluo = Speckle_2D.Fluorescence2D(kmax=8, num_pix=201, num_atoms=5)
+    fluo = Fluorescence2D(kmax=8, num_pix=201, num_atoms=5)
     P.rcParams.update({'font.size': 22})
 
     box_extent = np.max(fluo.x_pix[0])
@@ -1366,11 +1383,11 @@ def Figure_S3():
     P.show()
 
 
-def Figure_S5():
+def Figure_S5():  # noqa: PLR0915
     np.random.seed(0x5EED + 2)
     # Show the effects of phase ramps, sign flips, and the use of harmonic
     # inversion to find a 1D structure
-    fluo = Speckle_1D.Fluorescence1D(kmax=5, num_pix=501, num_atoms=3)
+    fluo = Fluorescence1D(kmax=5, num_pix=501, num_atoms=3)
 
     fig = P.figure(figsize=(20, 5))
     P.rcParams.update({'font.size': 22})
@@ -1381,9 +1398,9 @@ def Figure_S5():
         fluo.coh_phase_double + np.linspace(0, 50, len(fluo.coh_phase_double))
     )
     flipped = unwrap_phase(-fluo.coh_phase_double)
-    rampFlipped = unwrap_phase(
-        -fluo.coh_phase_double + np.linspace(0, -25, len(fluo.coh_phase_double))
-    )
+    # rampFlipped = unwrap_phase(
+    #     -fluo.coh_phase_double + np.linspace(0, -25, len(fluo.coh_phase_double))
+    # )
     s.plot(fluo.q_pix, truth, label='Truth')
     s.plot(fluo.q_pix, ramped, label='Ramped')
     s.plot(fluo.q_pix, flipped, label='Flipped')
@@ -1422,16 +1439,16 @@ def Figure_S5():
         signal, fmin=0, fmax=1, dt=2 * 2 * fluo.kmax / (2 * fluo.num_pix), nf=6
     )
     harm_x = inversion.frequency[inversion.amplitude > 0.1]
-    print('Truth', fluo.coords)
+    # print('Truth', fluo.coords)
     # frequencies
-    print('Frequencies', inversion.frequency[inversion.amplitude > 0.1])
+    # print('Frequencies', inversion.frequency[inversion.amplitude > 0.1])
     # decay rates
-    print('Decay Rates', inversion.decay[inversion.amplitude > 0.1])
-    print('Q Factor', inversion.Q[inversion.amplitude > 0.1])  # Q factor
+    # print('Decay Rates', inversion.decay[inversion.amplitude > 0.1])
+    # print('Q Factor', inversion.Q[inversion.amplitude > 0.1])  # Q factor
     # phase shift
-    print('Phase Shift', inversion.phase[inversion.amplitude > 0.1])
+    # print('Phase Shift', inversion.phase[inversion.amplitude > 0.1])
     # absolute amplitudes
-    print('Amplitude', inversion.amplitude[inversion.amplitude > 0.1])
+    # print('Amplitude', inversion.amplitude[inversion.amplitude > 0.1])
 
     s = fig.add_subplot(142)
     s.plot(
@@ -1483,16 +1500,16 @@ def Figure_S5():
     harm_x = inversion.frequency[inversion.amplitude > 0.1][1:] * np.sign(
         inversion.phase[inversion.amplitude > 0.1][1:]
     )
-    print('Truth', fluo.coords)
+    # print('Truth', fluo.coords)
     # frequencies
-    print('Frequencies', inversion.frequency[inversion.amplitude > 0.1])
+    # print('Frequencies', inversion.frequency[inversion.amplitude > 0.1])
     # decay rates
-    print('Decay Rates', inversion.decay[inversion.amplitude > 0.1])
-    print('Q Factor', inversion.Q[inversion.amplitude > 0.1])  # Q factor
+    # print('Decay Rates', inversion.decay[inversion.amplitude > 0.1])
+    # print('Q Factor', inversion.Q[inversion.amplitude > 0.1])  # Q factor
     # phase shift
-    print('Phase Shift', inversion.phase[inversion.amplitude > 0.1])
+    # print('Phase Shift', inversion.phase[inversion.amplitude > 0.1])
     # absolute amplitudes
-    print('Amplitude', inversion.amplitude[inversion.amplitude > 0.1])
+    # print('Amplitude', inversion.amplitude[inversion.amplitude > 0.1])
 
     s = fig.add_subplot(143)
     s.plot(
@@ -1545,16 +1562,16 @@ def Figure_S5():
         nf=6,
     )
     harm_x = -inversion.frequency[inversion.amplitude > 0.1]
-    print('Truth', fluo.coords)
+    # print('Truth', fluo.coords)
     # frequencies
-    print('Frequencies', inversion.frequency[inversion.amplitude > 0.1])
+    # print('Frequencies', inversion.frequency[inversion.amplitude > 0.1])
     # decay rates
-    print('Decay Rates', inversion.decay[inversion.amplitude > 0.1])
-    print('Q Factor', inversion.Q[inversion.amplitude > 0.1])  # Q factor
+    # print('Decay Rates', inversion.decay[inversion.amplitude > 0.1])
+    # print('Q Factor', inversion.Q[inversion.amplitude > 0.1])  # Q factor
     # phase shift
-    print('Phase Shift', inversion.phase[inversion.amplitude > 0.1])
+    # print('Phase Shift', inversion.phase[inversion.amplitude > 0.1])
     # absolute amplitudes
-    print('Amplitude', inversion.amplitude[inversion.amplitude > 0.1])
+    # print('Amplitude', inversion.amplitude[inversion.amplitude > 0.1])
 
     s = fig.add_subplot(144)
     s.plot(
@@ -1602,12 +1619,12 @@ def Figure_S5():
     P.show()
 
 
-def Figure_S4():
+def Figure_S4():  # noqa: PLR0915
     np.random.seed(0x5EED + 2)
-    fluo = Speckle_2D.Fluorescence2D(kmax=3, num_pix=101, num_atoms=5)
+    fluo = Fluorescence2D(kmax=3, num_pix=101, num_atoms=5)
 
     np.random.seed(0x5EED + 2)
-    fluo_coarse = Speckle_2D.Fluorescence2D(kmax=3, num_pix=15, num_atoms=5)
+    fluo_coarse = Fluorescence2D(kmax=3, num_pix=15, num_atoms=5)
 
     P.rcParams.update({'font.size': 22})
     box_extent = 2 * fluo.kmax
@@ -1666,9 +1683,9 @@ def Figure_S4():
     obj_Phase = np.abs(obj_Phase) * np.exp(1j * phase)
     obj_Phase = np.fft.ifft2(obj_Phase)
     obj_Phase = np.fft.fftshift(obj_Phase)
-    obj_scaled_x = np.fft.fftshift(
-        np.fft.fftfreq(len(obj_Phase), d=2 * 2 * fluo.kmax / (2 * fluo.num_pix))
-    )
+    # obj_scaled_x = np.fft.fftshift(
+    #     np.fft.fftfreq(len(obj_Phase), d=2 * 2 * fluo.kmax / (2 * fluo.num_pix))
+    # )
     box_extent = np.max(
         np.fft.fftshift(
             np.fft.fftfreq(2 * fluo.num_pix, d=2 * fluo.kmax / fluo.num_pix)
@@ -1711,9 +1728,9 @@ def Figure_S4():
     obj_Phase = np.abs(obj_Phase) * np.exp(1j * phase)
     obj_Phase = np.fft.ifft2(obj_Phase)
     obj_Phase = np.fft.fftshift(obj_Phase)
-    obj_scaled_x = np.fft.fftshift(
-        np.fft.fftfreq(len(obj_Phase), d=2 * 2 * fluo.kmax / (2 * fluo.num_pix))
-    )
+    # obj_scaled_x = np.fft.fftshift(
+    #     np.fft.fftfreq(len(obj_Phase), d=2 * 2 * fluo.kmax / (2 * fluo.num_pix))
+    # )
     box_extent = np.max(
         np.fft.fftshift(
             np.fft.fftfreq(2 * fluo.num_pix, d=2 * fluo.kmax / fluo.num_pix)

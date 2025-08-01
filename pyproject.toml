@@ -22,6 +22,8 @@ dependencies = [
     "lightning",
     "h5py",
     "tqdm",
+    "scikit-image",
+    "mpl_point_clicker",
 ]
 
 [project.urls]

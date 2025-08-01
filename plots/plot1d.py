@@ -3,13 +3,14 @@
 import numpy as np
 import pylab as P
 
+from biphase.solver.iterative import IterativeSolver
 from fluo import Fluorescence1D
 
 
 class Plot1D:
-    def __init__(self, num_atoms=5, num_pix=201, kmax=10):
+    def __init__(self, num_atoms: int = 5, num_pix: int = 201, kmax: float = 10):
         """Instantiate a Fluorescence_1D object with the given parameters. Use
-        this object to run simulations and plot results.
+        this object to run some common simulations and plot results.
 
         Keyword arguments:
             kmax (float) - maximum coordinate in reciprocal space
@@ -33,7 +34,6 @@ class Plot1D:
         array retrieved from inverting the diffraction intensity plus the phase.
         """
         P.plot(self.fluo.x_pix, self.fluo.object, label='Object')
-        print('Coordinates', self.fluo.coords)
         obj_NoPhase = np.fft.fftshift(self.fluo.coh_ft)
         obj_NoPhase = np.abs(obj_NoPhase)
         obj_Phase = np.fft.fftshift(self.fluo.coh_ft)
@@ -52,6 +52,8 @@ class Plot1D:
         P.plot(scaled_x, np.abs(obj_NoPhase), label='Object from Intensity')
         P.plot(scaled_x, np.abs(obj_Phase), '--', label='Object from Intensity + Phase')
         P.xlim([-1, 1])
+        P.xlabel('Position')
+        P.ylabel('Density')
         P.legend()
         P.tight_layout()
         P.show()
@@ -65,7 +67,7 @@ class Plot1D:
         P.tight_layout()
         P.show()
 
-    def plot_Intensities(self, num_shots=10000):
+    def plot_Intensities(self, num_shots: int = 10000):
         """Plot the coherent diffraction intensity and compare it to the
         intensity pattern computed from the double correlation. Compare both
         to the sum of speckle patterns (white noise).
@@ -80,7 +82,7 @@ class Plot1D:
         P.plot(self.fluo.q_pix, measured, 'o--', label=r'Intensity Computed via $g^2$')
 
         incoh_sum = np.zeros_like(self.fluo.k_pix)
-        for n in range(num_shots):
+        for _n in range(num_shots):
             incoh_sum += self.fluo.get_incoh_intens()
         P.plot(
             self.fluo.k_pix,
@@ -93,7 +95,7 @@ class Plot1D:
         P.tight_layout()
         P.show()
 
-    def plot_g2(self, num_shots=10000):
+    def plot_g2(self, num_shots: int = 10000):
         """Plot the full second-order correlation function.
 
         Keyword arguments:
@@ -105,7 +107,7 @@ class Plot1D:
         P.tight_layout()
         P.show()
 
-    def plot_g3(self, num_shots=10000):
+    def plot_g3(self, num_shots: int = 10000):
         """Plot the marginalized third-order correlation function.
 
         Keyword arguments:
@@ -120,7 +122,7 @@ class Plot1D:
         P.tight_layout()
         P.show()
 
-    def plot_Closure(self, num_shots=10000):
+    def plot_Closure(self, num_shots: int = 10000):
         """Plot the closure computed from the structure and from the
         simulated data and compare. The two closures have different domains
         in k-space, however.
@@ -148,7 +150,7 @@ class Plot1D:
         P.tight_layout()
         P.show()
 
-    def plot_ClosurePhase(self, num_shots=10000):
+    def plot_ClosurePhase(self, num_shots: int = 10000):
         """Plot the closure phase from the structure and simulated data.
 
         Keyword arguments:
@@ -169,7 +171,7 @@ class Plot1D:
         P.tight_layout()
         P.show()
 
-    def plot_cosPhi(self, num_shots=10000):
+    def plot_cosPhi(self, num_shots: int = 10000):
         """Plot the cosine of the closure phase from the structure and
         simulated data.
 
@@ -191,8 +193,6 @@ class Plot1D:
 
         cosPhi_from_phase = self.fluo.cosPhi_from_phase()
         cosPhi_from_phase_symmetrized = (cosPhi_from_phase + cosPhi_from_phase.T) / 2
-        print(cosPhi_from_phase.shape)
-        print(cosPhi_from_data.shape)
         assert cosPhi_from_data.shape == cosPhi_from_phase.shape, 'Shapes do not match'
 
         fig = P.figure(figsize=(7, 7))
@@ -219,7 +219,7 @@ class Plot1D:
         P.tight_layout()
         P.show()
 
-    def plot_simple_PhiSolve(self, num_shots=1000):
+    def plot_naive_PhiSolve(self, num_shots: int = 1000):
         """Plot the phase retrieved without sign information from all
         constraints of Phi.
 
@@ -230,7 +230,8 @@ class Plot1D:
         initial_phase = self.fluo.coh_phase_double[
             self.num_pix - 1 : 3 * self.num_pix // 2
         ][1]
-        solved = TriPhase_1D.simple_PhiSolver(cosPhi, initial_phase=initial_phase)
+        solver = IterativeSolver(cosPhi)
+        solved = solver.naive_solve(initial_phase=initial_phase)
         from skimage.restoration import unwrap_phase
 
         solved = unwrap_phase(solved)
@@ -255,7 +256,7 @@ class Plot1D:
         P.tight_layout()
         P.show()
 
-    def plot_PhiSolver(self, num_shots=10000):
+    def plot_PhiSolver(self, num_shots: int = 10000):
         """Plot the phase retrieved using sign information from all
         constraints of Phi.
 
@@ -266,7 +267,10 @@ class Plot1D:
         initial_phase = self.fluo.coh_phase_double[
             self.num_pix - 1 : 3 * self.num_pix // 2
         ][1]
-        solved, error = TriPhase_1D.PhiSolver(cosPhi, initial_phase=initial_phase)
+        solver = IterativeSolver(cosPhi, log_level='DEBUG')
+        solved, error = solver.solve(initial_phase=initial_phase)
+        # from biphase.solver.biphase1d import PhiSolver
+        # solved = PhiSolver(cosPhi)
         real_phase = self.fluo.coh_phase_double[self.fluo.num_pix - 1 :]
 
         # Unwrap the phase
@@ -277,7 +281,7 @@ class Plot1D:
 
         fig = P.figure(figsize=(5, 5))
         # Plot the solved phase branch
-        s = fig.add_subplot(111)
+        fig.add_subplot(111)
         P.plot(
             np.linspace(0, len(real_phase), len(real_phase)),
             plot_real_phase,
@@ -301,4 +305,4 @@ class Plot1D:
 
 if __name__ == '__main__':
     plotter = Plot1D(num_atoms=5, num_pix=21, kmax=3)
-    plotter.plot_cosPhi()
+    plotter.plot_PhiSolver(num_shots=1000)
