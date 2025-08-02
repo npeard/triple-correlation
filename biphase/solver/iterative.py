@@ -297,16 +297,16 @@ class IterativeSolver:
             # 2D symmetrization - combine symmetric 4D regions and average
             return (
                 self.cosPhi[
-                    self.num_pix - 1 : 2 * self.num_pix,
-                    self.num_pix - 1 : 2 * self.num_pix,
-                    self.num_pix - 1 : 2 * self.num_pix,
-                    self.num_pix - 1 : 2 * self.num_pix,
+                    self.num_pix - 1 : 3 * self.num_pix // 2,
+                    self.num_pix - 1 : 3 * self.num_pix // 2,
+                    self.num_pix - 1 : 3 * self.num_pix // 2,
+                    self.num_pix - 1 : 3 * self.num_pix // 2,
                 ]
                 + self.cosPhi[
-                    0 : self.num_pix,
-                    0 : self.num_pix,
-                    0 : self.num_pix,
-                    0 : self.num_pix,
+                    self.num_pix // 2 : self.num_pix,
+                    self.num_pix // 2 : self.num_pix,
+                    self.num_pix // 2 : self.num_pix,
+                    self.num_pix // 2 : self.num_pix,
                 ][::-1, ::-1, ::-1, ::-1]
             ) / 2
 
