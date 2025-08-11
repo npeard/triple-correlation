@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import logging
+
 import matplotlib.pyplot as P
 import matplotlib.ticker
 import numpy as np

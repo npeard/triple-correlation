@@ -213,7 +213,9 @@ class ModelTrainer:
             logger.info('GPU device name: %s', torch.cuda.get_device_name(0))
 
             # Check if FlashAttention is available
-            logger.info('FlashAttention available: %s', torch.backends.cuda.flash_sdp_enabled())
+            logger.info(
+                'FlashAttention available: %s', torch.backends.cuda.flash_sdp_enabled()
+            )
 
     def setup_data(self):
         """Setup data loaders."""

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
-from itertools import permutations
 import logging
+from itertools import permutations
 
 import numpy as np
 from scipy import optimize
@@ -125,19 +125,26 @@ def PhiSolver(cosPhi, initial_phase=None, error_reject=-10):  # noqa: PLR0915,PL
             # if (np.any( np.abs(np.subtract.outer(error[to_solve[0,:],
             # to_solve[1,:]], error[prev_solve[0,:], prev_solve[1,:]])) > 15)
             # and n>3):
-            logger.debug('Previous errors: %s', error[prev_solve[0, :], prev_solve[1, :]])
+            logger.debug(
+                'Previous errors: %s', error[prev_solve[0, :], prev_solve[1, :]]
+            )
             logger.debug('Current errors: %s', error[to_solve[0, :], to_solve[1, :]])
-            logger.debug('Error differences: %s', np.abs(
-                np.subtract.outer(
-                    error[to_solve[0, :], to_solve[1, :]],
-                    error[prev_solve[0, :], prev_solve[1, :]],
-                )
-            ))
+            logger.debug(
+                'Error differences: %s',
+                np.abs(
+                    np.subtract.outer(
+                        error[to_solve[0, :], to_solve[1, :]],
+                        error[prev_solve[0, :], prev_solve[1, :]],
+                    )
+                ),
+            )
             diagonal_flag = n
             logger.warning('Unacceptable error! Re-solving previous diagonal')
             # First, attempt to change pixels adjacent to pixel in current
             # diagonal with the largest error
-            logger.debug('Current pixel errors: %s', error[to_solve[0, :], to_solve[1, :]])
+            logger.debug(
+                'Current pixel errors: %s', error[to_solve[0, :], to_solve[1, :]]
+            )
             err_idx = np.argmax(error[to_solve[0, :], to_solve[1, :]])
             suspects = np.zeros((4, diagonal_flag - 0))  # The fourth row is
             # just a dummy case, only need 3 permutations for a 1 pixel error
@@ -164,8 +171,12 @@ def PhiSolver(cosPhi, initial_phase=None, error_reject=-10):  # noqa: PLR0915,PL
                 # In case we have already been through every possible
                 # permutation and still not met the error threshold
                 if num_pixels > len(elements):
-                    logger.critical('CRITICAL ERROR: Every possible permutation of alternate theta has been tested but the error threshold is still exceeded')
-                    logger.critical('The error threshold is either too stringent or user intervention is needed')
+                    logger.critical(
+                        'CRITICAL ERROR: Every possible permutation of alternate theta has been tested but the error threshold is still exceeded'
+                    )
+                    logger.critical(
+                        'The error threshold is either too stringent or user intervention is needed'
+                    )
                     # Then, go back to the default case (no alternates) and proceed anyways.
                     # For now, just exit.
                     import sys

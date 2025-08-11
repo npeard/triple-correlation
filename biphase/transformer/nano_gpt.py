@@ -50,7 +50,9 @@ class SelfAttention(nn.Module):
         # flash attention make GPU go brrrrr but support is only in PyTorch >= 2.0
         self.flash = hasattr(torch.nn.functional, 'scaled_dot_product_attention')
         if not self.flash:
-            logger.warning('Using slow attention. Flash Attention requires PyTorch >= 2.0')
+            logger.warning(
+                'Using slow attention. Flash Attention requires PyTorch >= 2.0'
+            )
             # causal mask to ensure attention is only applied to the left in the input
             # sequence
             self.register_buffer(
@@ -161,7 +163,7 @@ class TemporalBlock(nn.Module):
         super().__init__()
         if activation_fn is None:
             activation_fn = nn.LeakyReLU()
-            
+
         self.conv1 = nn.utils.weight_norm(
             nn.Conv1d(
                 n_inputs,
@@ -228,7 +230,7 @@ class RegressionTCN(nn.Module):
             'LeakyReLU': nn.LeakyReLU(),
             'Tanh': nn.Tanh(),
             'ReLU': nn.ReLU(),
-            'GELU': nn.GELU()
+            'GELU': nn.GELU(),
         }
         activation_fn = act_fn_map.get(config.reg_tcn_activation, nn.LeakyReLU())
 
@@ -236,12 +238,16 @@ class RegressionTCN(nn.Module):
         layers = []
         num_levels = len(config.reg_tcn_num_channels)
         for i in range(num_levels):
-            dilation_size = config.reg_tcn_dilation_base ** i
-            in_channels = config.n_embd if i == 0 else config.reg_tcn_num_channels[i - 1]
+            dilation_size = config.reg_tcn_dilation_base**i
+            in_channels = (
+                config.n_embd if i == 0 else config.reg_tcn_num_channels[i - 1]
+            )
             out_channels = config.reg_tcn_num_channels[i]
 
             # Calculate padding to maintain sequence length
-            padding = (config.reg_tcn_kernel_size - config.reg_tcn_stride) * dilation_size
+            padding = (
+                config.reg_tcn_kernel_size - config.reg_tcn_stride
+            ) * dilation_size
 
             layers.append(
                 TemporalBlock(
@@ -307,7 +313,7 @@ class GPTConfig:
     dropout: float = 0.1  # dropout rate
     bias: bool = False  # use bias in linear layers
     is_causal: bool = True  # Whether to use causal masking in self-attention
-    
+
     # RegressionTCN hyperparameters
     reg_tcn_kernel_size: int = 7  # Kernel size for TCN layers
     reg_tcn_num_channels: list[int] = None  # Number of channels in each TCN layer
@@ -318,7 +324,12 @@ class GPTConfig:
 
     def __post_init__(self):
         if self.reg_tcn_num_channels is None:
-            self.reg_tcn_num_channels = [16, 32, 64, 64]  # Default channel configuration
+            self.reg_tcn_num_channels = [
+                16,
+                32,
+                64,
+                64,
+            ]  # Default channel configuration
 
 
 class GPT(nn.Module):

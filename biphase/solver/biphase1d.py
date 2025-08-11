@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import logging
+
 import numpy as np
 from scipy import optimize
 
