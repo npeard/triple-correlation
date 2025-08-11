@@ -88,9 +88,15 @@ class BaseLightningModule(L.LightningModule):
             n_layer=self.model_hparams['n_layer'],
             n_head=self.model_hparams['n_head'],
             n_embd=self.model_hparams['n_embd'],
-            dropout=self.model_hparams.get('dropout', 0.1),
-            bias=self.model_hparams.get('bias', False),
-            is_causal=self.model_hparams.get('is_causal', True),
+            dropout=self.model_hparams['dropout'],
+            bias=self.model_hparams['bias'],
+            is_causal=self.model_hparams['is_causal'],
+            reg_tcn_kernel_size=self.model_hparams['reg_tcn_kernel_size'],
+            reg_tcn_num_channels=self.model_hparams['reg_tcn_num_channels'],
+            reg_tcn_dilation_base=self.model_hparams['reg_tcn_dilation_base'],
+            reg_tcn_stride=self.model_hparams['reg_tcn_stride'],
+            reg_tcn_activation=self.model_hparams['reg_tcn_activation'],
+            reg_tcn_dropout=self.model_hparams['reg_tcn_dropout'],
         )
 
     def create_model(self) -> GPT:
@@ -118,10 +124,10 @@ class BaseLightningModule(L.LightningModule):
             raise ValueError(f'Unknown optimizer: {optimizer_name}')
 
         # Configure multi-stage scheduler: linear warmup then cosine annealing
-        warmup_epochs = self.scheduler_hparams.get('warmup_epochs', 0)
-        cosine_epochs = self.scheduler_hparams.get('cosine_epochs', 0)
-        eta_min = self.scheduler_hparams.get('eta_min', 0)
-        T_max = self.scheduler_hparams.get('T_max', cosine_epochs)
+        warmup_epochs = self.scheduler_hparams['warmup_epochs']
+        cosine_epochs = self.scheduler_hparams['cosine_epochs']
+        eta_min = self.scheduler_hparams['eta_min']
+        T_max = self.scheduler_hparams['T_max']
 
         # LambdaLR for linear warmup
         def warmup_lambda(epoch: int) -> float:

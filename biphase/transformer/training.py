@@ -234,9 +234,9 @@ class ModelTrainer:
         data_dir = self.config.data_config['data_dir']
 
         # Resolve paths for data files
-        train_path = resolve_path(data_dir, self.config.data_config.get('train_file'))
-        val_path = resolve_path(data_dir, self.config.data_config.get('val_file'))
-        test_path = resolve_path(data_dir, self.config.data_config.get('test_file'))
+        train_path = resolve_path(data_dir, self.config.data_config['train_file'])
+        val_path = resolve_path(data_dir, self.config.data_config['val_file'])
+        test_path = resolve_path(data_dir, self.config.data_config['test_file'])
 
         self.train_loader, self.val_loader, self.test_loader = get_data_loaders(
             train_path=train_path,
@@ -248,29 +248,31 @@ class ModelTrainer:
 
     def create_lightning_module(self) -> BaseLightningModule:
         """Create lightning module based on model type."""
-        num_pix = self.config.data_config.get('dataset_params', {}).get('num_pix', 21)
+        num_pix = self.config.data_config['dataset_params']['num_pix']
         if isinstance(num_pix, str):
             num_pix = eval(num_pix)
 
         optimizer_hparams = {
-            'name': self.config.training_config.get('optimizer', 'Adam'),
+            'name': self.config.training_config['optimizer'],
             # TODO: why is this loaded as a string?
-            'lr': eval(self.config.training_config.get('learning_rate', 5e-4)),
-            'momentum': self.config.training_config.get('momentum', 0.9),
+            'lr': eval(self.config.training_config['learning_rate']),
+            'momentum': self.config.training_config.get(
+                'momentum', 0.9
+            ),  # Keep get() for optional param
         }
 
         # Common scheduler hyperparameters
-        max_epochs = self.config.training_config.get('max_epochs', 500)
+        max_epochs = self.config.training_config['max_epochs']
         warmup_epochs = int(0.1 * max_epochs)
         cosine_epochs = max_epochs - warmup_epochs
-        target_lr = eval(self.config.training_config.get('learning_rate', 1e-3))
+        target_lr = eval(self.config.training_config['learning_rate'])
 
         scheduler_hparams = {
             'warmup_epochs': warmup_epochs,
             'cosine_epochs': cosine_epochs,
             'target_lr': target_lr,
             'T_max': cosine_epochs,  # For CosineAnnealingLR
-            'eta_min': self.config.training_config.get('eta_min', 0),
+            'eta_min': self.config.training_config['eta_min'],
         }
 
         if self.config.model_config['type'] == 'GPT':
@@ -288,12 +290,10 @@ class ModelTrainer:
         # Callbacks
         callbacks = []
         # Add WandB logger if configured
-        if self.config.training_config.get('use_logging', False):
+        if self.config.training_config['use_logging']:
             loggers = [
                 WandbLogger(
-                    project=self.config.training_config.get(
-                        'wandb_project', 'ml-template'
-                    ),
+                    project=self.config.training_config['wandb_project'],
                     name=self.experiment_name,
                     save_dir=self.checkpoint_dir,
                 )
@@ -312,8 +312,8 @@ class ModelTrainer:
             loggers = []
 
         # Get accelerator and device settings from config
-        accelerator = self.config.training_config.get('accelerator', 'auto')
-        devices = self.config.training_config.get('devices', 1)
+        accelerator = self.config.training_config['accelerator']
+        devices = self.config.training_config['devices']
 
         # Convert devices to proper type if it's a string
         if isinstance(devices, str):
@@ -407,7 +407,7 @@ class ModelTrainer:
 
             # Apply encoding weight if available
             encoding_weight = (
-                model.loss_hparams.get('encoding_weight', 1.0)
+                model.loss_hparams['encoding_weight']
                 if hasattr(model, 'loss_hparams')
                 else 1.0
             )

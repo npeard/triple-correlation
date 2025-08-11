@@ -132,9 +132,89 @@ class Block(nn.Module):
         return x + self.mlp(self.ln_2(x))
 
 
-class RegressionCNN(nn.Module):
-    """CNN-based regression head that takes data with n_embd channels of length
-    in_seq_len and applies convolutional layers followed by average pooling
+class Chomp1d(nn.Module):
+    """Remove padding at the end of the sequence."""
+
+    def __init__(self, chomp_size: int):
+        super().__init__()
+        self.chomp_size = chomp_size
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return x[:, :, : -self.chomp_size].contiguous()
+
+
+class TemporalBlock(nn.Module):
+    """Single block of temporal convolutions with dilation."""
+
+    def __init__(
+        self,
+        n_inputs: int,
+        n_outputs: int,
+        kernel_size: int,
+        stride: int,
+        dilation: int,
+        padding: int,
+        dropout: float = 0.2,
+        activation_fn: nn.Module = None,
+    ):
+        super().__init__()
+        if activation_fn is None:
+            activation_fn = nn.LeakyReLU()
+            
+        self.conv1 = nn.utils.weight_norm(
+            nn.Conv1d(
+                n_inputs,
+                n_outputs,
+                kernel_size,
+                stride=stride,
+                padding=padding,
+                dilation=dilation,
+            )
+        )
+        self.chomp1 = Chomp1d(padding)
+        self.activation1 = activation_fn
+        self.dropout1 = nn.Dropout(dropout)
+
+        self.conv2 = nn.utils.weight_norm(
+            nn.Conv1d(
+                n_outputs,
+                n_outputs,
+                kernel_size,
+                stride=stride,
+                padding=padding,
+                dilation=dilation,
+            )
+        )
+        self.chomp2 = Chomp1d(padding)
+        self.activation2 = activation_fn
+        self.dropout2 = nn.Dropout(dropout)
+
+        self.net = nn.Sequential(
+            self.conv1,
+            self.chomp1,
+            self.activation1,
+            self.dropout1,
+            self.conv2,
+            self.chomp2,
+            self.activation2,
+            self.dropout2,
+        )
+
+        # 1x1 convolution for residual connection if input and output channels differ
+        self.downsample = (
+            nn.Conv1d(n_inputs, n_outputs, 1) if n_inputs != n_outputs else None
+        )
+        self.final_activation = activation_fn
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        out = self.net(x)
+        res = x if self.downsample is None else self.downsample(x)
+        return self.final_activation(out + res)
+
+
+class RegressionTCN(nn.Module):
+    """TCN-based regression head that takes data with n_embd channels of length
+    in_seq_len and applies temporal convolutional layers followed by average pooling
     to get the final output.
     """
 
@@ -142,31 +222,47 @@ class RegressionCNN(nn.Module):
         super().__init__()
         self.config = config
 
-        # First convolutional layer
-        self.conv1 = nn.Conv1d(
-            in_channels=config.n_embd,
-            out_channels=config.n_embd * 2,
-            kernel_size=3,
-            padding=1,
-        )
+        # Get activation function
+        act_fn_map = {
+            'LeakyReLU': nn.LeakyReLU(),
+            'Tanh': nn.Tanh(),
+            'ReLU': nn.ReLU(),
+            'GELU': nn.GELU()
+        }
+        activation_fn = act_fn_map.get(config.reg_tcn_activation, nn.LeakyReLU())
 
-        # Second convolutional layer
-        self.conv2 = nn.Conv1d(
-            in_channels=config.n_embd * 2,
-            out_channels=config.n_embd * 2,
-            kernel_size=3,
-            padding=1,
-        )
+        # Build TCN layers
+        layers = []
+        num_levels = len(config.reg_tcn_num_channels)
+        for i in range(num_levels):
+            dilation_size = config.reg_tcn_dilation_base ** i
+            in_channels = config.n_embd if i == 0 else config.reg_tcn_num_channels[i - 1]
+            out_channels = config.reg_tcn_num_channels[i]
 
-        # Final convolutional layer to reduce to desired output channels
-        self.conv3 = nn.Conv1d(
-            in_channels=config.n_embd * 2,
-            out_channels=config.output_dim * config.out_seq_len,
+            # Calculate padding to maintain sequence length
+            padding = (config.reg_tcn_kernel_size - config.reg_tcn_stride) * dilation_size
+
+            layers.append(
+                TemporalBlock(
+                    in_channels,
+                    out_channels,
+                    config.reg_tcn_kernel_size,
+                    stride=config.reg_tcn_stride,
+                    dilation=dilation_size,
+                    padding=padding,
+                    dropout=config.reg_tcn_dropout,
+                    activation_fn=activation_fn,
+                )
+            )
+
+        self.tcn_network = nn.Sequential(*layers)
+
+        # Final convolutional layer to map to desired output channels
+        self.conv_output = nn.Conv1d(
+            config.reg_tcn_num_channels[-1],
+            config.output_dim * config.out_seq_len,
             kernel_size=1,
         )
-
-        # Activation function
-        self.activation = nn.GELU()
 
         # Global average pooling will reduce the sequence length dimension
         self.pool = nn.AdaptiveAvgPool1d(1)
@@ -182,10 +278,11 @@ class RegressionCNN(nn.Module):
         # Reshape to (batch_size, n_embd, seq_len) for conv1d
         x = x.transpose(1, 2)
 
-        # Apply convolutional layers with activations
-        x = self.activation(self.conv1(x))
-        x = self.activation(self.conv2(x))
-        x = self.conv3(x)
+        # Process through TCN network
+        features = self.tcn_network(x)
+
+        # Map to output channels
+        x = self.conv_output(features)
 
         # Apply global average pooling to reduce sequence length
         x = self.pool(x)
@@ -209,6 +306,18 @@ class GPTConfig:
     dropout: float = 0.1  # dropout rate
     bias: bool = False  # use bias in linear layers
     is_causal: bool = True  # Whether to use causal masking in self-attention
+    
+    # RegressionTCN hyperparameters
+    reg_tcn_kernel_size: int = 7  # Kernel size for TCN layers
+    reg_tcn_num_channels: list[int] = None  # Number of channels in each TCN layer
+    reg_tcn_dilation_base: int = 2  # Base for dilation
+    reg_tcn_stride: int = 1  # Stride for TCN layers
+    reg_tcn_activation: str = 'LeakyReLU'  # Activation function
+    reg_tcn_dropout: float = 0.1  # Dropout rate for TCN
+
+    def __post_init__(self):
+        if self.reg_tcn_num_channels is None:
+            self.reg_tcn_num_channels = [16, 32, 64, 64]  # Default channel configuration
 
 
 class GPT(nn.Module):
@@ -232,8 +341,8 @@ class GPT(nn.Module):
         )
 
         # regression head
-        # We use a CNN here, because a simple MLP or Linear layer would be enormous
-        self.regression_head = RegressionCNN(config)
+        # We use a TCN here, because a simple MLP or Linear layer would be enormous
+        self.regression_head = RegressionTCN(config)
         # init all weights
         self.apply(self._init_weights)
         # apply special scaled init to the residual projections, per GPT-2 paper

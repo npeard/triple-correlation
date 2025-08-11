@@ -7,6 +7,14 @@ model:
   bias: false
   is_causal: true  # Whether to use causal masking in self-attention
   num_pix: (21, 21) # Tuple for 2D phase prediction
+  
+  # RegressionTCN hyperparameters
+  reg_tcn_kernel_size: 7
+  reg_tcn_num_channels: [16, 32, 64, 64]
+  reg_tcn_dilation_base: 2
+  reg_tcn_stride: 1
+  reg_tcn_activation: "LeakyReLU"
+  reg_tcn_dropout: 0.1
 
 training:
   max_epochs: 500
