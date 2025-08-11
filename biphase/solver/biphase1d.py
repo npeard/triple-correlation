@@ -1,7 +1,10 @@
 #!/usr/bin/env python
 
+import logging
 import numpy as np
 from scipy import optimize
+
+logger = logging.getLogger(__name__)
 
 
 def simple_PhiSolver(cosPhi, initial_phase=0):
@@ -31,7 +34,7 @@ def simple_PhiSolver(cosPhi, initial_phase=0):
 
     solved = np.zeros(num_pix // 2)
     solved[1] = initial_phase
-    # print(Phi[:, 2])
+    # logger.debug('Phi[:, 2] = %s', Phi[:, 2])
     for p in range(2, num_pix // 2):
         sum = 0
         for k in range(1, p):
@@ -78,7 +81,7 @@ def PhiSolver(cosPhi, initial_phase=0):  # noqa: PLR0915
     n = 1
     useAlt = False
     while n < num_pix // 2:
-        print('Pixel', n)
+        logger.info('Processing pixel %d', n)
         branches = np.zeros((int((n + 3) / 2) - 1, 2))
         for m in range(1, int((n + 3) / 2), 1):
             plus = Phi[n - m + 1, m] + solved[n - m + 1] + solved[m]
@@ -106,9 +109,9 @@ def PhiSolver(cosPhi, initial_phase=0):  # noqa: PLR0915
     error_threshold = 10
     n = 0
     # for n in range(0, self.num_pix//2, 1):
-    print('QMAX LOOP')
+    logger.info('Starting QMAX loop')
     while n < num_pix // 2:
-        print('Pixel', n + num_pix // 2)
+        logger.info('Processing pixel %d', n + num_pix // 2)
         branches = np.zeros((int((num_pix // 2 - n + 3) / 2) - 1, 2))
         for m in range(1, int((num_pix // 2 - n + 3) / 2), 1):
             plus = (
@@ -190,7 +193,7 @@ def find_next_phi(xdata=None, ydata=None, AltReturn=False):
     logThetaError = logThetaError(theta)
     num_theta = 2  # Number of candidates to accept. Two is optimal.
     mask = np.argpartition(logThetaError, num_theta)[:num_theta]
-    print('Possible Theta = ', theta[mask])
+    logger.debug('Possible Theta = %s', theta[mask])
     theta0 = theta[mask]
 
     # Optimize candidate theta and choose the theta with smallest error
@@ -207,17 +210,17 @@ def find_next_phi(xdata=None, ydata=None, AltReturn=False):
         fCandidate.append(res.fun)
         thetaCandidate.append(res.x)
     fCandidate = np.asarray(fCandidate)
-    print('Error = ', fCandidate)
+    logger.debug('Error = %s', fCandidate)
     thetaCandidate = np.asarray(thetaCandidate)
     thetaFinal = thetaCandidate[np.argmin(fCandidate)]
     fFinal = np.min(fCandidate)
-    print('Final Theta = ', thetaFinal)
+    logger.debug('Final Theta = %s', thetaFinal)
 
     if AltReturn:
         thetaFinal = thetaCandidate[np.argmax(fCandidate)]
         fFinal = np.max(fCandidate)
-        print('Alternate Triggered!')
-        print('Final Theta = ', thetaFinal)
+        logger.info('Alternate triggered!')
+        logger.debug('Final Theta = %s', thetaFinal)
 
     # Return ideal phi and the value of the error function at that phi
     return np.arctan2(np.sin(thetaFinal), np.cos(thetaFinal)), fFinal

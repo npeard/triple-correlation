@@ -7,12 +7,15 @@ https://github.com/openai/gpt-2/blob/master/src/model.py
 https://github.com/huggingface/transformers/blob/main/src/transformers/models/gpt2/modeling_gpt2.py
 """
 
+import logging
 import math
 from dataclasses import dataclass
 
 import torch
 from torch import nn
 from torch.nn import functional as F
+
+logger = logging.getLogger(__name__)
 
 # source: https://github.com/karpathy/nanoGPT/blob/master/model.py
 
@@ -47,9 +50,7 @@ class SelfAttention(nn.Module):
         # flash attention make GPU go brrrrr but support is only in PyTorch >= 2.0
         self.flash = hasattr(torch.nn.functional, 'scaled_dot_product_attention')
         if not self.flash:
-            print(  # noqa: T201
-                'WARNING: using slow attention. Flash Attention requires PyTorch >= 2.0'
-            )
+            logger.warning('Using slow attention. Flash Attention requires PyTorch >= 2.0')
             # causal mask to ensure attention is only applied to the left in the input
             # sequence
             self.register_buffer(
@@ -79,7 +80,7 @@ class SelfAttention(nn.Module):
         # causal self-attention; Self-attend: (B, nh, T, hs) x (B, nh, hs, T) -> (B, nh, T, T)
         if self.flash:
             # efficient attention using Flash Attention CUDA kernels
-            # print("using flash attention")
+            # logger.debug('Using flash attention')
             y = torch.nn.functional.scaled_dot_product_attention(
                 q,
                 k,
@@ -367,10 +368,10 @@ class GPT(nn.Module):
         block_params = sum(p.numel() for p in self.transformer.h.parameters())
         regression_params = sum(p.numel() for p in self.regression_head.parameters())
 
-        print(f'Number of embedding params: {embedding_params / 1e6:.3f}M')  # noqa: T201
-        print(f'Number of position params: {position_params / 1e6:.3f}M')  # noqa: T201
-        print(f'Number of block params: {block_params / 1e6:.3f}M')  # noqa: T201
-        print(f'Number of regression params: {regression_params / 1e6:.3f}M')  # noqa: T201
+        logger.info('Number of embedding params: %.3fM', embedding_params / 1e6)
+        logger.info('Number of position params: %.3fM', position_params / 1e6)
+        logger.info('Number of block params: %.3fM', block_params / 1e6)
+        logger.info('Number of regression params: %.3fM', regression_params / 1e6)
 
         return n_params
 

@@ -1,7 +1,10 @@
 #!/usr/bin/env python
 
+import logging
 import numpy as np
 from numba import jit
+
+logger = logging.getLogger(__name__)
 
 
 class Fluorescence1D:
@@ -37,7 +40,7 @@ class Fluorescence1D:
         """Initialize arrays and variables, generate atomic array. Some arrays
         are not initialized on startup to save resources.
         """
-        # print("Initializing system...")
+        # logger.info("Initializing system...")
         self.k_pix = np.linspace(-self.kmax, self.kmax, self.num_pix)
         self.x_pix = np.linspace(-1, 1, self.num_pix)
         self.x_double_pix = np.linspace(-1, 1, 2 * self.num_pix - 1)

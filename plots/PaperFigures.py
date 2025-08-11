@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import copy
+import logging
 from typing import Any
 
 import harminv
@@ -12,6 +13,8 @@ import pylab as P
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from PIL import Image
 from skimage.restoration import unwrap_phase
+
+logger = logging.getLogger(__name__)
 
 from biphase.solver.iterative import IterativeSolver
 from fluo import Fluorescence1D, Fluorescence2D
@@ -1439,16 +1442,16 @@ def Figure_S5():  # noqa: PLR0915
         signal, fmin=0, fmax=1, dt=2 * 2 * fluo.kmax / (2 * fluo.num_pix), nf=6
     )
     harm_x = inversion.frequency[inversion.amplitude > 0.1]
-    # print('Truth', fluo.coords)
+    # logger.debug('Truth: %s', fluo.coords)
     # frequencies
-    # print('Frequencies', inversion.frequency[inversion.amplitude > 0.1])
+    # logger.debug('Frequencies: %s', inversion.frequency[inversion.amplitude > 0.1])
     # decay rates
-    # print('Decay Rates', inversion.decay[inversion.amplitude > 0.1])
-    # print('Q Factor', inversion.Q[inversion.amplitude > 0.1])  # Q factor
+    # logger.debug('Decay Rates: %s', inversion.decay[inversion.amplitude > 0.1])
+    # logger.debug('Q Factor: %s', inversion.Q[inversion.amplitude > 0.1])  # Q factor
     # phase shift
-    # print('Phase Shift', inversion.phase[inversion.amplitude > 0.1])
+    # logger.debug('Phase Shift: %s', inversion.phase[inversion.amplitude > 0.1])
     # absolute amplitudes
-    # print('Amplitude', inversion.amplitude[inversion.amplitude > 0.1])
+    # logger.debug('Amplitude: %s', inversion.amplitude[inversion.amplitude > 0.1])
 
     s = fig.add_subplot(142)
     s.plot(
@@ -1500,16 +1503,16 @@ def Figure_S5():  # noqa: PLR0915
     harm_x = inversion.frequency[inversion.amplitude > 0.1][1:] * np.sign(
         inversion.phase[inversion.amplitude > 0.1][1:]
     )
-    # print('Truth', fluo.coords)
+    # logger.debug('Truth: %s', fluo.coords)
     # frequencies
-    # print('Frequencies', inversion.frequency[inversion.amplitude > 0.1])
+    # logger.debug('Frequencies: %s', inversion.frequency[inversion.amplitude > 0.1])
     # decay rates
-    # print('Decay Rates', inversion.decay[inversion.amplitude > 0.1])
-    # print('Q Factor', inversion.Q[inversion.amplitude > 0.1])  # Q factor
+    # logger.debug('Decay Rates: %s', inversion.decay[inversion.amplitude > 0.1])
+    # logger.debug('Q Factor: %s', inversion.Q[inversion.amplitude > 0.1])  # Q factor
     # phase shift
-    # print('Phase Shift', inversion.phase[inversion.amplitude > 0.1])
+    # logger.debug('Phase Shift: %s', inversion.phase[inversion.amplitude > 0.1])
     # absolute amplitudes
-    # print('Amplitude', inversion.amplitude[inversion.amplitude > 0.1])
+    # logger.debug('Amplitude: %s', inversion.amplitude[inversion.amplitude > 0.1])
 
     s = fig.add_subplot(143)
     s.plot(
@@ -1562,16 +1565,16 @@ def Figure_S5():  # noqa: PLR0915
         nf=6,
     )
     harm_x = -inversion.frequency[inversion.amplitude > 0.1]
-    # print('Truth', fluo.coords)
+    # logger.debug('Truth: %s', fluo.coords)
     # frequencies
-    # print('Frequencies', inversion.frequency[inversion.amplitude > 0.1])
+    # logger.debug('Frequencies: %s', inversion.frequency[inversion.amplitude > 0.1])
     # decay rates
-    # print('Decay Rates', inversion.decay[inversion.amplitude > 0.1])
-    # print('Q Factor', inversion.Q[inversion.amplitude > 0.1])  # Q factor
+    # logger.debug('Decay Rates: %s', inversion.decay[inversion.amplitude > 0.1])
+    # logger.debug('Q Factor: %s', inversion.Q[inversion.amplitude > 0.1])  # Q factor
     # phase shift
-    # print('Phase Shift', inversion.phase[inversion.amplitude > 0.1])
+    # logger.debug('Phase Shift: %s', inversion.phase[inversion.amplitude > 0.1])
     # absolute amplitudes
-    # print('Amplitude', inversion.amplitude[inversion.amplitude > 0.1])
+    # logger.debug('Amplitude: %s', inversion.amplitude[inversion.amplitude > 0.1])
 
     s = fig.add_subplot(144)
     s.plot(

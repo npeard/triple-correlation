@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import contextlib
+import logging
 import random
 from dataclasses import dataclass
 from itertools import product
@@ -12,6 +13,8 @@ import torch
 import yaml
 from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint
 from lightning.pytorch.loggers import WandbLogger
+
+logger = logging.getLogger(__name__)
 
 from biphase.transformer.datasets import get_data_loaders
 from biphase.transformer.lightning_decoder import BaseLightningModule, GPTDecoder
@@ -33,10 +36,10 @@ class TrainingConfig:
         need all config variables.
         """
         if self.model_config == {}:
-            print('TrainingConfig in checkpoint mode...')  # noqa: T201
+            logger.info('TrainingConfig in checkpoint mode')
             self._set_checkpoint_defaults()
         else:
-            print('TrainingConfig in training mode...')  # noqa: T201
+            logger.info('TrainingConfig in training mode')
 
     def _set_checkpoint_defaults(self):
         """Set default values for running checkpoints. Check points do not
@@ -200,17 +203,17 @@ class ModelTrainer:
             self.trainer = self.setup_trainer()
 
         # Check what version of PyTorch is installed
-        print(f'PyTorch version: {torch.__version__}')  # noqa: T201
+        logger.info('PyTorch version: %s', torch.__version__)
 
         # Check the current CUDA version being used
-        print(f'Current CUDA version: {torch.version.cuda}')  # noqa: T201
+        logger.info('Current CUDA version: %s', torch.version.cuda)
 
         if torch.version.cuda is not None:
             # Check if CUDA is available and if so, print the device name
-            print(f'GPU device name: {torch.cuda.get_device_name(0)}')  # noqa: T201
+            logger.info('GPU device name: %s', torch.cuda.get_device_name(0))
 
             # Check if FlashAttention is available
-            print('FlashAttention available:', torch.backends.cuda.flash_sdp_enabled())  # noqa: T201
+            logger.info('FlashAttention available: %s', torch.backends.cuda.flash_sdp_enabled())
 
     def setup_data(self):
         """Setup data loaders."""

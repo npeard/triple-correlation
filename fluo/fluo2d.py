@@ -1,7 +1,10 @@
 #!/usr/bin/env python
 
+import logging
 import numpy as np
 from numba import jit
+
+logger = logging.getLogger(__name__)
 
 
 @jit(nopython=True)
@@ -59,7 +62,7 @@ class Fluorescence2D:
         """Initialize arrays and variables, generate atomic array. Some arrays
         are not initialized on startup to save resources.
         """
-        # print("Initializing system...")
+        # logger.info("Initializing system...")
         self.k_pix = np.mgrid[
             -self.kmax : self.kmax : 1j * self.num_pix,
             -self.kmax : self.kmax : 1j * self.num_pix,
@@ -187,17 +190,17 @@ class Fluorescence2D:
         if self.g2 is not None:
             return self.g2
 
-        # print('Performing second-order intensity correlation using outer product...')
+        # logger.info('Performing second-order intensity correlation using outer product...')
         ave_intens = np.zeros(2 * (self.num_pix,))
         self.g2 = np.zeros(4 * (self.num_pix,))
 
         for _ in range(num_shots):
-            # print('Correlating frame ', i)
+            # logger.debug('Correlating frame %d', _)
             incoh = self.get_incoh_intens()
             self.g2 += np.multiply.outer(incoh, incoh)
             ave_intens += incoh
         self.g2 *= num_shots / np.multiply.outer(ave_intens, ave_intens)
-        # print('Finished correlation...')
+        # logger.info('Finished correlation...')
         return self.g2
 
     def marginalize_g2(self, num_shots: int = 1000) -> np.ndarray:
@@ -260,7 +263,7 @@ class Fluorescence2D:
         if self.g3 is not None:
             return self.g3
 
-        # print('Performing third-order correlation using outer product...')
+        # logger.info('Performing third-order correlation using outer product...')
         ave_intens = np.zeros(2 * (self.num_pix,))
         self.g3 = np.zeros(6 * (self.num_pix,))
         for _ in range(num_shots):
@@ -270,7 +273,7 @@ class Fluorescence2D:
         self.g3 *= num_shots**2 / np.multiply.outer(
             np.multiply.outer(ave_intens, ave_intens), ave_intens
         )
-        # print('Finished correlation...')
+        # logger.info('Finished correlation...')
         return self.g3
 
     def marginalize_g3(self, num_shots: int = 1000) -> np.ndarray:

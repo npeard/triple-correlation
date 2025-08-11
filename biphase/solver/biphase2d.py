@@ -1,9 +1,12 @@
 #!/usr/bin/env python
 
 from itertools import permutations
+import logging
 
 import numpy as np
 from scipy import optimize
+
+logger = logging.getLogger(__name__)
 
 
 def PhiSolver(cosPhi, initial_phase=None, error_reject=-10):  # noqa: PLR0915,PLR0912,C901
@@ -103,7 +106,7 @@ def PhiSolver(cosPhi, initial_phase=None, error_reject=-10):  # noqa: PLR0915,PL
             xdata = np.cos(theta1)
             ydata = np.sin(theta2)
 
-            print(current_pair)
+            logger.debug('Processing pixel pair: %s', current_pair)
             # If error flag has been triggered for the next diagonal, use the alternate value for trial positions
             # next_phi, error_val = self.find_next_phi(xdata=xdata, ydata=ydata)
             if diagonal_flag == n + 1 and perm[m] == 1:
@@ -122,21 +125,19 @@ def PhiSolver(cosPhi, initial_phase=None, error_reject=-10):  # noqa: PLR0915,PL
             # if (np.any( np.abs(np.subtract.outer(error[to_solve[0,:],
             # to_solve[1,:]], error[prev_solve[0,:], prev_solve[1,:]])) > 15)
             # and n>3):
-            print('Prev errors: ', error[prev_solve[0, :], prev_solve[1, :]])
-            print('Current errors: ', error[to_solve[0, :], to_solve[1, :]])
-            print(
-                np.abs(
-                    np.subtract.outer(
-                        error[to_solve[0, :], to_solve[1, :]],
-                        error[prev_solve[0, :], prev_solve[1, :]],
-                    )
+            logger.debug('Previous errors: %s', error[prev_solve[0, :], prev_solve[1, :]])
+            logger.debug('Current errors: %s', error[to_solve[0, :], to_solve[1, :]])
+            logger.debug('Error differences: %s', np.abs(
+                np.subtract.outer(
+                    error[to_solve[0, :], to_solve[1, :]],
+                    error[prev_solve[0, :], prev_solve[1, :]],
                 )
-            )
+            ))
             diagonal_flag = n
-            print('Unacceptable Error! Re-solving previous diagonal.')
+            logger.warning('Unacceptable error! Re-solving previous diagonal')
             # First, attempt to change pixels adjacent to pixel in current
             # diagonal with the largest error
-            print('Errors: ', error[to_solve[0, :], to_solve[1, :]])
+            logger.debug('Current pixel errors: %s', error[to_solve[0, :], to_solve[1, :]])
             err_idx = np.argmax(error[to_solve[0, :], to_solve[1, :]])
             suspects = np.zeros((4, diagonal_flag - 0))  # The fourth row is
             # just a dummy case, only need 3 permutations for a 1 pixel error
@@ -144,7 +145,7 @@ def PhiSolver(cosPhi, initial_phase=None, error_reject=-10):  # noqa: PLR0915,PL
             suspects[1, err_idx - 1] = 1
             suspects[2, err_idx - 1 : err_idx + 1] = 1
             suspect_num += 1
-            print('Suspect pixels: ', suspects)
+            logger.debug('Suspect pixels: %s', suspects)
             perm = suspects[suspect_num, :]
 
             # But if that fails, sort through all possible permutations
@@ -155,7 +156,7 @@ def PhiSolver(cosPhi, initial_phase=None, error_reject=-10):  # noqa: PLR0915,PL
                 perms = np.asarray(list(set(permutations(elements))))
                 perm_num += 1
                 if perm_num >= len(perms[:, 0]):
-                    print('Adding additional pixel to re-solve.')
+                    logger.info('Adding additional pixel to re-solve')
                     num_pixels += 1
                     elements[:num_pixels] = 1
                     perms = np.asarray(list(set(permutations(elements))))
@@ -163,24 +164,15 @@ def PhiSolver(cosPhi, initial_phase=None, error_reject=-10):  # noqa: PLR0915,PL
                 # In case we have already been through every possible
                 # permutation and still not met the error threshold
                 if num_pixels > len(elements):
-                    print('WARNING! WARNING!')
-                    print('WARNING! WARNING!')
-                    print('WARNING! WARNING!')
-                    print('WARNING! WARNING!')
-                    print('WARNING! WARNING!')
-                    print(
-                        'Every possible permutation of alternate theta have been tested but the error threshold is still exceed.'
-                    )
-                    print(
-                        'The error threshold is either too stringent or intervention from the user is needed.'
-                    )
+                    logger.critical('CRITICAL ERROR: Every possible permutation of alternate theta has been tested but the error threshold is still exceeded')
+                    logger.critical('The error threshold is either too stringent or user intervention is needed')
                     # Then, go back to the default case (no alternates) and proceed anyways.
                     # For now, just exit.
                     import sys
 
                     sys.exit(1)
 
-                print(perms)
+                logger.debug('Permutations: %s', perms)
                 perm = perms[perm_num, :]
             n -= 2  # This is outside the "if suspect_num > 2:" statement
         elif diagonal_flag == n:
@@ -188,8 +180,7 @@ def PhiSolver(cosPhi, initial_phase=None, error_reject=-10):  # noqa: PLR0915,PL
             suspect_num = -1
             perm_num = -1
             perm = np.zeros(num_pix)
-        print('suspect_num', suspect_num)
-        print('perm_num', perm_num)
+        logger.debug('suspect_num: %d, perm_num: %d', suspect_num, perm_num)
         n += 1
 
     # Solve out to q_max, at this point error resolving should not be needed
@@ -240,7 +231,7 @@ def PhiSolver(cosPhi, initial_phase=None, error_reject=-10):  # noqa: PLR0915,PL
             xdata = np.cos(theta1)
             ydata = np.sin(theta2)
 
-            print(current_pair)
+            logger.debug('Processing pixel pair: %s', current_pair)
             next_phi, error_val = find_next_phi(xdata=xdata, ydata=ydata)
 
             solved[current_pair[0], current_pair[1]] = next_phi
@@ -329,7 +320,7 @@ def PhiSolver_manualSelect(cosPhi, initial_phase=None, Alt=None):  # noqa: PLR09
             xdata = np.cos(theta1)
             ydata = np.sin(theta2)
 
-            print(current_pair)
+            logger.debug('Processing pixel pair: %s', current_pair)
             # If an alternate has been requested by the user for the pixel,
             # choose the other value
             if Alt[current_pair[0], current_pair[1]] == 1:
@@ -390,7 +381,7 @@ def PhiSolver_manualSelect(cosPhi, initial_phase=None, Alt=None):  # noqa: PLR09
             xdata = np.cos(theta1)
             ydata = np.sin(theta2)
 
-            print(current_pair)
+            logger.debug('Processing pixel pair: %s', current_pair)
             next_phi, error_val = find_next_phi(xdata=xdata, ydata=ydata)
 
             solved[current_pair[0], current_pair[1]] = next_phi
@@ -445,7 +436,7 @@ def find_next_phi(xdata=None, ydata=None, AltReturn=False):
     logThetaError = logThetaError(theta)
     num_theta = 2  # Number of candidates to accept. Two is optimal.
     mask = np.argpartition(logThetaError, num_theta)[:num_theta]
-    print('Possible Theta = ', theta[mask])
+    logger.debug('Possible Theta = %s', theta[mask])
     theta0 = theta[mask]
 
     # Optimize candidate theta and choose the theta with smallest error
@@ -462,17 +453,17 @@ def find_next_phi(xdata=None, ydata=None, AltReturn=False):
         fCandidate.append(res.fun)
         thetaCandidate.append(res.x)
     fCandidate = np.asarray(fCandidate)
-    print('Error = ', fCandidate)
+    logger.debug('Error = %s', fCandidate)
     thetaCandidate = np.asarray(thetaCandidate)
     thetaFinal = thetaCandidate[np.argmin(fCandidate)]
     fFinal = np.min(fCandidate)
-    print('Final Theta = ', thetaFinal)
+    logger.debug('Final Theta = %s', thetaFinal)
 
     if AltReturn:
         thetaFinal = thetaCandidate[np.argmax(fCandidate)]
         fFinal = np.max(fCandidate)
-        print('Alternate Triggered!')
-        print('Final Theta = ', thetaFinal)
+        logger.info('Alternate triggered!')
+        logger.debug('Final Theta = %s', thetaFinal)
 
     # Return ideal phi and the value of the error function at that phi
     return np.arctan2(np.sin(thetaFinal), np.cos(thetaFinal)), fFinal

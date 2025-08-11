@@ -102,7 +102,7 @@ class DifferentiableSolver:
 
         # Prepare target tensor (arccos of cosPhi)
         self.target = self._prepare_target()
-        print(self.target.shape)
+        self.logger.debug('Target shape: %s', self.target.shape)
 
         # Initialize trainable phase
         self.trainable_phase = TrainablePhase(self.phase_shape)

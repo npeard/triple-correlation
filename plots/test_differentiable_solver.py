@@ -1,6 +1,9 @@
 #!/usr/bin/env python
 
+import logging
 import matplotlib.pyplot as plt
+
+logger = logging.getLogger(__name__)
 
 from biphase.solver.differentiable import DifferentiableSolver
 from biphase.transformer.lightning_decoder import GPTDecoder
@@ -9,7 +12,7 @@ from fluo import Fluorescence1D, Fluorescence2D
 
 def test_1d_solver():
     """Test the 1D differentiable solver with synthetic data."""
-    print('Testing 1D DifferentiableSolver...')
+    logger.info('Testing 1D DifferentiableSolver...')
     num_pix = 31
     fluo = Fluorescence1D(kmax=5, num_pix=num_pix, num_atoms=4)
     true_phase = fluo.coh_phase_double[fluo.num_pix - 1 :]
@@ -21,9 +24,9 @@ def test_1d_solver():
     # Solve
     phase, loss_history = solver.solve()
 
-    print(f'Final phase shape: {phase.shape}')
-    print(f'Final loss: {loss_history[-1]:.6f}')
-    print(f'Loss decreased: {loss_history[0] > loss_history[-1]}')
+    logger.debug('Final phase shape: %s', phase.shape)
+    logger.debug('Final loss: %.6f', loss_history[-1])
+    logger.debug('Loss decreased: %s', loss_history[0] > loss_history[-1])
 
     # Plot results
     fig, ((ax1, ax2, ax3), (ax4, ax5, _)) = plt.subplots(2, 3, figsize=(15, 8))
@@ -82,13 +85,13 @@ def test_1d_solver():
     # plt.savefig('1d_differentiable_solver_results.png', dpi=150, bbox_inches='tight')
     plt.show()
 
-    print('1D test completed successfully!\n')
+    logger.info('1D test completed successfully!')
     return true_phase, solved_phase_np, loss_history
 
 
 def test_2d_solver():
     """Test the 2D differentiable solver with synthetic data."""
-    print('Testing 2D DifferentiableSolver...')
+    logger.info('Testing 2D DifferentiableSolver...')
 
     num_pix = 11
     fluo = Fluorescence2D(kmax=5, num_pix=num_pix, num_atoms=4)
@@ -101,9 +104,9 @@ def test_2d_solver():
     # Solve
     phase, loss_history = solver.solve()
 
-    print(f'Final phase shape: {phase.shape}')
-    print(f'Final loss: {loss_history[-1]:.6f}')
-    print(f'Loss decreased: {loss_history[0] > loss_history[-1]}')
+    logger.debug('Final phase shape: %s', phase.shape)
+    logger.debug('Final loss: %.6f', loss_history[-1])
+    logger.debug('Loss decreased: %s', loss_history[0] > loss_history[-1])
 
     # Plot results
     fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(15, 4))
@@ -138,11 +141,11 @@ def test_2d_solver():
     # plt.savefig('2d_differentiable_solver_results.png', dpi=150, bbox_inches='tight')
     plt.show()
 
-    print('2D test completed successfully!\n')
+    logger.info('2D test completed successfully!')
     return true_phase, solved_phase_np, loss_history
 
 
 if __name__ == '__main__':
     # true_1d, solved_1d, loss_1d = test_1d_solver()
     true_2d, solved_2d, loss_2d = test_2d_solver()
-    print('All tests passed!')
+    logger.info('All tests passed!')

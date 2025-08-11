@@ -1,11 +1,14 @@
 #!/usr/bin/env python
 
+import logging
 import matplotlib.pyplot as P
 import matplotlib.ticker
 import numpy as np
 from matplotlib import gridspec
 from mpl_point_clicker import clicker
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+
+logger = logging.getLogger(__name__)
 
 from biphase.solver.iterative import IterativeSolver
 from fluo import Fluorescence2D
@@ -426,7 +429,7 @@ class Plot2D:
                 xAlt = np.round(klicker.get_positions()['event'][:, 1]).astype(int)
                 yAlt = np.round(klicker.get_positions()['event'][:, 0]).astype(int)
 
-                print('xAlt', xAlt, 'yAlt', yAlt)
+                logger.debug('xAlt: %s, yAlt: %s', xAlt, yAlt)
                 if (quad1_alternates[xAlt, yAlt] == 1).any():
                     quad1_alternates[xAlt, yAlt] = 0
                 else:
@@ -474,7 +477,7 @@ class Plot2D:
                 xAlt = np.round(klicker.get_positions()['event'][:, 1]).astype(int)
                 yAlt = np.round(klicker.get_positions()['event'][:, 0]).astype(int)
 
-                print('xAlt', xAlt, 'yAlt', yAlt)
+                logger.debug('xAlt: %s, yAlt: %s', xAlt, yAlt)
                 if (quad2_alternates[xAlt, yAlt] == 1).any():
                     quad2_alternates[xAlt, yAlt] = 0
                 else:
