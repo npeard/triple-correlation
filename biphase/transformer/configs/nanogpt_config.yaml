@@ -1,30 +1,32 @@
 model:
   type: "GPT"
+  input_dim: 1 # Always 1
+  output_dim: 1 # Always 1
   n_layer: 2
   n_head: 2
   n_embd: 16
   dropout: 0.1
   bias: false
   is_causal: true  # Whether to use causal masking in self-attention
-  num_pix: (21, 21) # Tuple for 2D phase prediction
+  num_pix: (11) # Tuple, (21, 21) for 2D or (21) for 1D
   
   # RegressionTCN hyperparameters
   reg_tcn_kernel_size: 7
-  reg_tcn_num_channels: [16, 32, 64, 64]
+  reg_tcn_num_channels: [[16, 32, 64, 64]]
   reg_tcn_dilation_base: 2
   reg_tcn_stride: 1
-  reg_tcn_activation: "LeakyReLU"
+  reg_tcn_activation: ["LeakyReLU", "GELU"]
   reg_tcn_dropout: 0.1
 
 training:
   max_epochs: 500
-  batch_size: 256
+  batch_size: 16
   optimizer: "Adam"
   learning_rate: 5e-4
   eta_min: 0
-  accelerator: "gpu"
+  accelerator: "cpu"
   devices: '1'
-  use_logging: true
+  use_logging: false
   wandb_project: "triple_correlation"
   experiment_name: "updated_encoding_2D_sherlock"
   checkpoint_dir: "./biphase/transformer/checkpoints"
@@ -39,6 +41,6 @@ data:
   test_file: "test.h5"
   num_workers: 7
   dataset_params:
-    train_samples: 10000
+    train_samples: 1000
     val_samples: 1000
     test_samples: 1000

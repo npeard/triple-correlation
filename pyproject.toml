@@ -24,6 +24,8 @@ dependencies = [
     "tqdm",
     "scikit-image",
     "mpl_point_clicker",
+    "pyyaml",
+    "logging",
 ]
 
 [project.urls]

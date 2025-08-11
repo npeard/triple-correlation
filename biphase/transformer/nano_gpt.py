@@ -5,6 +5,7 @@ References:
 https://github.com/openai/gpt-2/blob/master/src/model.py
 2) huggingface/transformers PyTorch implementation:
 https://github.com/huggingface/transformers/blob/main/src/transformers/models/gpt2/modeling_gpt2.py
+# source for the nanoGPT implementation: https://github.com/karpathy/nanoGPT/blob/master/model.py
 """
 
 import logging
@@ -16,8 +17,6 @@ from torch import nn
 from torch.nn import functional as F
 
 logger = logging.getLogger(__name__)
-
-# source: https://github.com/karpathy/nanoGPT/blob/master/model.py
 
 
 class LayerNorm(nn.Module):
@@ -161,8 +160,6 @@ class TemporalBlock(nn.Module):
         activation_fn: nn.Module = None,
     ):
         super().__init__()
-        if activation_fn is None:
-            activation_fn = nn.LeakyReLU()
 
         self.conv1 = nn.utils.weight_norm(
             nn.Conv1d(
@@ -232,7 +229,12 @@ class RegressionTCN(nn.Module):
             'ReLU': nn.ReLU(),
             'GELU': nn.GELU(),
         }
-        activation_fn = act_fn_map.get(config.reg_tcn_activation, nn.LeakyReLU())
+        try:
+            activation_fn = act_fn_map.get(config.reg_tcn_activation, nn.LeakyReLU())
+        except KeyError:
+            raise KeyError(
+                f'Invalid activation function: {config.reg_tcn_activation}'
+            ) from None
 
         # Build TCN layers
         layers = []
@@ -303,33 +305,24 @@ class RegressionTCN(nn.Module):
 
 @dataclass
 class GPTConfig:
-    in_seq_len: int = 5 * 5  # input sequence length
-    out_seq_len: int = 11  # output sequence length
-    input_dim: int = 1  # dimension of input features
-    output_dim: int = 1  # dimension of output (target) features
-    n_layer: int = 8  # number of transformer layers
-    n_head: int = 4  # number of attention heads
-    n_embd: int = 32  # embedding dimension
-    dropout: float = 0.1  # dropout rate
-    bias: bool = False  # use bias in linear layers
-    is_causal: bool = True  # Whether to use causal masking in self-attention
+    in_seq_len: int  # input sequence length
+    out_seq_len: int  # output sequence length
+    input_dim: int  # dimension of input features
+    output_dim: int  # dimension of output (target) features
+    n_layer: int  # number of transformer layers
+    n_head: int  # number of attention heads
+    n_embd: int  # embedding dimension
+    dropout: float  # dropout rate
+    bias: bool  # use bias in linear layers
+    is_causal: bool  # Whether to use causal masking in self-attention
 
     # RegressionTCN hyperparameters
-    reg_tcn_kernel_size: int = 7  # Kernel size for TCN layers
-    reg_tcn_num_channels: list[int] = None  # Number of channels in each TCN layer
-    reg_tcn_dilation_base: int = 2  # Base for dilation
-    reg_tcn_stride: int = 1  # Stride for TCN layers
-    reg_tcn_activation: str = 'LeakyReLU'  # Activation function
-    reg_tcn_dropout: float = 0.1  # Dropout rate for TCN
-
-    def __post_init__(self):
-        if self.reg_tcn_num_channels is None:
-            self.reg_tcn_num_channels = [
-                16,
-                32,
-                64,
-                64,
-            ]  # Default channel configuration
+    reg_tcn_kernel_size: int  # Kernel size for TCN layers
+    reg_tcn_num_channels: list[int]  # Number of channels in each TCN layer
+    reg_tcn_dilation_base: int  # Base for dilation
+    reg_tcn_stride: int  # Stride for TCN layers
+    reg_tcn_activation: str  # Activation function
+    reg_tcn_dropout: float  # Dropout rate for TCN
 
 
 class GPT(nn.Module):

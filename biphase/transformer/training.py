@@ -253,7 +253,7 @@ class ModelTrainer:
 
     def create_lightning_module(self) -> BaseLightningModule:
         """Create lightning module based on model type."""
-        num_pix = self.config.data_config['dataset_params']['num_pix']
+        num_pix = self.config.model_config['num_pix']
         if isinstance(num_pix, str):
             num_pix = eval(num_pix)
 

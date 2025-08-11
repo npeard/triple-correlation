@@ -23,7 +23,7 @@ def roll2d_torch(arr: torch.Tensor, shift_x: int, shift_y: int) -> torch.Tensor:
         torch.Tensor: Shifted tensor of same shape as input
     """
     # Get dimensions
-    batch_size, nx, ny = arr.shape
+    # batch_size, nx, ny = arr.shape
 
     # Use torch.roll for each dimension separately
     out = torch.roll(arr, shifts=shift_x, dims=1)  # Roll along x dimension
@@ -82,21 +82,16 @@ class BaseLightningModule(L.LightningModule):
                 f'Unsupported type for num_pix in _create_gpt_config: {type(num_pix)}'
             )
 
+        # Dynamically get GPTConfig field names and filter params
+        import inspect
+
+        gpt_config_fields = set(inspect.signature(GPTConfig).parameters.keys())
+        filtered_params = {
+            k: v for k, v in self.model_hparams.items() if k in gpt_config_fields
+        }
+
         return GPTConfig(
-            in_seq_len=in_seq_len,
-            out_seq_len=out_seq_len,
-            n_layer=self.model_hparams['n_layer'],
-            n_head=self.model_hparams['n_head'],
-            n_embd=self.model_hparams['n_embd'],
-            dropout=self.model_hparams['dropout'],
-            bias=self.model_hparams['bias'],
-            is_causal=self.model_hparams['is_causal'],
-            reg_tcn_kernel_size=self.model_hparams['reg_tcn_kernel_size'],
-            reg_tcn_num_channels=self.model_hparams['reg_tcn_num_channels'],
-            reg_tcn_dilation_base=self.model_hparams['reg_tcn_dilation_base'],
-            reg_tcn_stride=self.model_hparams['reg_tcn_stride'],
-            reg_tcn_activation=self.model_hparams['reg_tcn_activation'],
-            reg_tcn_dropout=self.model_hparams['reg_tcn_dropout'],
+            in_seq_len=in_seq_len, out_seq_len=out_seq_len, **filtered_params
         )
 
     def create_model(self) -> GPT:
@@ -149,13 +144,6 @@ class BaseLightningModule(L.LightningModule):
         )
 
         return {'optimizer': optimizer, 'lr_scheduler': {'scheduler': scheduler}}
-
-    # TODO: what is this, where is it used?
-    def _get_progress_bar_dict(self) -> dict[str, Any]:
-        """Modify progress bar display."""
-        items = super()._get_progress_bar_dict()
-        items.pop('v_num', None)
-        return items
 
 
 class GPTDecoder(BaseLightningModule):
