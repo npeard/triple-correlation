@@ -45,6 +45,9 @@ class TrainingConfig:
         """Set default values for running checkpoints. Check points do not
         need all config variables.
         """
+        # Set default values for running checkpoints
+        self.model_config['type'] = 'GPT'
+        
         # Training defaults
         self.training_config.setdefault('batch_size', 64)
 
@@ -54,12 +57,6 @@ class TrainingConfig:
         self.data_config.setdefault('val_file', 'val.h5')
         self.data_config.setdefault('test_file', 'test.h5')
         self.data_config.setdefault('num_workers', 4)
-        # self.data_config.setdefault("dataset_params", {
-        #     "train_samples": 10000,
-        #     "val_samples": 1000,
-        #     "test_samples": 1000,
-        #     "num_pix": 21
-        # })
 
     @classmethod
     def from_yaml(
@@ -368,10 +365,10 @@ class ModelTrainer:
 
         # get num_pix from test dataset for prediction output organization
         num_pix = self.test_loader.dataset.num_pix
-        # Cast np.int64 to int so that predict_step doesn't throw an error
-        if isinstance(num_pix, np.int64):
-            num_pix = int(num_pix)
-        model.num_pix = num_pix
+        # predict_step throws an error if np.int data types are used
+        # Not sure why or how this happens, but this next line fixes it
+        if isinstance(num_pix, np.int64) or isinstance(num_pix, np.int32):
+           num_pix = int(num_pix)
 
         predictions = trainer.predict(model, self.test_loader)
 

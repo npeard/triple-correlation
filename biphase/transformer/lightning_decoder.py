@@ -48,8 +48,6 @@ class BaseLightningModule(L.LightningModule):
         """
         super().__init__()
         self.model_hparams = model_hparams
-
-        # Set default optimizer hyperparameters if none provided
         self.optimizer_hparams = optimizer_hparams
         self.scheduler_hparams = scheduler_hparams
         self.loss_hparams = loss_hparams
@@ -167,6 +165,7 @@ class GPTDecoder(BaseLightningModule):
         # Number of pixels in the phase array, used to determine how to
         # do the encoding loss, 1D vs 2D
         self.num_pix = eval(model_hparams['num_pix'])
+        model_hparams['type'] = 'GPT'
 
         super().__init__(
             model_hparams=model_hparams,
@@ -194,26 +193,27 @@ class GPTDecoder(BaseLightningModule):
         # Base loss (MSE)
         # I've found that comparing the absolute value trains better
         # because there is an overall global +/-1 sign ambiguity
-        loss = nn.MSELoss()(torch.abs(y_hat), torch.abs(targets))
+        abs_loss = nn.MSELoss()(torch.abs(y_hat), torch.abs(targets))
         # But we should also try to infer the overall sign
-        loss += nn.MSELoss()(y_hat, targets)
+        sign_loss = nn.MSELoss()(y_hat, targets)
 
         # Add encoding loss if enabled and x is provided
         encoding_loss = 0
-        if self.loss_hparams.get('encoding_weight', 0) > 0 and x is not None:
-            encoding_weight = self.loss_hparams['encoding_weight']
-            encoding_loss += encoding_weight * self.encoding_loss(y_hat, x)
+        encoding_weight = self.loss_hparams['encoding_weight']
+        if encoding_weight > 0 and x is not None:
+            encoding_loss += self.encoding_loss(y_hat, x)
 
         # Create a dictionary of unweighted loss components
         loss_dict = {
-            'target': loss,
+            'abs': abs_loss,
+            'sign': sign_loss,
             'encoding': encoding_loss,
-            'total_unweighted': loss + encoding_loss,
+            'total_unweighted': abs_loss + sign_loss + encoding_loss,
             # Add more loss components as needed
         }
 
         # Add a total loss entry with loss components weighted by loss weights
-        loss_dict['total'] = self.loss_hparams['encoding_weight'] * encoding_loss + loss
+        loss_dict['total'] = encoding_weight * encoding_loss + abs_loss + sign_loss
 
         return loss_dict
 
