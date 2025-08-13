@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 
-from biphase.transformer.lightning_decoder import roll2d_torch
+from biphase.transformer.gpt_decoder import roll2d_torch
 from fluo.fluo2d import roll2d
 
 

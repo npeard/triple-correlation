@@ -52,56 +52,8 @@ class BaseLightningModule(L.LightningModule):
         self.scheduler_hparams = scheduler_hparams
         self.loss_hparams = loss_hparams
         self.save_hyperparameters(ignore=['model'])
-        self.model = self.create_model()
 
         torch.set_float32_matmul_precision('high')
-
-    def _create_gpt_config(self) -> GPTConfig:
-        """Create GPTConfig from model configuration."""
-        num_pix = self.model_hparams['num_pix']
-        if isinstance(num_pix, str):
-            num_pix = eval(num_pix)
-
-        # Determine whether we are training a 1D or 2D phase prediction model
-        # and set the sequence lengths accordingly
-        if isinstance(num_pix, tuple):
-            num_pix = num_pix[0]
-            Phi_dim = num_pix // 2 + 1
-            Phi_dim -= 1  # for removal of zero-valued row/column with no information
-            in_seq_len = Phi_dim**4
-            out_seq_len = num_pix**2
-        elif isinstance(num_pix, int):
-            Phi_dim = num_pix // 2 + 1
-            Phi_dim -= 1  # for removal of zero-valued row/column with no information
-            in_seq_len = Phi_dim**2
-            out_seq_len = num_pix
-        else:
-            raise TypeError(
-                f'Unsupported type for num_pix in _create_gpt_config: {type(num_pix)}'
-            )
-
-        # Dynamically get GPTConfig field names and filter params
-        import inspect
-
-        gpt_config_fields = set(inspect.signature(GPTConfig).parameters.keys())
-        filtered_params = {
-            k: v for k, v in self.model_hparams.items() if k in gpt_config_fields
-        }
-
-        return GPTConfig(
-            in_seq_len=in_seq_len, out_seq_len=out_seq_len, **filtered_params
-        )
-
-    def create_model(self) -> GPT:
-        """Create model instance based on config."""
-        model_type = self.model_hparams.pop('type')
-        if model_type == 'GPT':
-            return GPT(self._create_gpt_config())
-        else:
-            raise ValueError(f'Unknown model type: {model_type}')
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.model(x)
 
     def configure_optimizers(self) -> dict[str, Any]:
         """Configure optimizer and learning rate scheduler."""
@@ -118,7 +70,7 @@ class BaseLightningModule(L.LightningModule):
 
         # Configure multi-stage scheduler: linear warmup then cosine annealing
         warmup_epochs = self.scheduler_hparams['warmup_epochs']
-        cosine_epochs = self.scheduler_hparams['cosine_epochs']
+        # cosine_epochs = self.scheduler_hparams['cosine_epochs']
         eta_min = self.scheduler_hparams['eta_min']
         T_max = self.scheduler_hparams['T_max']
 
@@ -162,17 +114,61 @@ class GPTDecoder(BaseLightningModule):
         num_pix: Number of pixels in the phase array, used to determine how to
         do the encoding loss, 1D vs 2D.
         """
-        # Number of pixels in the phase array, used to determine how to
-        # do the encoding loss, 1D vs 2D
-        self.num_pix = eval(model_hparams['num_pix'])
-        model_hparams['type'] = 'GPT'
-
         super().__init__(
             model_hparams=model_hparams,
             optimizer_hparams=optimizer_hparams,
             scheduler_hparams=scheduler_hparams,
             loss_hparams=loss_hparams,
         )
+
+        # Number of pixels in the phase array, used to determine how to
+        # do the encoding loss, 1D vs 2D
+        self.num_pix = eval(model_hparams['num_pix'])
+        self.model = self.create_model()
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.model(x)
+
+    def _create_gpt_config(self) -> GPTConfig:
+        """Create GPTConfig from model configuration."""
+        num_pix = self.model_hparams['num_pix']
+        if isinstance(num_pix, str):
+            num_pix = eval(num_pix)
+
+        # Determine whether we are training a 1D or 2D phase prediction model
+        # and set the sequence lengths accordingly
+        if isinstance(num_pix, tuple):
+            num_pix = num_pix[0]
+            Phi_dim = num_pix // 2 + 1
+            Phi_dim -= 1  # for removal of zero-valued row/column with no information
+            in_seq_len = Phi_dim**4
+            out_seq_len = num_pix**2
+        elif isinstance(num_pix, int):
+            Phi_dim = num_pix // 2 + 1
+            Phi_dim -= 1  # for removal of zero-valued row/column with no information
+            in_seq_len = Phi_dim**2
+            out_seq_len = num_pix
+        else:
+            raise TypeError(
+                f'Unsupported type for num_pix in _create_gpt_config: {type(num_pix)}'
+            )
+
+        # Dynamically get GPTConfig field names and filter params
+        import inspect
+
+        gpt_config_fields = set(inspect.signature(GPTConfig).parameters.keys())
+        filtered_params = {
+            k: v for k, v in self.model_hparams.items() if k in gpt_config_fields
+        }
+
+        return GPTConfig(
+            in_seq_len=in_seq_len, out_seq_len=out_seq_len, **filtered_params
+        )
+
+    @override
+    def create_model(self) -> GPT:
+        """Create model instance based on config."""
+        return GPT(self._create_gpt_config())
 
     def loss_function(
         self,
@@ -433,9 +429,9 @@ class GPTDecoder(BaseLightningModule):
         # Verify encoding/unpacking order during sanity check (first validation)
         if self.trainer.sanity_checking:
             # Re-encode the targets and compare with input, they should be identical
-            encoding_loss = self.encoding_loss(phases, inputs)
-            assert encoding_loss < 1e-6, (
-                f'Encoding verification failed! Loss: {encoding_loss:.2e}'
+            loss_dict = self.loss_function(phases, phases, inputs)
+            assert loss_dict['encoding'] < 1e-6, (
+                f'Encoding verification failed! Loss: {loss_dict["encoding"]:.2e}'
             )
 
         # Log each loss component with val_ prefix

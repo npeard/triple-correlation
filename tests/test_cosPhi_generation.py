@@ -10,7 +10,7 @@ def test_cosPhi_1d():
     fluo = Fluorescence1D(kmax=3, num_pix=21, num_atoms=5)
 
     # Get cosPhi from both methods
-    cosPhi_from_data = fluo.cosPhi_from_data(num_shots=10000)
+    cosPhi_from_data = fluo.cosPhi_from_data(num_shots=50000)
     cosPhi_from_data = cosPhi_from_data[
         fluo.num_pix - 1 : 3 * fluo.num_pix // 2,
         fluo.num_pix - 1 : 3 * fluo.num_pix // 2,
@@ -28,8 +28,8 @@ def test_cosPhi_1d():
     np.testing.assert_allclose(
         cosPhi_from_data,
         cosPhi_from_phase,
-        rtol=0.0,  # 30% relative tolerance
-        atol=0.5,  # 0.3 absolute tolerance
+        rtol=0.2,  # 20% relative tolerance
+        atol=0.1,  # 10% absolute tolerance
         err_msg='1D cosPhi values differ too much between methods',
     )
 
@@ -64,8 +64,8 @@ def test_cosPhi_2d():
     np.testing.assert_allclose(
         cosPhi_from_data,
         cosPhi_from_phase,
-        rtol=0.0,  # 30% relative tolerance
-        atol=0.5,  # 0.3 absolute tolerance
+        rtol=0.2,  # 20% relative tolerance
+        atol=0.1,  # 10% absolute tolerance
         err_msg='2D cosPhi values differ too much between methods',
     )
 

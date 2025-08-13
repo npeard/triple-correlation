@@ -29,7 +29,7 @@ def setup_logging(verbosity: str) -> None:
     )
 
 
-def parse_args():
+def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description='Train a new model or test from checkpoint'
     )
@@ -91,6 +91,8 @@ def main():
     if not args.config:
         raise ValueError('Config file is required for training mode')
 
+    # Load config
+    logger.info(f'Loading config from {args.config}')
     config = TrainingConfig.from_yaml(args.config)
 
     # Set random seed from time

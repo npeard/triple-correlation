@@ -14,10 +14,11 @@ import yaml
 from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint
 from lightning.pytorch.loggers import WandbLogger
 
-logger = logging.getLogger(__name__)
+from biphase.transformer.datasets import PreTrainingDataset, get_data_loaders
+from biphase.transformer.gpt_decoder import BaseLightningModule, GPTDecoder
+from biphase.transformer.tcn_decoder import TCNDecoder
 
-from biphase.transformer.datasets import get_data_loaders
-from biphase.transformer.lightning_decoder import BaseLightningModule, GPTDecoder
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -46,8 +47,8 @@ class TrainingConfig:
         need all config variables.
         """
         # Set default values for running checkpoints
-        self.model_config['type'] = 'GPT'
-        
+        self.model_config.setdefault('type', 'GPT')
+
         # Training defaults
         self.training_config.setdefault('batch_size', 64)
 
@@ -240,6 +241,10 @@ class ModelTrainer:
         val_path = resolve_path(data_dir, self.config.data_config['val_file'])
         test_path = resolve_path(data_dir, self.config.data_config['test_file'])
 
+        # Check that the shape of the phase arrays in the dataset matches
+        # the model expected shape
+        self.verify_phase_array_shape(train_path, val_path, test_path)
+
         self.train_loader, self.val_loader, self.test_loader = get_data_loaders(
             train_path=train_path,
             val_path=val_path,
@@ -247,6 +252,38 @@ class ModelTrainer:
             batch_size=self.config.training_config['batch_size'],
             num_workers=self.config.data_config['num_workers'],
         )
+
+    def verify_phase_array_shape(self, train_path: str, val_path: str, test_path: str):
+        """Verify that phase arrays have the expected shape."""
+        # We need to do this carefully to avoid h5py pickling issues with
+        # multiprocessing
+        expected_num_pix = self.config.model_config['num_pix']
+        if isinstance(expected_num_pix, str):
+            expected_num_pix = eval(expected_num_pix)
+
+        # Temporarily create datasets with num_workers=0 for validation
+        for loader_name, path in [
+            ('train', train_path),
+            ('val', val_path),
+            ('test', test_path),
+        ]:
+            # Create a temporary dataset just for validation (no multiprocessing)
+            temp_dataset = PreTrainingDataset(path, cache_size=0)
+            sample_phase = temp_dataset[
+                0
+            ]  # This will open h5py file in this dataset only
+            actual_length = len(sample_phase)
+
+            # Close the temporary dataset's h5py file to clean up
+            if hasattr(temp_dataset, 'h5_file') and temp_dataset.opened_flag:
+                temp_dataset.h5_file.close()
+
+            if actual_length != expected_num_pix:
+                raise ValueError(
+                    f'{loader_name} dataset phase array length mismatch: '
+                    f'expected {expected_num_pix}, got {actual_length}'
+                    f'\nAre you using the correct dataset?'
+                )
 
     def create_lightning_module(self) -> BaseLightningModule:
         """Create lightning module based on model type."""
@@ -277,15 +314,25 @@ class ModelTrainer:
             'eta_min': self.config.training_config['eta_min'],
         }
 
-        if self.config.model_config['type'] == 'GPT':
+        model_type = self.config.model_config['type']
+        if model_type == 'GPT':
             return GPTDecoder(
                 model_hparams=self.config.model_config,
                 optimizer_hparams=optimizer_hparams,
                 scheduler_hparams=scheduler_hparams,
                 loss_hparams=self.config.loss_config,
             )
+        elif model_type == 'TCN2D':
+            return TCNDecoder(
+                model_hparams=self.config.model_config,
+                optimizer_hparams=optimizer_hparams,
+                scheduler_hparams=scheduler_hparams,
+                loss_hparams=self.config.loss_config,
+            )
         else:
-            raise ValueError("Unknown model type, can't initialize Lightning.")
+            raise ValueError(
+                f"Unknown model type '{model_type}', can't initialize Lightning."
+            )
 
     def setup_trainer(self) -> L.Trainer:
         """Setup Lightning trainer with callbacks and loggers."""
@@ -357,7 +404,16 @@ class ModelTrainer:
         import matplotlib.pyplot as plt
         import numpy as np
 
-        model = GPTDecoder.load_from_checkpoint(checkpoint_path)
+        # Determine model type from checkpoint and load appropriately
+        checkpoint = torch.load(checkpoint_path, map_location='cpu')
+        model_type = checkpoint['hyper_parameters']['model_hparams'].get('type', 'GPT')
+
+        if model_type == 'GPT':
+            model = GPTDecoder.load_from_checkpoint(checkpoint_path)
+        elif model_type == 'TCN2D':
+            model = TCNDecoder.load_from_checkpoint(checkpoint_path)
+        else:
+            raise ValueError(f"Unknown model type '{model_type}' in checkpoint")
         trainer = L.Trainer(accelerator='gpu', devices=1, logger=[])
 
         # setup dataloaders
@@ -367,8 +423,8 @@ class ModelTrainer:
         num_pix = self.test_loader.dataset.num_pix
         # predict_step throws an error if np.int data types are used
         # Not sure why or how this happens, but this next line fixes it
-        if isinstance(num_pix, np.int64) or isinstance(num_pix, np.int32):
-           num_pix = int(num_pix)
+        if isinstance(num_pix, np.int64 | np.int32):
+            num_pix = int(num_pix)
 
         predictions = trainer.predict(model, self.test_loader)
 

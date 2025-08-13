@@ -1,25 +1,21 @@
 model:
-  type: "GPT"
+  type: "TCN2D"
   input_dim: 1 # Always 1
   output_dim: 1 # Always 1
-  n_layer: 2
-  n_head: 2
-  n_embd: 16
   dropout: 0.1
   bias: false
-  is_causal: true  # Whether to use causal masking in self-attention
   num_pix: (21) # Tuple, (21, 21) for 2D or (21) for 1D
   
-  # RegressionTCN hyperparameters
-  reg_tcn_kernel_size: 7
-  reg_tcn_num_channels: [[32, 64, 64]]
+  # TCN2D hyperparameters
+  reg_tcn_kernel_size: 3
+  reg_tcn_num_channels: [[16, 32, 64]]
   reg_tcn_dilation_base: 2
   reg_tcn_stride: 1
   reg_tcn_activation: 'GELU'
   reg_tcn_dropout: 0.1
 
 training:
-  max_epochs: 500
+  max_epochs: 300
   batch_size: 256
   optimizer: "Adam"
   learning_rate: 1e-3
@@ -28,7 +24,7 @@ training:
   devices: '1'
   use_logging: false
   wandb_project: "triple_correlation"
-  experiment_name: "tcn_regression_hypersearch"
+  experiment_name: "tcn2d_hypersearch"
   checkpoint_dir: "./biphase/transformer/checkpoints"
 
 loss:
@@ -37,7 +33,7 @@ loss:
 data:
   data_dir: "./biphase/transformer/data"
   train_file: "train.h5"
-  val_file: "val.h5"
+  val_file: "val.h5" 
   test_file: "test.h5"
   num_workers: 7
   dataset_params:

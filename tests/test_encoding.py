@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 
-from biphase.transformer.lightning_decoder import GPTDecoder
+from biphase.transformer.gpt_decoder import GPTDecoder
 from fluo import Fluorescence1D, Fluorescence2D
 
 
