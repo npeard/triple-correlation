@@ -1,21 +1,36 @@
 model:
-  type: "TCN2D"
+  type: "TCNGPT"
   input_dim: 1 # Always 1
   output_dim: 1 # Always 1
   dropout: 0.1
   bias: false
-  num_pix: (21) # Tuple, (21, 21) for 2D or (21) for 1D
+  num_pix: (51) # Tuple, (21, 21) for 2D or (21) for 1D
   
-  # TCN2D hyperparameters
+  # TCN2D embedding hyperparameters for 2D input processing
   embd_tcn_kernel_size: 3
   embd_tcn_num_channels: [[16, 32, 64]]
   embd_tcn_dilation_base: 2
   embd_tcn_stride: 1
   embd_tcn_activation: 'GELU'
   embd_tcn_dropout: 0.1
+  
+  # GPT hyperparameters for sequence modeling
+  n_layer: 2
+  n_head: 2
+  n_embd: 16
+  is_causal: true  # Whether to use causal masking in self-attention
+  gpt_seq_len: 256  # Intermediate sequence length for GPT input
+  
+  # RegressionTCN hyperparameters (inside GPT model)
+  reg_tcn_kernel_size: 7
+  reg_tcn_num_channels: [[32, 64, 64]]
+  reg_tcn_dilation_base: 2
+  reg_tcn_stride: 1
+  reg_tcn_activation: 'GELU'
+  reg_tcn_dropout: 0.1
 
 training:
-  max_epochs: 300
+  max_epochs: 500
   batch_size: 256
   optimizer: "Adam"
   learning_rate: 1e-3
@@ -24,7 +39,7 @@ training:
   devices: '1'
   use_logging: false
   wandb_project: "triple_correlation"
-  experiment_name: "tcn2d_hypersearch"
+  experiment_name: "tcngpt_hypersearch"
   checkpoint_dir: "./biphase/transformer/checkpoints"
 
 loss:
@@ -33,7 +48,7 @@ loss:
 data:
   data_dir: "./biphase/transformer/data"
   train_file: "train.h5"
-  val_file: "val.h5" 
+  val_file: "val.h5"
   test_file: "test.h5"
   num_workers: 7
   dataset_params:

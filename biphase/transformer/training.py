@@ -17,6 +17,7 @@ from lightning.pytorch.loggers import WandbLogger
 from biphase.transformer.datasets import PreTrainingDataset, get_data_loaders
 from biphase.transformer.gpt_decoder import BaseLightningModule, GPTDecoder
 from biphase.transformer.tcn_decoder import TCNDecoder
+from biphase.transformer.tcngpt_decoder import TCNGPTDecoder
 
 logger = logging.getLogger(__name__)
 
@@ -329,6 +330,13 @@ class ModelTrainer:
                 scheduler_hparams=scheduler_hparams,
                 loss_hparams=self.config.loss_config,
             )
+        elif model_type == 'TCNGPT':
+            return TCNGPTDecoder(
+                model_hparams=self.config.model_config,
+                optimizer_hparams=optimizer_hparams,
+                scheduler_hparams=scheduler_hparams,
+                loss_hparams=self.config.loss_config,
+            )
         else:
             raise ValueError(
                 f"Unknown model type '{model_type}', can't initialize Lightning."
@@ -412,6 +420,8 @@ class ModelTrainer:
             model = GPTDecoder.load_from_checkpoint(checkpoint_path)
         elif model_type == 'TCN2D':
             model = TCNDecoder.load_from_checkpoint(checkpoint_path)
+        elif model_type == 'TCNGPT':
+            model = TCNGPTDecoder.load_from_checkpoint(checkpoint_path)
         else:
             raise ValueError(f"Unknown model type '{model_type}' in checkpoint")
         trainer = L.Trainer(accelerator='gpu', devices=1, logger=[])

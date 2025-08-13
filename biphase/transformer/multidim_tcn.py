@@ -20,12 +20,12 @@ class TCN2DConfig:
     output_dim: int
     dropout: float
     bias: bool
-    reg_tcn_kernel_size: int
-    reg_tcn_num_channels: list[int]
-    reg_tcn_dilation_base: int
-    reg_tcn_stride: int
-    reg_tcn_activation: str
-    reg_tcn_dropout: float
+    embd_tcn_kernel_size: int
+    embd_tcn_num_channels: list[int]
+    embd_tcn_dilation_base: int
+    embd_tcn_stride: int
+    embd_tcn_activation: str
+    embd_tcn_dropout: float
 
 
 class Chomp2d(nn.Module):
@@ -155,36 +155,36 @@ class TCN2D(nn.Module):
             'GELU': nn.GELU(),
         }
         try:
-            activation_fn = act_fn_map.get(config.reg_tcn_activation)
+            activation_fn = act_fn_map.get(config.embd_tcn_activation)
         except (AttributeError, KeyError):
             raise KeyError(
-                f'Unsupported activation function: {config.reg_tcn_activation}'
+                f'Unsupported activation function: {config.embd_tcn_activation}'
             ) from None
 
         # Build TCN layers
         layers = []
-        num_levels = len(config.reg_tcn_num_channels)
+        num_levels = len(config.embd_tcn_num_channels)
 
         # For 2D, we start with a single input channel (the encoded 2D matrix)
         input_channels = 1
         for i in range(num_levels):
-            dilation_h = config.reg_tcn_dilation_base**i
-            dilation_w = config.reg_tcn_dilation_base**i
+            dilation_h = config.embd_tcn_dilation_base**i
+            dilation_w = config.embd_tcn_dilation_base**i
 
             in_channels = (
-                input_channels if i == 0 else config.reg_tcn_num_channels[i - 1]
+                input_channels if i == 0 else config.embd_tcn_num_channels[i - 1]
             )
-            out_channels = config.reg_tcn_num_channels[i]
+            out_channels = config.embd_tcn_num_channels[i]
 
             # 2D kernel size - use same size for both dimensions
-            kernel_size = (config.reg_tcn_kernel_size, config.reg_tcn_kernel_size)
-            stride = (config.reg_tcn_stride, config.reg_tcn_stride)
+            kernel_size = (config.embd_tcn_kernel_size, config.embd_tcn_kernel_size)
+            stride = (config.embd_tcn_stride, config.embd_tcn_stride)
             dilation = (dilation_h, dilation_w)
 
             # Calculate padding to maintain sequence length for causal convolution
             # For causal masking, we pad only on the left/top
-            padding_h = (config.reg_tcn_kernel_size - 1) * dilation_h
-            padding_w = (config.reg_tcn_kernel_size - 1) * dilation_w
+            padding_h = (config.embd_tcn_kernel_size - 1) * dilation_h
+            padding_w = (config.embd_tcn_kernel_size - 1) * dilation_w
             padding = (padding_h, padding_w)
 
             layers.append(
@@ -195,7 +195,7 @@ class TCN2D(nn.Module):
                     stride,
                     dilation,
                     padding,
-                    dropout=config.reg_tcn_dropout,
+                    dropout=config.embd_tcn_dropout,
                     activation_fn=activation_fn,
                 )
             )
@@ -210,7 +210,7 @@ class TCN2D(nn.Module):
 
     def _create_output_layers(self):
         """Create output projection layers based on spatial size."""
-        final_channels = self.config.reg_tcn_num_channels[-1]
+        final_channels = self.config.embd_tcn_num_channels[-1]
 
         # Global average pooling to reduce spatial dimensions
         self._spatial_pooling = nn.AdaptiveAvgPool2d(1)
