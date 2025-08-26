@@ -8,7 +8,7 @@ model:
   dropout: 0.1
   bias: false
   is_causal: true  # Whether to use causal masking in self-attention
-  num_pix: (21) # Tuple, (21, 21) for 2D or (21) for 1D
+  num_pix: (51) # Tuple, (21, 21) for 2D or (21) for 1D
   
   # RegressionTCN hyperparameters
   reg_tcn_kernel_size: 7
@@ -20,7 +20,7 @@ model:
 
 training:
   max_epochs: 500
-  batch_size: 256
+  batch_size: 16
   optimizer: "Adam"
   learning_rate: 1e-3
   eta_min: 0
@@ -28,10 +28,11 @@ training:
   devices: '1'
   use_logging: false
   wandb_project: "triple_correlation"
-  experiment_name: "tcn_regression_hypersearch"
+  experiment_name: "dynamic_weight_test"
   checkpoint_dir: "./biphase/transformer/checkpoints"
 
 loss:
+  dynamic: true
   encoding_weight: 1.0
 
 data:
