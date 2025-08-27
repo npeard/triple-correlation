@@ -3,16 +3,16 @@ model:
   input_dim: 1 # Always 1
   output_dim: 1 # Always 1
   n_layer: 2
-  n_head: 2
-  n_embd: 16
+  n_head: 4
+  n_embd: 32
   dropout: 0.1
   bias: false
   is_causal: true  # Whether to use causal masking in self-attention
-  num_pix: (51) # Tuple, (21, 21) for 2D or (21) for 1D
+  num_pix: (21) # Tuple, (21, 21) for 2D or (21) for 1D
   
   # RegressionTCN hyperparameters
-  reg_tcn_kernel_size: 7
-  reg_tcn_num_channels: [[32, 64, 64]]
+  reg_tcn_kernel_size: 5
+  reg_tcn_num_channels: [[16, 16, 32, 64, 64]]
   reg_tcn_dilation_base: 2
   reg_tcn_stride: 1
   reg_tcn_activation: 'GELU'
@@ -20,13 +20,13 @@ model:
 
 training:
   max_epochs: 500
-  batch_size: 16
+  batch_size: 256
   optimizer: "Adam"
   learning_rate: 1e-3
   eta_min: 0
-  accelerator: "cpu"
+  accelerator: "gpu"
   devices: '1'
-  use_logging: false
+  use_logging: true
   wandb_project: "triple_correlation"
   experiment_name: "dynamic_weight_test"
   checkpoint_dir: "./biphase/transformer/checkpoints"
@@ -42,6 +42,6 @@ data:
   test_file: "test.h5"
   num_workers: 7
   dataset_params:
-    train_samples: 1000
+    train_samples: 10000
     val_samples: 1000
     test_samples: 1000

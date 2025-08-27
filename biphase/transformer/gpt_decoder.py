@@ -134,7 +134,8 @@ class GPTDecoder(BaseLightningModule):
         if self.dynamic_weighting:
             # Initialize learnable weight parameters for homoscedastic uncertainty
             # Start with reasonable initial values (e.g., 1.0)
-            # self.log_weight_phase = nn.Parameter(torch.tensor(0.0))  # log(1.0) = 0.0
+            self.log_dynamic_abs_weight = nn.Parameter(torch.tensor(0.0))  # log(1.0) = 0.0
+            self.log_dynamic_sign_weight = nn.Parameter(torch.tensor(0.0))  # log(1.0) = 0.0
             self.log_dynamic_encoding_weight = nn.Parameter(
                 torch.tensor(0.0)
             )  # log(1.0) = 0.0
@@ -226,15 +227,19 @@ class GPTDecoder(BaseLightningModule):
             # Dynamic weighting using learnable parameters for homoscedastic uncertainty
             # Formula: 1/weight**2 * loss + log(weight) for each term
             dynamic_encoding_weight = torch.exp(self.log_dynamic_encoding_weight)
+            dynamic_abs_weight = 1#torch.exp(self.log_dynamic_abs_weight)
+            dynamic_sign_weight = torch.exp(self.log_dynamic_sign_weight)
             loss_dict['total'] = (
                 1 / dynamic_encoding_weight**2 * encoding_loss
-                + torch.log(dynamic_encoding_weight)
-                + abs_loss
-                + sign_loss
+                #+ 1 / dynamic_abs_weight**2 * abs_loss
+                + 1 / dynamic_sign_weight**2 * sign_loss
+                + torch.log(dynamic_encoding_weight * dynamic_abs_weight * dynamic_sign_weight)
             )
 
             # Add weight values to loss dict for logging
             loss_dict['dynamic_encoding_weight'] = dynamic_encoding_weight
+            loss_dict['dynamic_abs_weight'] = dynamic_abs_weight
+            loss_dict['dynamic_sign_weight'] = dynamic_sign_weight
         else:
             # Static weighting using fixed hyperparameters
             loss_dict['total'] = encoding_weight * encoding_loss + abs_loss + sign_loss

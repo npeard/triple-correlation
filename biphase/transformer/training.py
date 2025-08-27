@@ -244,7 +244,9 @@ class ModelTrainer:
 
         # Check that the shape of the phase arrays in the dataset matches
         # the model expected shape
-        self.verify_phase_array_shape(train_path, val_path, test_path)
+        # Skip if this is a checkpoint evaluation
+        if self.experiment_name != 'checkpoint_eval':
+            self.verify_phase_array_shape(train_path, val_path, test_path)
 
         self.train_loader, self.val_loader, self.test_loader = get_data_loaders(
             train_path=train_path,
