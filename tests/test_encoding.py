@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 
-from biphase.transformer.gpt_decoder import GPTDecoder
+from biphase.transformer.encoding import encode_1d, encode_2d
 from fluo import Fluorescence1D, Fluorescence2D
 
 
@@ -22,7 +22,7 @@ def test_encode_equivalence():
     phase_tensor = torch.from_numpy(phase).float().unsqueeze(0)
 
     # Get GPTDecoder output
-    gpt_output = GPTDecoder._encode(phase_tensor[:, :])
+    gpt_output = encode_1d(phase_tensor[:, :])
 
     # Get Fluorescence1D output
     # Use only positive half for compute_Phi_from_phase
@@ -56,7 +56,7 @@ def test_encode_multiple_sizes():
         phase_tensor = torch.from_numpy(phase).float().unsqueeze(0)
 
         # Get outputs
-        gpt_output = GPTDecoder._encode(phase_tensor).squeeze().numpy()
+        gpt_output = encode_1d(phase_tensor).squeeze().numpy()
         fluo_output = np.abs(Fluorescence1D.compute_Phi_from_phase(phase)[1:, 1:])
 
         # Compare
@@ -94,7 +94,7 @@ def test_encode_2D_equivalence():
     fluo_output = np.abs(fluo_output[1:, 1:, 1:, 1:])
 
     # Get output from our PyTorch implementation
-    gpt_output = GPTDecoder._encode_2D(phase_torch)
+    gpt_output = encode_2d(phase_torch)
 
     # Convert PyTorch output to numpy for comparison
     gpt_output_np = gpt_output.squeeze().numpy()
@@ -128,7 +128,7 @@ def test_encode_2D_multiple_sizes():
         phase_torch = torch.from_numpy(phase_np).float().unsqueeze(0)
 
         # Get outputs
-        gpt_output = GPTDecoder._encode_2D(phase_torch).squeeze().numpy()
+        gpt_output = encode_2d(phase_torch).squeeze().numpy()
         fluo_output = np.abs(
             Fluorescence2D.compute_Phi_from_phase(phase_np)[1:, 1:, 1:, 1:]
         )

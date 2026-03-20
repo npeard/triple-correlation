@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 logger = logging.getLogger(__name__)
 
 from biphase.solver.differentiable import DifferentiableSolver
-from biphase.transformer.lightning_decoder import GPTDecoder
+from biphase.transformer.encoding import encode_1d
 from fluo import Fluorescence1D, Fluorescence2D
 
 
@@ -71,7 +71,7 @@ def test_1d_solver():
 
     # Plot DifferentiableSolver phase re-encoded
     encoded = (
-        GPTDecoder._encode(solver.trainable_phase.phase.unsqueeze(0))
+        encode_1d(solver.trainable_phase.phase.unsqueeze(0))
         .detach()
         .numpy()
         .reshape((Phi_dim, Phi_dim))

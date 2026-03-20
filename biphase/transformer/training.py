@@ -15,9 +15,7 @@ from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint
 from lightning.pytorch.loggers import WandbLogger
 
 from biphase.transformer.datasets import PreTrainingDataset, get_data_loaders
-from biphase.transformer.gpt_decoder import BaseLightningModule, GPTDecoder
-from biphase.transformer.tcn_decoder import TCNDecoder
-from biphase.transformer.tcngpt_decoder import TCNGPTDecoder
+from biphase.transformer.lit_module import LitModule
 
 logger = logging.getLogger(__name__)
 
@@ -288,12 +286,8 @@ class ModelTrainer:
                     f'\nAre you using the correct dataset?'
                 )
 
-    def create_lightning_module(self) -> BaseLightningModule:
-        """Create lightning module based on model type."""
-        num_pix = self.config.model_config['num_pix']
-        if isinstance(num_pix, str):
-            num_pix = eval(num_pix)
-
+    def create_lightning_module(self) -> LitModule:
+        """Create lightning module."""
         optimizer_hparams = {
             'name': self.config.training_config['optimizer'],
             # TODO: why is this loaded as a string?
@@ -317,32 +311,12 @@ class ModelTrainer:
             'eta_min': self.config.training_config['eta_min'],
         }
 
-        model_type = self.config.model_config['type']
-        if model_type == 'GPT':
-            return GPTDecoder(
-                model_hparams=self.config.model_config,
-                optimizer_hparams=optimizer_hparams,
-                scheduler_hparams=scheduler_hparams,
-                loss_hparams=self.config.loss_config,
-            )
-        elif model_type == 'TCN2D':
-            return TCNDecoder(
-                model_hparams=self.config.model_config,
-                optimizer_hparams=optimizer_hparams,
-                scheduler_hparams=scheduler_hparams,
-                loss_hparams=self.config.loss_config,
-            )
-        elif model_type == 'TCNGPT':
-            return TCNGPTDecoder(
-                model_hparams=self.config.model_config,
-                optimizer_hparams=optimizer_hparams,
-                scheduler_hparams=scheduler_hparams,
-                loss_hparams=self.config.loss_config,
-            )
-        else:
-            raise ValueError(
-                f"Unknown model type '{model_type}', can't initialize Lightning."
-            )
+        return LitModule(
+            model_hparams=self.config.model_config,
+            optimizer_hparams=optimizer_hparams,
+            scheduler_hparams=scheduler_hparams,
+            loss_hparams=self.config.loss_config,
+        )
 
     def setup_trainer(self) -> L.Trainer:
         """Setup Lightning trainer with callbacks and loggers."""
@@ -414,18 +388,8 @@ class ModelTrainer:
         import matplotlib.pyplot as plt
         import numpy as np
 
-        # Determine model type from checkpoint and load appropriately
-        checkpoint = torch.load(checkpoint_path, map_location='cpu')
-        model_type = checkpoint['hyper_parameters']['model_hparams'].get('type', 'GPT')
-
-        if model_type == 'GPT':
-            model = GPTDecoder.load_from_checkpoint(checkpoint_path)
-        elif model_type == 'TCN2D':
-            model = TCNDecoder.load_from_checkpoint(checkpoint_path)
-        elif model_type == 'TCNGPT':
-            model = TCNGPTDecoder.load_from_checkpoint(checkpoint_path)
-        else:
-            raise ValueError(f"Unknown model type '{model_type}' in checkpoint")
+        # Load model from checkpoint
+        model = LitModule.load_from_checkpoint(checkpoint_path)
         trainer = L.Trainer(accelerator='gpu', devices=1, logger=[])
 
         # setup dataloaders

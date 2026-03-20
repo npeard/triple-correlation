@@ -6,7 +6,7 @@ import numpy as np
 import torch
 from torch import nn, optim
 
-from biphase.transformer.lightning_decoder import GPTDecoder
+from biphase.transformer.encoding import encode_1d, encode_2d
 
 
 class TrainablePhase(nn.Module):
@@ -185,11 +185,9 @@ class DifferentiableSolver:
             MSE loss
         """
         if self.is_1d:
-            # Add batch dimension before using _encode from GPTDecoder
-            encoded = GPTDecoder._encode(phase.unsqueeze(0))
+            encoded = encode_1d(phase.unsqueeze(0))
         else:
-            # Add batch dimension before using _encode_2D from GPTDecoder
-            encoded = GPTDecoder._encode_2D(phase.unsqueeze(0))
+            encoded = encode_2d(phase.unsqueeze(0))
 
         encoded_flat = encoded.flatten()
         zero_loss = torch.abs(phase[0]) if self.is_1d else torch.abs(phase[0, 0])

@@ -32,7 +32,6 @@ training:
   checkpoint_dir: "./biphase/transformer/checkpoints"
 
 loss:
-  dynamic: true
   encoding_weight: 1.0
 
 data:
