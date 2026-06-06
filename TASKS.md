@@ -1,9 +1,5 @@
 # Triphase ML Tasks
 
-> Migrated from Reminders: Triphase ML list. 26 pending tasks.
-
----
-
 ## Performance & Scalability
 
 - [ ] **4D `g3` via Numba** — write a function that computes the 4D `g3` directly using Numba, avoiding storage of the full 6D tensor; also speeds up fine-tuning data generation

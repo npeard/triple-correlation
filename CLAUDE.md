@@ -7,7 +7,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 This repository implements phase retrieval from triple correlations of fluorescence intensity, as described in [this paper](https://opg.optica.org/oe/fulltext.cfm?uri=oe-31-15-25082&id=532719). The project consists of:
 
 - **Fluorescence simulation** (`fluo/` directory): Core simulation code for generating fluorescence intensity patterns and computing correlations
-- **Phase retrieval algorithms** (`biphase_gpt/` directory): GPT-based neural network models for phase retrieval from triple correlations  
+- **Phase retrieval via neural networks** (`biphase/transformer/` directory): GPT-based models for phase retrieval from triple correlations, with on-the-fly synthetic data generation
+- **Differentiable solver** (`biphase/solver/` directory): Gradient-based phase retrieval solver
 - **Plotting and visualization** (`plots/` directory): Paper figures and data visualization
 - **Tests** (`tests/` directory): Unit tests for core functionality
 
@@ -20,18 +21,19 @@ The codebase follows a modular structure:
 - `triphase1d.py` / `triphase2d.py`: Triple correlation and phase retrieval algorithms
 - `xtal.py`: Crystal structure utilities
 
-### Neural Network Training (`biphase_gpt/`)
-- `training.py`: Main training orchestration with `ModelTrainer` class and `TrainingConfig` for hyperparameter management
-- `lightning_config.py`: PyTorch Lightning modules including `BaseLightningModule` and `GPTDecoder`
-- `nano_gpt.py`: GPT model architecture implementation
-- `datasets.py`: Data loading and preprocessing for neural network training
+### Neural Network Training (`biphase/transformer/`)
+- `lit_module.py`: Unified PyTorch Lightning module (`LitModule`) that handles model creation, on-the-fly data generation, training/validation/test steps, and loss computation
+- `training.py`: Training orchestration with `ModelTrainer` class and `TrainingConfig` for hyperparameter management
+- `encoding.py`: JIT-compiled encoding functions (`encode_1d`, `encode_2d`) for computing Phi matrices from phase arrays
+- `models/`: Neural network architectures accessed via `factory.py`'s `create_model()` factory method
+  - `gpt.py`: GPT model architecture (transformer-based)
+  - `factory.py`: Model factory — sole access point for creating `nn.Module` models
 - `configs/nanogpt_config.yaml`: Training configuration with hyperparameter grids for model search
 
 ### Entry Points
 - `main.py`: Main training script that supports:
   - Training new models: `python3 main.py --config path/to/config.yaml`
   - Testing from checkpoint: `python3 main.py --checkpoint path/to/checkpoint.ckpt`
-  - Dataset regeneration: `python3 main.py --config path/to/config.yaml --regenerate_datasets`
 
 ## Development Commands
 
@@ -41,7 +43,7 @@ The project uses `taskipy` for task automation. All commands should use `python3
 # Run tests
 task test
 
-# Lint code 
+# Lint code
 task lint
 
 # Format code
@@ -65,7 +67,7 @@ python3 -m pytest
 # Linting
 python3 -m ruff check .
 
-# Formatting  
+# Formatting
 python3 -m ruff format . && python3 -m ruff check --fix .
 
 # Spell checking
@@ -77,23 +79,23 @@ codespell .
 Key dependencies include:
 - **PyTorch + Lightning**: Neural network training framework
 - **NumPy + Numba**: Numerical computing with JIT compilation for performance
-- **h5py**: HDF5 data storage for training datasets
 - **matplotlib**: Plotting and visualization
 - **wandb**: Experiment tracking (when `use_logging: true` in config)
 
 ## Configuration
 
-Training configurations are in YAML format (see `biphase_gpt/configs/nanogpt_config.yaml`). The config supports:
+Training configurations are in YAML format (see `biphase/transformer/configs/nanogpt_config.yaml`). The config supports:
 - Hyperparameter grid search with lists (e.g., `n_layer: [1,2,4]`)
 - Model architecture parameters (`n_layer`, `n_head`, `n_embd`, `num_pix`)
-- Training settings (optimizer, learning rate, batch size)
-- Data paths and dataset generation parameters
+- Training settings (optimizer, learning rate, batch size, steps_per_epoch)
+- Loss settings (encoding_weight for static loss weighting)
 
 ## Data Flow
 
-1. **Dataset Generation**: `create_pretraining_datasets()` generates synthetic fluorescence data stored in HDF5 format
-2. **Training**: `ModelTrainer` loads data via `get_data_loaders()` and trains GPT models using PyTorch Lightning
-3. **Evaluation**: Models can be tested from checkpoints with `plot_predictions_from_checkpoint()`
+1. **Phase generation**: `LitModule` generates random synthetic phases on-the-fly on GPU each training step (no stored datasets)
+2. **Encoding**: Phases are encoded into absolute Phi matrices via JIT-compiled `encode_1d`/`encode_2d`
+3. **Training**: The model learns to predict phases from Phi matrices; loss combines abs, sign, and encoding components
+4. **Evaluation**: Models can be tested from checkpoints with `plot_predictions_from_checkpoint()`
 
 ## Testing
 

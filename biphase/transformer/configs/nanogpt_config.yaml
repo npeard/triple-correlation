@@ -9,7 +9,7 @@ model:
   bias: false
   is_causal: true  # Whether to use causal masking in self-attention
   num_pix: (21) # Tuple, (21, 21) for 2D or (21) for 1D
-  
+
   # RegressionTCN hyperparameters
   reg_tcn_kernel_size: 5
   reg_tcn_num_channels: [[16, 16, 32, 64, 64]]
@@ -21,6 +21,7 @@ model:
 training:
   max_epochs: 500
   batch_size: 256
+  steps_per_epoch: 100
   optimizer: "Adam"
   learning_rate: 1e-3
   eta_min: 0
@@ -33,14 +34,3 @@ training:
 
 loss:
   encoding_weight: 1.0
-
-data:
-  data_dir: "./biphase/transformer/data"
-  train_file: "train.h5"
-  val_file: "val.h5"
-  test_file: "test.h5"
-  num_workers: 7
-  dataset_params:
-    train_samples: 10000
-    val_samples: 1000
-    test_samples: 1000

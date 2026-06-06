@@ -2,15 +2,33 @@
 
 """Unified Lightning module for phase retrieval training."""
 
+import math
 from typing import Any
 
 import lightning as L
 import numpy as np
 import torch
 from torch import nn, optim
+from torch.utils.data import DataLoader, Dataset
 
 from biphase.transformer.encoding import encode_1d, encode_2d, encoding_loss
 from biphase.transformer.models.factory import create_model
+
+VAL_SEED = 42
+TEST_SEED = 43
+
+
+class DummyDataset(Dataset):
+    """Dataset that yields unused scalars to drive DataLoader iteration."""
+
+    def __init__(self, num_samples: int):
+        self.num_samples = num_samples
+
+    def __len__(self) -> int:
+        return self.num_samples
+
+    def __getitem__(self, idx: int) -> int:
+        return 0
 
 
 class LitModule(L.LightningModule):
@@ -22,6 +40,7 @@ class LitModule(L.LightningModule):
         optimizer_hparams: dict | None = None,
         scheduler_hparams: dict | None = None,
         loss_hparams: dict | None = None,
+        training_hparams: dict | None = None,
     ):
         """Initialize LitModule.
 
@@ -30,12 +49,15 @@ class LitModule(L.LightningModule):
             optimizer_hparams: Hyperparameters for the optimizer
             scheduler_hparams: Hyperparameters for the learning rate scheduler
             loss_hparams: Hyperparameters for the loss function
+            training_hparams: Hyperparameters for data generation (batch_size,
+                steps_per_epoch)
         """
         super().__init__()
         self.model_hparams = model_hparams
         self.optimizer_hparams = optimizer_hparams
         self.scheduler_hparams = scheduler_hparams
         self.loss_hparams = loss_hparams
+        self.training_hparams = training_hparams or {}
         self.save_hyperparameters(ignore=['model'])
 
         torch.set_float32_matmul_precision('high')
@@ -43,9 +65,35 @@ class LitModule(L.LightningModule):
         # Parse num_pix for encoding dimensions
         self.num_pix = eval(model_hparams['num_pix'])
 
+        # Data generation parameters
+        self.batch_size = self.training_hparams.get('batch_size', 256)
+        self.steps_per_epoch = self.training_hparams.get('steps_per_epoch', 100)
+
         # Create model via factory
         model_type = model_hparams.get('type', 'GPT')
         self.model = create_model(model_type, model_hparams)
+
+    def _generate_phase_batch(self, batch_size: int) -> torch.Tensor:
+        """Generate a batch of random phase arrays on the current device.
+
+        Args:
+            batch_size: Number of phase arrays to generate
+
+        Returns:
+            torch.Tensor: Random phases in [-π, π] with phase origin set to 0
+        """
+        if isinstance(self.num_pix, tuple):
+            phase_len = self.num_pix[0] * self.num_pix[1]
+        else:
+            phase_len = self.num_pix
+
+        phases = (
+            torch.rand(batch_size, phase_len, device=self.device) * 2 * math.pi
+            - math.pi
+        )
+        # Set phase origin to zero
+        phases[:, 0] = 0.0
+        return phases
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.model(x)
@@ -144,8 +192,32 @@ class LitModule(L.LightningModule):
 
         return inputs_flat.clone().detach()
 
+    # -- DataLoaders ----------------------------------------------------------
+
+    def train_dataloader(self) -> DataLoader:
+        """Dummy dataloader to drive training iteration."""
+        dataset = DummyDataset(self.steps_per_epoch * self.batch_size)
+        return DataLoader(dataset, batch_size=self.batch_size)
+
+    def val_dataloader(self) -> DataLoader:
+        """Dummy dataloader to drive validation iteration."""
+        dataset = DummyDataset(self.steps_per_epoch * self.batch_size)
+        return DataLoader(dataset, batch_size=self.batch_size)
+
+    def test_dataloader(self) -> DataLoader:
+        """Dummy dataloader to drive test iteration."""
+        dataset = DummyDataset(self.steps_per_epoch * self.batch_size)
+        return DataLoader(dataset, batch_size=self.batch_size)
+
+    def predict_dataloader(self) -> DataLoader:
+        """Dummy dataloader to drive predict iteration."""
+        dataset = DummyDataset(self.steps_per_epoch * self.batch_size)
+        return DataLoader(dataset, batch_size=self.batch_size)
+
+    # -- Steps ----------------------------------------------------------------
+
     def training_step(self, batch: torch.Tensor, batch_idx: int) -> torch.Tensor:  # noqa: ARG002
-        phases = batch
+        phases = self._generate_phase_batch(self.batch_size)
         inputs = self.compute_inputs_from_phases(phases)
         y_hat = self(inputs)
         loss_dict = self.loss_function(y_hat, phases, inputs)
@@ -161,7 +233,13 @@ class LitModule(L.LightningModule):
         return loss_dict['total']
 
     def validation_step(self, batch: torch.Tensor, batch_idx: int) -> None:  # noqa: ARG002
-        phases = batch
+        rng_state = torch.random.get_rng_state()
+        torch.manual_seed(VAL_SEED + batch_idx)
+
+        phases = self._generate_phase_batch(self.batch_size)
+
+        torch.random.set_rng_state(rng_state)
+
         inputs = self.compute_inputs_from_phases(phases)
         y_hat = self(inputs)
         loss_dict = self.loss_function(y_hat, phases, inputs)
@@ -181,7 +259,13 @@ class LitModule(L.LightningModule):
             )
 
     def test_step(self, batch: torch.Tensor, batch_idx: int) -> None:  # noqa: ARG002
-        phases = batch
+        rng_state = torch.random.get_rng_state()
+        torch.manual_seed(TEST_SEED + batch_idx)
+
+        phases = self._generate_phase_batch(self.batch_size)
+
+        torch.random.set_rng_state(rng_state)
+
         inputs = self.compute_inputs_from_phases(phases)
         y_hat = self(inputs)
         loss_dict = self.loss_function(y_hat, phases, inputs)
@@ -191,11 +275,17 @@ class LitModule(L.LightningModule):
 
     def predict_step(
         self,
-        batch: torch.Tensor,
+        batch: torch.Tensor,  # noqa: ARG002
         batch_idx: int,
         dataloader_idx: int = 0,  # noqa: ARG002
     ) -> torch.Tensor:
-        phases = batch
+        rng_state = torch.random.get_rng_state()
+        torch.manual_seed(TEST_SEED + batch_idx)
+
+        phases = self._generate_phase_batch(self.batch_size)
+
+        torch.random.set_rng_state(rng_state)
+
         inputs = self.compute_inputs_from_phases(phases)
         predictions = self.model(inputs)
 
