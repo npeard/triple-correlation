@@ -223,9 +223,12 @@ all = { depends-on = ["format", "lint", "ascii", "typecheck", "test"] }
 
 [tool.ty.environment]
 python-version = "3.12"
-# Resolve third-party imports against the dev pixi environment explicitly, so
-# `ty` gives the same answer whether it is invoked via `pixi run -e dev
-# typecheck` (env activated) or by the pre-commit hook.
+# Pin import resolution to the dev environment. `ty` otherwise infers a
+# search path from the interpreter it happens to find, so a machine with a
+# system Python on PATH can get different diagnostics than the pixi env
+# produces -- and the dev env is the only one that has `ty` installed at all.
+# Naming it here makes `typecheck` answer the same question everywhere,
+# including under a pre-commit hook that runs with no env activated.
 python = ".pixi/envs/dev"
 
 [tool.ty.src]
