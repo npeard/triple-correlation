@@ -163,10 +163,13 @@ convention = "google"
 
 [tool.codespell]
 # codespell walks the filesystem, not the git index, so gitignoring a
-# directory does not hide it -- scratch/ and docs/superpowers/ are both
-# ignored and both still have to be named here. They hold untracked drafts and
-# session-scoped specs, which are not prose this project ships.
-skip = ".git,*.ipynb,./.pixi,./scratch,./docs/superpowers"
+# directory does not hide it -- scratch/, docs/superpowers/ and report/build/
+# are all ignored and all still have to be named here. The first two hold
+# untracked drafts and session-scoped specs, which are not prose this project
+# ships. report/build/ holds the compiled PDF: codespell reads it as text and
+# reports "typos" in the binary font and stream data, which is noise with no
+# possible fix.
+skip = ".git,*.ipynb,./.pixi,./scratch,./docs/superpowers,./report/build"
 # "clos" is the deliberate abbreviation of "closure" (closure phase) used as a
 # local in fluo/fluo1d.py and fluo/fluo2d.py, not a truncated "close".
 # "ket" is Dirac notation -- the |x> half of bra-ket -- and names the Typst
