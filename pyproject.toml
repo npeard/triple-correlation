@@ -153,18 +153,38 @@ skip = ".git,*.ipynb"
 
 [tool.pixi.workspace]
 channels = ["conda-forge"]
-platforms = ["osx-64", "osx-arm64", "linux-64"]
+# win-64 is the machine this is developed on; without it every `pixi run` here
+# fails with `unsupported-platform`, which is why no .pixi/ ever existed. The
+# macOS entries are dropped deliberately rather than kept alongside: nobody
+# develops or runs this project on a Mac, and keeping them makes the solver
+# find a torch/numpy/numba set consistent across Intel and Apple-silicon
+# macOS as well, which is what historically forced backdated pins. Re-add
+# them only together with someone who actually tests there.
+platforms = ["win-64", "linux-64"]
 
 [tool.pixi.dependencies]
 python = ">=3.12,<3.13"
-numba = "*"
+# numba deliberately comes from PyPI (via [project.dependencies]), NOT conda.
+# Conda-forge's numeric packages link libomp while the PyPI torch wheels
+# bundle Intel's libiomp5md.dll; loading both OpenMP runtimes in one process
+# makes OpenMP abort with "OMP: Error #15". The documented
+# KMP_DUPLICATE_LIB_OK escape hatch is explicitly unsafe -- its own error text
+# warns it can silently produce incorrect results -- so instead keep a single
+# OpenMP runtime by sourcing the whole numeric stack (numpy, numba, torch)
+# from one place. Do not move numba back here.
+#
+# ruff and codespell live in the *default* env because [tool.pixi.tasks]
+# (below) runs in the default env and defines `format`, `lint` and `spell` in
+# terms of them. While they were dev-feature-only, those three tasks were
+# broken by construction. Sourcing them here means the tasks use the pinned,
+# lockfile-backed tools instead of whatever happens to be first on PATH.
+ruff = ">=0.15,<0.16"
+codespell = "*"
 
 [tool.pixi.pypi-dependencies]
 triple-correlation = { path = ".", editable = true }
 
 [tool.pixi.feature.dev.pypi-dependencies]
-ruff = "*"
-codespell = "*"
 pre-commit = "*"
 nbstripout = "*"
 ty = "*"
@@ -178,7 +198,10 @@ pytest-benchmark = "*"
 coverage = { version = "*", extras = ["toml"] }
 
 [tool.pixi.environments]
-default = { solve-group = "default" }
+# The default env includes the test feature because `test` is defined under
+# [tool.pixi.tasks], which runs in the default env -- so pytest has to be
+# resolvable there, not just in dev.
+default = { features = ["test"], solve-group = "default" }
 dev = { features = ["dev", "test"], solve-group = "default" }
 test = { features = ["test"], solve-group = "default" }
 
@@ -186,8 +209,12 @@ test = { features = ["test"], solve-group = "default" }
 format = "ruff format . && ruff check --fix ."
 lint = "ruff check ."
 ascii = "python scripts/check_ascii.py"
-test = "pytest"
-spell = "codespell ."
+# `python -m pytest` / `python -m codespell_lib` rather than a bare `pytest` /
+# `codespell`, so the tool runs through this environment's interpreter instead
+# of resolving against PATH -- PATH resolution is the exact failure mode being
+# fixed here.
+test = "python -m pytest"
+spell = "python -m codespell_lib ."
 precommit = "pre-commit run --all-files"
 
 [tool.pixi.feature.dev.tasks]
@@ -196,6 +223,10 @@ all = { depends-on = ["format", "lint", "ascii", "typecheck", "test"] }
 
 [tool.ty.environment]
 python-version = "3.12"
+# Resolve third-party imports against the dev pixi environment explicitly, so
+# `ty` gives the same answer whether it is invoked via `pixi run -e dev
+# typecheck` (env activated) or by the pre-commit hook.
+python = ".pixi/envs/dev"
 
 [tool.ty.src]
 exclude = [".pixi", "**/*.ipynb"]
