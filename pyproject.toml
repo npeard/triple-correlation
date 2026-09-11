@@ -156,7 +156,16 @@ allow-dict-calls-with-keyword-arguments = true
 convention = "google"
 
 [tool.codespell]
-skip = ".git,*.ipynb"
+# codespell walks the filesystem, not the git index, so gitignoring a
+# directory does not hide it -- scratch/ and docs/superpowers/ are both
+# ignored and both still have to be named here. They hold untracked drafts and
+# session-scoped specs, which are not prose this project ships.
+skip = ".git,*.ipynb,./.pixi,./scratch,./docs/superpowers"
+# "clos" is the deliberate abbreviation of "closure" (closure phase) used as a
+# local in fluo/fluo1d.py and fluo/fluo2d.py, not a truncated "close".
+# Silenced here rather than renaming physics-facing identifiers to satisfy a
+# spell checker.
+ignore-words-list = ["clos"]
 
 [tool.pixi.workspace]
 channels = ["conda-forge"]
