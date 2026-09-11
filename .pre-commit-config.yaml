@@ -11,13 +11,16 @@ repos:
     hooks:
         # report/biblio.bib is a verbatim copy of the published paper's
         # bibliography, kept byte-identical so re-exporting it from the
-        # reference manager stays a plain overwrite rather than a merge. Its
-        # entries have trailing spaces; stripping them is a diff against
+        # reference manager stays a plain overwrite rather than a merge. 16 of
+        # its entries carry trailing spaces; stripping them is a diff against
         # upstream for no benefit, since Typst does not care.
+        #
+        # Only this hook needs the exemption. The file already ends in exactly
+        # one newline, so end-of-file-fixer is a no-op on it and excluding it
+        # there would weaken the hook while protecting nothing.
     -   id: trailing-whitespace
         exclude: '^report/biblio\.bib$'
     -   id: end-of-file-fixer
-        exclude: '^report/biblio\.bib$'
     -   id: check-yaml
     -   id: check-added-large-files
         args: ['--maxkb=5000']

@@ -55,11 +55,13 @@ ASSETS = sorted(str(p.relative_to(REPORT_DIR)) for p in (REPORT_DIR / "assets").
 # document output and its input function raises KeyError on every run. Pinning
 # both wildcards to their registries keeps the DAG unambiguous.
 #
-# An empty registry needs care: "|".join([]) is the empty string, which as a
-# regex matches the empty string everywhere and so constrains nothing -- the
-# exact bug the constraint exists to prevent. `(?!)` is a regex that can never
-# match, which is the correct reading of "no name is a valid figure" while
-# FIGURES is empty.
+# An empty registry needs care: "|".join([]) is the empty string, and
+# Snakemake interpolates a constraint as (?P<name>...), so that yields
+# (?P<name>) -- a group matching zero characters. `{name}` would then be
+# satisfiable only by the empty string, which is not the same as "no figure
+# name is valid" and leaves the rule reachable with a degenerate match.
+# `(?!)` is a regex that can never match anything, which is the correct
+# reading of "no name is a valid figure" while FIGURES is empty.
 wildcard_constraints:
     document="|".join(DOCUMENTS),
     name="|".join(FIGURES) if FIGURES else "(?!)",
