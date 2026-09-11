@@ -149,12 +149,12 @@ allow-dict-calls-with-keyword-arguments = true
 # Reformatting them here would fork them from upstream and turn the next copy
 # into a merge, so the rules they trip are disabled rather than the files
 # edited. Keep them byte-identical to the originals.
-# Each list is scoped to the rules that file actually trips, verified with
-# `ruff check --isolated --select ...`. smi carries the union of both lists on
-# both files; copying that would leave e.g. T201 suppressed in
-# platform_paths.py, which prints nothing today -- so a stray print added
-# later would land silently in a file that is supposed to stay a faithful
-# copy.
+#
+# Each list is scoped to the rules its own file actually trips, verified with
+# `ruff check --isolated --select ...`. smi pastes the union of both lists onto
+# both files; copying that would leave T201 suppressed in platform_paths.py,
+# which prints nothing today -- so a stray print added to a file that is
+# supposed to stay byte-identical to upstream would never be flagged.
 "scripts/preflight.py" = ["ANN202", "B007", "PLC0415", "S603", "S607", "T201"]
 "scripts/platform_paths.py" = ["D301", "INP001", "PTH115", "S603", "S607"]
 
