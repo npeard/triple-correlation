@@ -191,7 +191,7 @@ class Fluorescence2D:
         if self.g2 is not None:
             return self.g2
 
-        # logger.info('Performing second-order intensity correlation using outer product...')
+        # logger.info('Performing second-order intensity correlation...')
         ave_intens = np.zeros(2 * (self.num_pix,))
         self.g2 = np.zeros(4 * (self.num_pix,))
 

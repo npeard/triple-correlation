@@ -25,7 +25,6 @@ dependencies = [
     "scikit-image",
     "mpl_point_clicker",
     "pyyaml",
-    "logging",
 ]
 
 [project.urls]
@@ -40,25 +39,46 @@ build-backend = "flit_core.buildapi"
 testpaths = ["tests"]
 python_files = "test_*.py"
 addopts = "--verbose"
+filterwarnings = [
+    # Ignore external package warnings
+    "ignore::UserWarning:torch.*",
+    "ignore::DeprecationWarning:torch.*",
+    "ignore::FutureWarning:torch.*",
+    "ignore::UserWarning:numpy.*",
+    "ignore::DeprecationWarning:numpy.*",
+    "ignore::UserWarning:scipy.*",
+    "ignore::DeprecationWarning:scipy.*",
+    "ignore::UserWarning:matplotlib.*",
+    "ignore::DeprecationWarning:matplotlib.*",
+    "ignore::UserWarning:lightning.*",
+    "ignore::DeprecationWarning:lightning.*",
+    "ignore::FutureWarning:lightning.*",
+    "ignore::UserWarning:numba.*",
+    "ignore::DeprecationWarning:numba.*",
+    # Keep warnings from your own package (as warnings, not errors)
+    "default::Warning:fluo.*",
+]
 
 [project.optional-dependencies]
+test = [
+    "pytest>=8.0",
+    "pytest-cov>=3.0",
+    "pytest-xdist>=2.5",
+    "pytest-benchmark",
+]
 dev = [
     "pytest>=8.0.0",
-    "black",
     "ruff",
     "codespell",
-    "taskipy",
     "pre-commit",
     "nbstripout",
+    "ty",             # Type checking
+    "bandit",         # Security linting
+    "coverage[toml]", # Coverage with pyproject.toml support
 ]
 
 [tool.flit.module]
 name = "fluo"
-
-[tool.black]
-line-length = 88
-target-version = ["py312"]
-include = '\.pyi?$'
 
 [tool.ruff.format]
 quote-style = "single"
@@ -69,19 +89,34 @@ skip-magic-trailing-comma = true
 select = [
     "F", "E", "W", "C90", "I", "D", "UP", "YTT", "ANN", "BLE", "B", "A", "C4", "FA",
     "INP", "NPY201", "PIE", "T20", "PYI", "PT", "RSE", "RET", "SLF", "SIM", "INT",
-    "ARG", "PTH", "PL", "TRY", "FLY", "NPY", "RUF",
+    "ARG", "PTH", "PL", "TRY", "FLY", "NPY", "RUF", "S", "N", "PERF", "FURB",
 ]
 extend-select = ["D204", "D400", "D404", "D406", "D410"]
 ignore = [
+    # Import-related (keep for __init__.py files)
     "F403", "F405",
-    "E203", "E731", "E741",
+    # Style preferences
+    "E741",  # Ambiguous variable names (sometimes necessary in scientific code)
+    # Documentation (reasonable for scientific/research code)
     "D100", "D101", "D102", "D103", "D104", "D105", "D106", "D107", "D205", "D405", "D417",
+    # Type annotations (reasonable choices)
     "ANN002", "ANN003", "ANN401",
+    # Argument usage (common in scientific APIs)
     "ARG001",
-    "RET505", "RUF022",
+    # Return style preference
+    "RET505",
+    # Exception handling (reasonable for research code)
     "TRY003",
+    # Complexity (reasonable limits for scientific code)
     "PLR0913", "PLR2004",
+    # Private access (sometimes needed for scientific libraries)
     "SLF001",
+    # Security (may need adjustment based on your needs)
+    "S101",  # Use of assert (common in scientific code)
+    "S311",  # Random generators (often fine for scientific use)
+    # Naming (scientific computing often uses uppercase for matrices/operators)
+    "N803", # Argument names should be lowercase (conflicts with math notation for matrices)
+    "N806", "N802", # Variable names should be lowercase (conflicts with math notation)
 ]
 
 [tool.ruff.lint.isort]
@@ -94,10 +129,21 @@ suppress-none-returning = true
 allow-dict-calls-with-keyword-arguments = true
 
 [tool.ruff.lint.per-file-ignores]
-"__init__.py" = ["F401"]
+"__init__.py" = ["F401", "N999"]
 "docs/**.py" = ["INP001", "ARG001", "ANN"]
 "conftest.py" = ["ANN"]
-"tests/**.py" = ["ANN"]
+"tests/**.py" = ["ANN", "N999"]
+"notebooks/**.py" = ["T201"]
+"main.py" = ["T201", "S603", "S607"]
+"*.ipynb" = ["ALL"]
+"plots/__init__.py" = ["N999"]
+"plots/PaperFigures.py" = ["N999", "N812", "E402", "NPY002", "E501", "B007", "PLW0127", "F841"]
+"plots/plot1d.py" = ["N812"]
+"plots/plot2d.py" = ["N812", "E402", "E501", "PLR0915"]
+"plots/test_differentiable_solver.py" = ["E402", "ANN201"]
+"scripts/check_ascii.py" = ["S603", "S607", "T201"]
+"tests/test_cosPhi_generation.py" = ["N999"]
+"biphase/solver/biphase2d.py" = ["E501"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
@@ -105,10 +151,75 @@ convention = "google"
 [tool.codespell]
 skip = ".git,*.ipynb"
 
-[tool.taskipy.tasks]
-test = "pytest"
-lint = "ruff check ."
+[tool.pixi.workspace]
+channels = ["conda-forge"]
+platforms = ["osx-64", "osx-arm64", "linux-64"]
+
+[tool.pixi.dependencies]
+python = ">=3.12,<3.13"
+numba = "*"
+
+[tool.pixi.pypi-dependencies]
+triple-correlation = { path = ".", editable = true }
+
+[tool.pixi.feature.dev.pypi-dependencies]
+ruff = "*"
+codespell = "*"
+pre-commit = "*"
+nbstripout = "*"
+ty = "*"
+bandit = "*"
+
+[tool.pixi.feature.test.pypi-dependencies]
+pytest = ">=8.0"
+pytest-cov = ">=3.0"
+pytest-xdist = ">=2.5"
+pytest-benchmark = "*"
+coverage = { version = "*", extras = ["toml"] }
+
+[tool.pixi.environments]
+default = { solve-group = "default" }
+dev = { features = ["dev", "test"], solve-group = "default" }
+test = { features = ["test"], solve-group = "default" }
+
+[tool.pixi.tasks]
 format = "ruff format . && ruff check --fix ."
+lint = "ruff check ."
+ascii = "python scripts/check_ascii.py"
+test = "pytest"
 spell = "codespell ."
 precommit = "pre-commit run --all-files"
-all = "task format && task lint && task test"
+
+[tool.pixi.feature.dev.tasks]
+typecheck = "ty check"
+all = { depends-on = ["format", "lint", "ascii", "typecheck", "test"] }
+
+[tool.ty.environment]
+python-version = "3.12"
+
+[tool.ty.src]
+exclude = [".pixi", "**/*.ipynb"]
+
+# Rules dominated by PyTorch / scientific-library typing gaps (incomplete third-
+# party stubs, autograd Function patterns). Downgraded so the high-signal rules
+# stay actionable; promote back to "error" individually as stubs improve.
+[tool.ty.rules]
+unresolved-attribute = "ignore"
+invalid-argument-type = "ignore"
+unsupported-operator = "ignore"
+not-iterable = "ignore"
+invalid-method-override = "ignore"
+not-subscriptable = "ignore"
+invalid-type-form = "ignore"
+possibly-missing-submodule = "ignore"
+
+[tool.coverage.run]
+source = ["fluo"]
+branch = true
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise NotImplementedError",
+]

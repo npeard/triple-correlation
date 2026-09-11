@@ -337,7 +337,7 @@ class Plot2D:
         P.tight_layout()
         P.show()
 
-    def plot_PhiSolver_manualSelect(  # noqa: PLR0915, PLR0912, C901
+    def plot_PhiSolver_manualSelect(  # noqa: PLR0912, C901
         self, num_shots: int = 1000, altLabel: bool = False
     ):
         """Plot the phase retrieved using sign information from all

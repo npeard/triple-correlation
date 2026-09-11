@@ -9,7 +9,9 @@ from scipy import optimize
 logger = logging.getLogger(__name__)
 
 
-def PhiSolver(cosPhi, initial_phase=None, error_reject=-10):  # noqa: PLR0915,PLR0912,C901
+def PhiSolver(  # noqa: PLR0915,PLR0912,C901
+    cosPhi: np.ndarray, initial_phase: list | None = None, error_reject: float = -10
+) -> tuple:
     """Solves the phase for a given cosPhi from data and guesstimate of the
     first phase value. Uses all rows of Phi to solve the sign problem and
     obtain the correct phase slope.
@@ -251,7 +253,9 @@ def PhiSolver(cosPhi, initial_phase=None, error_reject=-10):  # noqa: PLR0915,PL
     return solved, error
 
 
-def PhiSolver_manualSelect(cosPhi, initial_phase=None, Alt=None):  # noqa: PLR0915
+def PhiSolver_manualSelect(  # noqa: PLR0915
+    cosPhi: np.ndarray, initial_phase: list | None = None, Alt: np.ndarray | None = None
+) -> tuple:
     """Solves the phase for a given cosPhi from data and guesstimate of the
     first phase value. Uses all rows of Phi to solve the sign problem and
     obtain the correct phase slope. Here, the user selects where resolving is used.
@@ -401,7 +405,11 @@ def PhiSolver_manualSelect(cosPhi, initial_phase=None, Alt=None):  # noqa: PLR09
     return solved, error
 
 
-def find_next_phi(xdata=None, ydata=None, AltReturn=False):
+def find_next_phi(
+    xdata: np.ndarray | None = None,
+    ydata: np.ndarray | None = None,
+    AltReturn: bool = False,
+) -> tuple:
     """Finds the nearest intersection of sets of possible theta by finding
     the pairs of vertical and horizontal lines that best fit the data when
     plotted as ordered pairs in the xy-plane.
@@ -421,7 +429,7 @@ def find_next_phi(xdata=None, ydata=None, AltReturn=False):
     """
 
     # Samples the error function and starts minimization near the minimum
-    def logThetaError(theta):
+    def logThetaError(theta: np.ndarray) -> np.ndarray:
         return np.log(
             np.minimum(
                 (np.add.outer(xdata, -np.cos(theta))) ** 2,
@@ -429,7 +437,7 @@ def find_next_phi(xdata=None, ydata=None, AltReturn=False):
             ).sum(0)
         )
 
-    def opt_func(theta):
+    def opt_func(theta: np.ndarray) -> float:
         if np.abs(theta) > np.pi:
             return 1e10
         else:

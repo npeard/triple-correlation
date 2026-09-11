@@ -8,7 +8,7 @@ from scipy import optimize
 logger = logging.getLogger(__name__)
 
 
-def simple_PhiSolver(cosPhi, initial_phase=0):
+def simple_PhiSolver(cosPhi: np.ndarray, initial_phase: float = 0) -> np.ndarray:
     """Solves the phase for a given cosPhi from data and guesstimate of the
     first phase value, but does not use all rows of Phi to solve the sign
     problem.
@@ -37,15 +37,15 @@ def simple_PhiSolver(cosPhi, initial_phase=0):
     solved[1] = initial_phase
     # logger.debug('Phi[:, 2] = %s', Phi[:, 2])
     for p in range(2, num_pix // 2):
-        sum = 0
+        running_sum = 0
         for k in range(1, p):
-            sum += Phi[k, 1]
-        solved[p] = sum + p * solved[1]
+            running_sum += Phi[k, 1]
+        solved[p] = running_sum + p * solved[1]
 
     return solved
 
 
-def PhiSolver(cosPhi, initial_phase=0):  # noqa: PLR0915
+def PhiSolver(cosPhi: np.ndarray, initial_phase: float = 0) -> tuple:  # noqa: PLR0915
     """Solves the phase for a given cosPhi from data and guesstimate of the
     first phase value. Uses all rows of Phi to solve the sign problem and
     obtain the correct phase slope.
@@ -148,7 +148,11 @@ def PhiSolver(cosPhi, initial_phase=0):  # noqa: PLR0915
     return solved, error
 
 
-def find_next_phi(xdata=None, ydata=None, AltReturn=False):
+def find_next_phi(
+    xdata: np.ndarray | None = None,
+    ydata: np.ndarray | None = None,
+    AltReturn: bool = False,
+) -> tuple:
     """Finds the nearest intersection of sets of possible theta by finding
     the pairs of vertical and horizontal lines that best fit the data when
     plotted as ordered pairs in the xy-plane.
@@ -168,7 +172,7 @@ def find_next_phi(xdata=None, ydata=None, AltReturn=False):
     """
 
     # Samples the error function and starts minimization near the minimum
-    def logThetaError(theta):
+    def logThetaError(theta: np.ndarray) -> np.ndarray:
         return np.log(
             np.minimum(
                 (np.add.outer(xdata, -np.cos(theta))) ** 2,
@@ -176,7 +180,7 @@ def find_next_phi(xdata=None, ydata=None, AltReturn=False):
             ).sum(0)
         )
 
-    def opt_func(theta):
+    def opt_func(theta: np.ndarray) -> float:
         if np.abs(theta) > np.pi:
             return 1e10
         else:

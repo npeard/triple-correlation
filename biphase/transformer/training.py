@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import ast
 import contextlib
 import logging
 import random
@@ -8,7 +9,7 @@ from itertools import product
 from pathlib import Path
 from typing import Any, Union
 
-import lightning as L
+import lightning as L  # noqa: N812
 import torch
 import yaml
 from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint
@@ -198,7 +199,7 @@ class ModelTrainer:
         optimizer_hparams = {
             'name': self.config.training_config['optimizer'],
             # TODO: why is this loaded as a string?
-            'lr': eval(self.config.training_config['learning_rate']),
+            'lr': ast.literal_eval(self.config.training_config['learning_rate']),
             'momentum': self.config.training_config.get(
                 'momentum', 0.9
             ),  # Keep get() for optional param
@@ -208,7 +209,7 @@ class ModelTrainer:
         max_epochs = self.config.training_config['max_epochs']
         warmup_epochs = int(0.1 * max_epochs)
         cosine_epochs = max_epochs - warmup_epochs
-        target_lr = eval(self.config.training_config['learning_rate'])
+        target_lr = ast.literal_eval(self.config.training_config['learning_rate'])
 
         scheduler_hparams = {
             'warmup_epochs': warmup_epochs,

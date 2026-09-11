@@ -31,7 +31,7 @@ class TrainablePhase(nn.Module):
             self.is_1d = False
             self.num_pix = shape
         else:
-            raise ValueError('Shape must be int (1D) or tuple (2D)')
+            raise TypeError('Shape must be int (1D) or tuple (2D)')
 
     def forward(self) -> torch.Tensor:
         """Return the current phase parameters."""
@@ -92,7 +92,9 @@ class DifferentiableSolver:
             self.num_pix = int((cosPhi.shape[0] + 1) / 2)
             self.phase_shape = (self.num_pix, self.num_pix)
             self.logger.debug(
-                f'Initialized 2D differentiable solver with {self.num_pix}x{self.num_pix} pixels'
+                'Initialized 2D differentiable solver with %dx%d pixels',
+                self.num_pix,
+                self.num_pix,
             )
         else:
             raise ValueError(
@@ -163,14 +165,11 @@ class DifferentiableSolver:
         if self.is_1d:
             # For 1D, need to trim to remove zero row/column with no information
             Phi_dim = self.num_pix
-            out_dim = Phi_dim - 1
             target_trimmed = target_Phi[1:Phi_dim, 1:Phi_dim]
         else:
             # For 2D, need to trim to remove zero rows/columns
             half_nx = self.num_pix
             half_ny = self.num_pix
-            out_nx = half_nx - 1
-            out_ny = half_ny - 1
             target_trimmed = target_Phi[1:half_nx, 1:half_ny, 1:half_nx, 1:half_ny]
 
         return target_trimmed.flatten()
@@ -255,12 +254,20 @@ class DifferentiableSolver:
             if epoch % (self.epochs // 10) == 0 or epoch == self.epochs - 1:
                 current_lr = scheduler.get_last_lr()[0]
                 self.logger.info(
-                    f'Epoch {epoch:4d}/{self.epochs}: Loss = {loss_val:.6f}, LR = {current_lr:.6f}'
+                    'Epoch %4d/%d: Loss = %.6f, LR = %.6f',
+                    epoch,
+                    self.epochs,
+                    loss_val,
+                    current_lr,
                 )
             elif epoch < 10:
                 current_lr = scheduler.get_last_lr()[0]
                 self.logger.debug(
-                    f'Epoch {epoch:4d}/{self.epochs}: Loss = {loss_val:.6f}, LR = {current_lr:.6f}'
+                    'Epoch %4d/%d: Loss = %.6f, LR = %.6f',
+                    epoch,
+                    self.epochs,
+                    loss_val,
+                    current_lr,
                 )
 
         final_phase = self.trainable_phase().detach()

@@ -2,6 +2,7 @@
 
 """Model factory for creating nn.Module instances."""
 
+import ast
 import inspect
 
 from torch import nn
@@ -17,7 +18,7 @@ def _create_gpt_config(model_hparams: dict) -> GPTConfig:
     """
     num_pix = model_hparams['num_pix']
     if isinstance(num_pix, str):
-        num_pix = eval(num_pix)
+        num_pix = ast.literal_eval(num_pix)
 
     if isinstance(num_pix, tuple):
         num_pix = num_pix[0]

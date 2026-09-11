@@ -2,10 +2,11 @@
 
 """Unified Lightning module for phase retrieval training."""
 
+import ast
 import math
 from typing import Any
 
-import lightning as L
+import lightning as L  # noqa: N812
 import numpy as np
 import torch
 from torch import nn, optim
@@ -63,7 +64,7 @@ class LitModule(L.LightningModule):
         torch.set_float32_matmul_precision('high')
 
         # Parse num_pix for encoding dimensions
-        self.num_pix = eval(model_hparams['num_pix'])
+        self.num_pix = ast.literal_eval(model_hparams['num_pix'])
 
         # Data generation parameters
         self.batch_size = self.training_hparams.get('batch_size', 256)
@@ -80,7 +81,7 @@ class LitModule(L.LightningModule):
             batch_size: Number of phase arrays to generate
 
         Returns:
-            torch.Tensor: Random phases in [-π, π] with phase origin set to 0
+            torch.Tensor: Random phases in [-pi, pi] with phase origin set to 0
         """
         if isinstance(self.num_pix, tuple):
             phase_len = self.num_pix[0] * self.num_pix[1]

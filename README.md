@@ -13,13 +13,13 @@ Traditional coherent diffractive imaging faces a fundamental challenge: phase in
 
 **This work finally cracks the code.**
 
-### 🌟 **Applications Across Fields**
+### **Applications Across Fields**
 - **Astronomy**: Imaging star clusters with radio telescope arrays
 - **X-ray Science**: Fluorescence imaging without lenses
 - **Microscopy**: High-resolution imaging of fluorescent molecules and atoms
 - **Quantum Optics**: Many-body correlations in ultracold atomic gases
 
-### 🚀 **Technical Breakthroughs**
+### **Technical Breakthroughs**
 - Novel numerical algorithm using redundant closure phase information
 - Sophisticated error minimization approach for noisy data
 - Enhanced spatial resolution beyond detector physical limits
@@ -28,9 +28,9 @@ Traditional coherent diffractive imaging faces a fundamental challenge: phase in
 ## Key Results
 
 Our simulations demonstrate:
-- ✅ Accurate phase retrieval for clusters of several atoms with only 10⁴ shots
-- ✅ Complete image reconstruction without coherent diffraction data
-- ✅ Phase information retrieval beyond physical detector boundaries
+- Accurate phase retrieval for clusters of several atoms with only 10^4 shots
+- Complete image reconstruction without coherent diffraction data
+- Phase information retrieval beyond physical detector boundaries
 
 ## The Science Behind It
 
@@ -38,7 +38,7 @@ The method leverages **third-order intensity correlations** (bispectrum) to extr
 
 $$\Phi(\vec{m},\vec{n}) = \pm[\phi(\vec{m}+\vec{n}) - \phi(\vec{m}) - \phi(\vec{n})]$$
 
-The breakthrough lies in using redundant information to constrain the sign ambiguity (±), enabling complete phase recovery through:
+The breakthrough lies in using redundant information to constrain the sign ambiguity (+/-), enabling complete phase recovery through:
 
 1. **Intersection Algorithm**: Finding common values among multiple sign-ambiguous solutions
 2. **Iterative Refinement**: Correcting early pixel errors to maintain global consistency
