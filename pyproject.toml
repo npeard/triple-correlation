@@ -149,8 +149,14 @@ allow-dict-calls-with-keyword-arguments = true
 # Reformatting them here would fork them from upstream and turn the next copy
 # into a merge, so the rules they trip are disabled rather than the files
 # edited. Keep them byte-identical to the originals.
-"scripts/preflight.py" = ["ANN202", "B007", "D301", "PLC0415", "PTH115", "S603", "S607", "T201"]
-"scripts/platform_paths.py" = ["ANN202", "D301", "INP001", "PLC0415", "PTH115", "S603", "S607", "T201"]
+# Each list is scoped to the rules that file actually trips, verified with
+# `ruff check --isolated --select ...`. smi carries the union of both lists on
+# both files; copying that would leave e.g. T201 suppressed in
+# platform_paths.py, which prints nothing today -- so a stray print added
+# later would land silently in a file that is supposed to stay a faithful
+# copy.
+"scripts/preflight.py" = ["ANN202", "B007", "PLC0415", "S603", "S607", "T201"]
+"scripts/platform_paths.py" = ["D301", "INP001", "PTH115", "S603", "S607"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
@@ -220,6 +226,7 @@ coverage = { version = "*", extras = ["toml"] }
 default = { features = ["test"], solve-group = "default" }
 dev = { features = ["dev", "test"], solve-group = "default" }
 test = { features = ["test"], solve-group = "default" }
+report = { features = ["report"], solve-group = "default" }
 
 [tool.pixi.tasks]
 format = "ruff format . && ruff check --fix ."
@@ -241,6 +248,35 @@ typecheck = "ty check"
 # `--with-tests` to actually run the suite rather than just report the command.
 preflight = "python scripts/preflight.py"
 all = { depends-on = ["format", "lint", "ascii", "typecheck", "test"] }
+
+# Typst report build (report/). The whole document toolchain is
+# lockfile-reproducible, unlike a TeX engine, which is the reason the paper
+# lives here as Typst rather than as the original LaTeX.
+[tool.pixi.feature.report.dependencies]
+# typst only: it is a self-contained Rust binary with no OpenMP/BLAS linkage,
+# so it cannot collide with the PyPI numeric stack that the OpenMP note in
+# [tool.pixi.dependencies] above is about.
+typst = "*"
+
+# Snakemake has no conda-forge win-64 build at all (it is packaged only for
+# linux-64/osx), so it comes from PyPI, where the wheels are pure Python and
+# run fine here. Only *local* (--cores) execution is exercised; the cluster
+# and --use-conda executors are the parts with real Windows gaps. matplotlib
+# is here for the figure scripts this DAG is being prepared for -- the paper's
+# figures are committed PNGs today.
+[tool.pixi.feature.report.pypi-dependencies]
+snakemake = ">=8"
+matplotlib = "*"
+
+# Report build tasks. These live under the `report` feature, not
+# [tool.pixi.tasks], because the latter runs in the default env, which has
+# neither typst nor snakemake. `cwd` points them at report/ so the Snakefile's
+# relative paths resolve the same whether you invoke a task from the repo root
+# or run snakemake by hand from inside report/.
+[tool.pixi.feature.report.tasks]
+report = { cmd = "snakemake --cores all", cwd = "report" }
+report-dry = { cmd = "snakemake --cores all -n", cwd = "report" }
+report-clean = { cmd = "snakemake --cores 1 clean", cwd = "report" }
 
 [tool.ty.environment]
 python-version = "3.12"
