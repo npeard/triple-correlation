@@ -55,6 +55,10 @@ always invoke Python and tools through `pixi run` (or from inside `pixi shell`)
 - `pixi run spell` - Run codespell for spell checking
 - `pixi run precommit` - Run all pre-commit hooks
 - `pixi run -e test pytest` - Run pytest in the minimal `test` environment (CI-equivalent)
+- `pixi run -e dev preflight` - Step 0: is this repo fit to work in right now?
+  (pre-commit installed and current, clean tree, expected branch, tests
+  detected). Add `--with-tests` to actually run the suite:
+  `pixi run -e dev python scripts/preflight.py --with-tests`
 
 For installation and setup:
 
@@ -66,6 +70,48 @@ pixi run pre-commit install   # One-time: set up git hooks
 Tasks are defined in `[tool.pixi.tasks]` in `pyproject.toml`; dependencies live
 in `[tool.pixi.*]` feature/environment tables. The lockfile `pixi.lock` is
 committed for reproducibility.
+
+Environments: `default` (library + test feature), `dev` (dev + test; tooling),
+`test` (CI-equivalent).
+
+### Environment constraints (easy to break, so stated here)
+
+**Platforms are `win-64` and `linux-64`.** The macOS entries were dropped
+deliberately: nobody develops or runs this on a Mac, and carrying them makes
+the solver find a torch/numpy/numba set consistent across Intel and
+Apple-silicon macOS too, which is what historically forced backdated pins.
+Re-add them only alongside someone who actually tests there.
+
+**`ruff` and `codespell` come from conda in the *default* env**, not from the
+`dev` feature. `format`, `lint` and `spell` are defined in
+`[tool.pixi.tasks]`, which runs in the default env, so a dev-only ruff makes
+those three tasks broken by construction. Same reason the default env pulls in
+the `test` feature: `test` is defined there too.
+
+**Tasks invoke tools as `python -m <tool>`, not as a bare executable.** A bare
+`pytest` or `codespell` resolves against PATH rather than the environment,
+which is the failure mode the pixi setup exists to prevent.
+
+**One OpenMP runtime, so the whole numeric stack comes from PyPI.** `numpy`,
+`numba` and `torch` all resolve from `[project.dependencies]`, *not* conda.
+Conda-forge's numeric packages link `libomp` while the PyPI torch wheel
+bundles Intel's `libiomp5md.dll`; loading both aborts the process with
+"OMP: Error #15". Do not move `numba` back to `[tool.pixi.dependencies]`, and
+do not reach for `KMP_DUPLICATE_LIB_OK` -- that flag's own error text warns it
+can silently produce incorrect results. numba 0.67.0, numpy 2.5.3 and torch
+2.14.0 were confirmed to import together in one process with no abort.
+
+**Torch currently resolves to a CPU-only wheel** (`2.14.0+cpu` on win-64),
+because that is PyPI's default win-64 build. Training GPT models in
+`biphase/transformer/` on it is unusably slow. Fixing it means pinning a CUDA
+index in `[tool.pixi.pypi-dependencies]`; that is a recorded task, not done
+yet.
+
+**Pre-commit hooks all route through `pixi run -e dev`.** They must not name
+`.pixi/envs/dev/bin/...` -- that path only exists on Unix, so on win-64 every
+hook silently failed. `ruff` runs as a local pixi hook rather than via
+`ruff-pre-commit` so the hook and `pixi run lint` cannot disagree about what
+passes.
 
 **Important**: Always run `pixi run format` first when encountering linting/formatting issues before making manual edits. This auto-fixes most formatting problems and saves time.
 
