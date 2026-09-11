@@ -9,8 +9,15 @@ repos:
 -   repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
+        # report/biblio.bib is a verbatim copy of the published paper's
+        # bibliography, kept byte-identical so re-exporting it from the
+        # reference manager stays a plain overwrite rather than a merge. Its
+        # entries have trailing spaces; stripping them is a diff against
+        # upstream for no benefit, since Typst does not care.
     -   id: trailing-whitespace
+        exclude: '^report/biblio\.bib$'
     -   id: end-of-file-fixer
+        exclude: '^report/biblio\.bib$'
     -   id: check-yaml
     -   id: check-added-large-files
         args: ['--maxkb=5000']

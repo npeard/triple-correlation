@@ -169,9 +169,11 @@ convention = "google"
 skip = ".git,*.ipynb,./.pixi,./scratch,./docs/superpowers"
 # "clos" is the deliberate abbreviation of "closure" (closure phase) used as a
 # local in fluo/fluo1d.py and fluo/fluo2d.py, not a truncated "close".
-# Silenced here rather than renaming physics-facing identifiers to satisfy a
-# spell checker.
-ignore-words-list = ["clos"]
+# "ket" is Dirac notation -- the |x> half of bra-ket -- and names the Typst
+# math helper in report/lib/theme.typ that renders it.
+# Both silenced here rather than renaming physics-facing identifiers to
+# satisfy a spell checker.
+ignore-words-list = ["clos", "ket"]
 
 [tool.pixi.workspace]
 channels = ["conda-forge"]
