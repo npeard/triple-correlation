@@ -144,6 +144,13 @@ allow-dict-calls-with-keyword-arguments = true
 "scripts/check_ascii.py" = ["S603", "S607", "T201"]
 "tests/test_cosPhi_generation.py" = ["N999"]
 "biphase/solver/biphase2d.py" = ["E501"]
+# These two are copied verbatim from ~/Documents/Projects/claude-config, where
+# they are maintained and linted against that project's own rules.
+# Reformatting them here would fork them from upstream and turn the next copy
+# into a merge, so the rules they trip are disabled rather than the files
+# edited. Keep them byte-identical to the originals.
+"scripts/preflight.py" = ["ANN202", "B007", "D301", "PLC0415", "PTH115", "S603", "S607", "T201"]
+"scripts/platform_paths.py" = ["ANN202", "D301", "INP001", "PLC0415", "PTH115", "S603", "S607", "T201"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
@@ -219,6 +226,11 @@ precommit = "pre-commit run --all-files"
 
 [tool.pixi.feature.dev.tasks]
 typecheck = "ty check"
+# Step 0 of the workflow spine collapsed into one command: pre-commit wired up
+# and current, tests green, clean tree, expected branch. In the dev feature
+# because the hooks it inspects are installed from that environment. Pass
+# `--with-tests` to actually run the suite rather than just report the command.
+preflight = "python scripts/preflight.py"
 all = { depends-on = ["format", "lint", "ascii", "typecheck", "test"] }
 
 [tool.ty.environment]
