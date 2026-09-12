@@ -117,6 +117,17 @@ co-installability below was verified against. Changing this index means
 re-running the OpenMP check in `[tool.pixi.dependencies]`, since each CUDA
 wheel bundles its own OpenMP runtime.
 
+**A few files still carry CRLF in the git index**, left from before
+`.gitattributes` existed. The first edit to such a file renormalizes the whole
+file, so a one-line change shows up as a whole-file diff -- alarming, but
+cosmetic. Seven files were affected; four were normalized on their own in
+commit `5b36fe5`, and two more (`biphase/solver/biphase1d.py`,
+`biphase/solver/iterative.py`) normalized as a side effect of later edits.
+**`fluo/fluo1d.py` is the one that remains.** Check the current state with
+`git ls-files --eol | grep -v 'i/lf'` (binaries and empty files show `-text` /
+`none` and are fine). When a whole-file diff appears, do not fight it:
+normalize in its own commit so the real change stays reviewable.
+
 **Pre-commit hooks all route through `pixi run -e dev`.** They must not name
 `.pixi/envs/dev/bin/...` -- that path only exists on Unix, so on win-64 every
 hook silently failed. `ruff` runs as a local pixi hook rather than via
@@ -178,7 +189,7 @@ from), and call `#fig("<name>")` in the document.
 Adding a *static* figure is two edits: the PNG in `assets/` and an
 `#asset("<name>")` call; the same test checks both directions there too.
 
-Five things that are not obvious and each cost real time:
+Seven things that are not obvious and each cost real time:
 
 - **`\vec{q}` is `arrow()`, never Typst's `vec()`.** `vec()` builds a column
   vector and would silently render a matrix where an accent was meant. Use the
@@ -196,6 +207,15 @@ Five things that are not obvious and each cost real time:
 - **Figures must be deterministic** once they are generated rather than
   committed. Seed any RNG: the DAG's caching is only trustworthy if rebuilding
   unchanged inputs is a no-op.
+- **Snakemake 9 tracks input *content*, not mtime.** `touch`ing a file will
+  not force a rebuild, so a run that "should" have rebuilt and reported
+  nothing to do is correct behaviour, not a broken DAG. Use
+  `--forcerun <rule>` (or `--forceall`) when you actually need a rebuild.
+- **Assets copied in from elsewhere can carry future mtimes**, which
+  snakemake correctly refuses to build against as clock skew. The
+  `report/assets/` PNGs arrived from `scratch/` stamped ~5 hours ahead and had
+  to be normalized. If a copy-in produces an unexplained snakemake error,
+  check the mtimes before the rules.
 
 Build invariants: `pixi run report` from a clean `build/` produces
 `report/build/paper.pdf`, and an immediate second run reports nothing to do.
