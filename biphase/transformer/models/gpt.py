@@ -156,8 +156,8 @@ class TemporalBlock(nn.Module):
         stride: int,
         dilation: int,
         padding: int,
+        activation_fn: nn.Module,
         dropout: float = 0.2,
-        activation_fn: nn.Module = None,
     ):
         super().__init__()
 

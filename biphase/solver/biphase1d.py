@@ -149,9 +149,7 @@ def PhiSolver(cosPhi: np.ndarray, initial_phase: float = 0) -> tuple:  # noqa: P
 
 
 def find_next_phi(
-    xdata: np.ndarray | None = None,
-    ydata: np.ndarray | None = None,
-    AltReturn: bool = False,
+    xdata: np.ndarray, ydata: np.ndarray, AltReturn: bool = False
 ) -> tuple:
     """Finds the nearest intersection of sets of possible theta by finding
     the pairs of vertical and horizontal lines that best fit the data when

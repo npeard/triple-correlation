@@ -93,7 +93,7 @@ class IterativeSolver:
             return self._solve_2d([initial_phase, initial_phase], error_reject)
 
     def manual_solve(
-        self, initial_phase: list, alt_pixels: np.ndarray = None
+        self, initial_phase: list, alt_pixels: np.ndarray | None = None
     ) -> tuple[np.ndarray, np.ndarray]:
         """Manual phase solver allowing user-specified pixels to use alternate
         solutions.
