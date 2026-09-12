@@ -369,7 +369,11 @@ def Figure_1() -> None:  # noqa: PLR0915
     # Hide axes ticks
     ax1.set_xticks([])
     ax1.set_yticks([])
-    ax1.set_zticks([])
+    # Axes3D.set_zticks is synthesized at class-definition time by
+    # _axis_method_wrapper('zaxis', 'set_ticks'), a descriptor matplotlib
+    # ships with no declared __call__, so a typechecker sees a non-callable.
+    # Going through the axis directly is what set_zticks forwards to anyway.
+    ax1.zaxis.set_ticks([])
 
     P.tight_layout()
     P.show()

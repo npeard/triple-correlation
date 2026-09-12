@@ -141,21 +141,28 @@ class LitModule(L.LightningModule):
         x: torch.Tensor | None = None,
         *_args,
         **_kwargs,
-    ) -> torch.Tensor:
+    ) -> dict[str, torch.Tensor]:
         """Custom loss function for training.
 
         Args:
             y_hat: Model predictions
             targets: Ground truth targets
             x: Additional input tensor for encoding loss
+
+        Returns:
+            The individual loss components keyed by name, plus their weighted
+            sum under 'total'. 'encoding' is a zero tensor when the encoding
+            term is disabled or no input tensor was supplied.
         """
         abs_loss = nn.MSELoss()(torch.abs(y_hat), torch.abs(targets))
         sign_loss = nn.MSELoss()(y_hat, targets)
 
-        enc_loss = 0
+        # A zero tensor rather than the int 0, so every value in the returned
+        # dict is a Tensor and self.log gets a consistent type.
+        enc_loss = torch.zeros((), dtype=y_hat.dtype, device=y_hat.device)
         encoding_weight = self.loss_hparams['encoding_weight']
         if encoding_weight > 0 and x is not None:
-            enc_loss += encoding_loss(y_hat, x, self.num_pix)
+            enc_loss = enc_loss + encoding_loss(y_hat, x, self.num_pix)
 
         return {
             'abs': abs_loss,
@@ -279,7 +286,13 @@ class LitModule(L.LightningModule):
         batch: torch.Tensor,  # noqa: ARG002
         batch_idx: int,
         dataloader_idx: int = 0,  # noqa: ARG002
-    ) -> torch.Tensor:
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Predict on a deterministically regenerated batch.
+
+        Returns:
+            (predictions, targets, encoded, inputs), in the order that
+            `plot_predictions_from_checkpoint` indexes them.
+        """
         rng_state = torch.random.get_rng_state()
         torch.manual_seed(TEST_SEED + batch_idx)
 
