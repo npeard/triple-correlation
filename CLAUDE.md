@@ -117,16 +117,18 @@ co-installability below was verified against. Changing this index means
 re-running the OpenMP check in `[tool.pixi.dependencies]`, since each CUDA
 wheel bundles its own OpenMP runtime.
 
-**A few files still carry CRLF in the git index**, left from before
-`.gitattributes` existed. The first edit to such a file renormalizes the whole
-file, so a one-line change shows up as a whole-file diff -- alarming, but
-cosmetic. Seven files were affected; four were normalized on their own in
-commit `5b36fe5`, and two more (`biphase/solver/biphase1d.py`,
-`biphase/solver/iterative.py`) normalized as a side effect of later edits.
-**`fluo/fluo1d.py` is the one that remains.** Check the current state with
-`git ls-files --eol | grep -v 'i/lf'` (binaries and empty files show `-text` /
-`none` and are fine). When a whole-file diff appears, do not fight it:
-normalize in its own commit so the real change stays reviewable.
+**Line endings are fully normalized to LF, and should stay that way.** Seven
+files once carried CRLF in the index, left from before `.gitattributes` set
+`* text=auto`. That mattered because the first edit to such a file
+renormalizes all of it, so a one-line change arrives as a whole-file diff --
+cosmetic, but it buries the real change. Four were normalized in `5b36fe5`,
+two normalized as a side effect of being edited, and `fluo/fluo1d.py` in
+`4206078`; `git ls-files --eol | grep 'i/crlf'` is now empty.
+
+If a whole-file diff ever appears again, this is why. Do not fight it --
+normalize that file in its own commit with `git add --renormalize`, so the
+substantive change stays reviewable. Binaries and empty files show `-text` or
+`none` and are fine.
 
 **Pre-commit hooks all route through `pixi run -e dev`.** They must not name
 `.pixi/envs/dev/bin/...` -- that path only exists on Unix, so on win-64 every
