@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import Any, Union
 
 import lightning as L  # noqa: N812
+import matplotlib.pyplot as plt
+import numpy as np
 import torch
 import yaml
 from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint
@@ -287,9 +289,6 @@ class ModelTrainer:
         - 1D case: Shows 3 subplots (Inputs, Predictions/Targets, Encoded)
         - 2D case: Shows 4 subplots (Inputs, Predictions, Targets, Encoded)
         """
-        import matplotlib.pyplot as plt
-        import numpy as np
-
         # Load model from checkpoint
         model = LitModule.load_from_checkpoint(checkpoint_path)
         trainer = L.Trainer(accelerator='gpu', devices=1, logger=[])

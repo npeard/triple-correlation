@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import logging
+import sys
 from itertools import permutations
 
 import numpy as np
@@ -181,8 +182,6 @@ def PhiSolver(  # noqa: PLR0915,PLR0912,C901
                     )
                     # Then, go back to the default case (no alternates) and proceed anyways.
                     # For now, just exit.
-                    import sys
-
                     sys.exit(1)
 
                 logger.debug('Permutations: %s', perms)

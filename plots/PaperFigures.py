@@ -22,11 +22,13 @@ import pylab as P
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from PIL import Image
 from skimage.restoration import unwrap_phase
+from skimage.transform import resize
 
 logger = logging.getLogger(__name__)
 
 from biphase.solver.iterative import IterativeSolver
 from fluo import Fluorescence1D, Fluorescence2D
+from plots.plot2d import Plot2D
 
 
 def _require_harminv() -> Any:
@@ -1018,8 +1020,6 @@ def Figure_4_Rows():
     using manual (user-input) resolving to minimize the total error.
     """
     np.random.seed(0x5EED)
-    from plots.plot2d import Plot2D
-
     plot = Plot2D(num_pix=11, num_atoms=7, kmax=2)
 
     # First, user should do manual resolving to generate subfigures A-D
@@ -1666,7 +1666,7 @@ def Figure_S5():  # noqa: PLR0915
     P.show()
 
 
-def Figure_S4():  # noqa: PLR0915
+def Figure_S4():
     np.random.seed(0x5EED + 2)
     fluo = Fluorescence2D(kmax=3, num_pix=101, num_atoms=5)
 
@@ -1697,8 +1697,6 @@ def Figure_S4():  # noqa: PLR0915
         va='top',
         c='white',
     )
-
-    from skimage.transform import resize
 
     spline_order = 5
     ax2 = fig.add_subplot(222)
