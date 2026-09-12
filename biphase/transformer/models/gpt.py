@@ -393,7 +393,7 @@ class GPT(nn.Module):
         device = x.device
         x = x.squeeze(1)
         x = x.unsqueeze(-1)
-        batch_size, seq_len, n_features = x.size()  # batch, sequence length, features
+        _batch_size, seq_len, _n_features = x.size()  # batch, sequence length, features
         assert seq_len <= self.config.in_seq_len, (
             f'Cannot forward sequence of length {seq_len}, '
             f'block size is only {self.config.in_seq_len}'

@@ -268,7 +268,7 @@ class Plot1D:
             self.num_pix - 1 : 3 * self.num_pix // 2
         ][1]
         solver = IterativeSolver(cosPhi, log_level='DEBUG')
-        solved, error = solver.solve(initial_phase=initial_phase)
+        solved, _error = solver.solve(initial_phase=initial_phase)
         # from biphase.solver.biphase1d import PhiSolver
         # solved = PhiSolver(cosPhi)
         real_phase = self.fluo.coh_phase_double[self.fluo.num_pix - 1 :]
