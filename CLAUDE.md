@@ -106,11 +106,16 @@ do not reach for `KMP_DUPLICATE_LIB_OK` -- that flag's own error text warns it
 can silently produce incorrect results. numba 0.67.0, numpy 2.5.3 and torch
 2.14.0 were confirmed to import together in one process with no abort.
 
-**Torch currently resolves to a CPU-only wheel** (`2.14.0+cpu` on win-64),
-because that is PyPI's default win-64 build. Training GPT models in
-`biphase/transformer/` on it is unusably slow. Fixing it means pinning a CUDA
-index in `[tool.pixi.pypi-dependencies]`; that is a recorded task, not done
-yet.
+**Torch is pinned to the cu126 wheel index**, not left to PyPI's default
+win-64 build -- that default is CPU-only, which made training GPT models in
+`biphase/transformer/` unusably slow. The pin lives in
+`[tool.pixi.pypi-dependencies]` and resolves to `2.14.0+cu126`, with
+`torch.cuda.is_available()` true on both GPUs in this box. cu126 rather than
+the cu124 that `smi` pins: the cu124 index stopped at torch 2.6.0, and cu126
+is the oldest index still carrying 2.14.0, the version the numba/numpy
+co-installability below was verified against. Changing this index means
+re-running the OpenMP check in `[tool.pixi.dependencies]`, since each CUDA
+wheel bundles its own OpenMP runtime.
 
 **Pre-commit hooks all route through `pixi run -e dev`.** They must not name
 `.pixi/envs/dev/bin/...` -- that path only exists on Unix, so on win-64 every

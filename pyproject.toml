@@ -211,6 +211,20 @@ codespell = "*"
 [tool.pixi.pypi-dependencies]
 triple-correlation = { path = ".", editable = true }
 
+# Torch arrives via the editable `triple-correlation` install, and PyPI's
+# default win-64 torch wheel is CPU-only by design -- which makes the GPT
+# training path in biphase/transformer/ unusably slow on the machine this is
+# developed on. Pin a CUDA index explicitly on both supported platforms so
+# `torch.cuda.is_available()` is true out of the box.
+#
+# cu126, not the cu124 that `smi` pins: the cu124 index was frozen at torch
+# 2.6.0, so copying that pin would drag torch back eight minor versions from
+# the 2.14.0 this environment already solves for -- and the numba/numpy
+# co-installability that the OpenMP note in [tool.pixi.dependencies] is about
+# was verified against 2.14.0. cu126 is the oldest index that still carries
+# 2.14.0. Both GPUs here (sm_86, sm_75) and the installed driver support it.
+torch = { version = ">=2.14", index = "https://download.pytorch.org/whl/cu126" }
+
 [tool.pixi.feature.dev.pypi-dependencies]
 pre-commit = "*"
 nbstripout = "*"
