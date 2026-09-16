@@ -191,21 +191,35 @@ from), and call `#fig("<name>")` in the document.
 Adding a *static* figure is two edits: the PNG in `assets/` and an
 `#asset("<name>")` call; the same test checks both directions there too.
 
-Seven things that are not obvious and each cost real time:
+**Before editing a `.typ` file, invoke the `typst` skill.** It carries the
+silent traps -- the ones that compile at exit 0 and render wrong -- verified
+against Typst 0.15.1: numbering patterns that break references, `vec()`
+versus `arrow()`, doubled reference nouns, subequations, and what to check in
+the render rather than the exit code. It is general Typst knowledge and is
+not repeated here.
 
-- **`\vec{q}` is `arrow()`, never Typst's `vec()`.** `vec()` builds a column
-  vector and would silently render a matrix where an accent was meant. Use the
-  `vv` helper; it has a name with no other meaning so the mistake is not
-  available to muscle memory.
-- **The angle brackets are `chevron.l`/`chevron.r`, not `angle.l`.** In Typst
-  0.15 `angle` is the geometric angle and rejects an `.l` modifier. There is
-  no `bra`/`ket` builtin either; `lib/theme.typ` defines both.
-- **Cross-references render bare**, via `set ref(supplement: none)`. The LaTeX
-  writes the noun at nearly every site ("Section \ref{}", "Fig.~\ref{}"), so
-  Typst's default supplement produces "Section Section 3".
-- **Supplement numbering is a numbering function, not the pattern `"S1.1"`.**
-  With a pattern, a reference to a level-2 heading renders only the sublevels
-  and drops the "S", turning "Supplement S1.11" into "Supplement 1.11".
+What the skill cannot know is what *this paper* decided. Four conventions,
+each a deliberate choice rather than a default:
+
+- **`\vec{q}` goes through the `vv` helper** in `lib/theme.typ`, not a bare
+  `arrow()` at 431 sites. The helper's name has no other meaning, so reaching
+  for Typst's `vec()` -- which builds a column vector -- is not available to
+  muscle memory.
+- **`bra` and `ket` are defined in `lib/theme.typ`.** Typst has no builtin
+  for either, and the paper uses `\ket` 23 times.
+- **`set ref(supplement: none)` is global**, because the published LaTeX
+  writes the noun itself at nearly every one of 57 sites ("Section \ref{}",
+  "Fig.~\ref{}"). Suppressing it globally reproduces the published wording
+  everywhere instead of leaving 57 sites to judge one at a time.
+- **The supplement's counters reset and re-prefix at the boundary**
+  (`paper.typ`, just before `= Supplement`). Five main-body cross-references
+  resolve against those numbers, so the reset is load-bearing. Only two of
+  the five have live references; the other three are referenced solely from
+  LaTeX blocks that were commented out before publication, which the
+  conversion correctly dropped.
+
+Three more that are about the build, not the markup:
+
 - **Figures must be deterministic** once they are generated rather than
   committed. Seed any RNG: the DAG's caching is only trustworthy if rebuilding
   unchanged inputs is a no-op.
@@ -224,6 +238,16 @@ Build invariants: `pixi run report` from a clean `build/` produces
 Editing `paper.typ`, the theme, `biblio.bib` or any asset PNG rebuilds the
 PDF; nothing else does. A clean compile emits zero Typst warnings, so any
 warning is a regression worth reading.
+
+**The scaffold is duplicated from `smi/report/` on purpose.** The Snakemake
+`figure`/`document`/`clean` rules, the `report` pixi tasks and the `figpath`
+helper are substantially the same in both repos, and an audit will keep
+noticing it. That is a deliberate choice, not drift: the two documents want
+to diverge -- this one is a single-column journal article with an abstract
+and back-matter, that one is a slide deck plus a standalone report -- and a
+shared template would couple two paper repos so that a change for one has to
+be safe for the other. Copy and adapt when starting a third; do not factor
+these two together.
 
 Snakemake comes from PyPI: it has no conda-forge win-64 build. Local
 `--cores` execution is what is exercised here; the cluster executors are the
