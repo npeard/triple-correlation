@@ -1,0 +1,109 @@
+# Build DAG for the triple-correlation report: figure scripts -> PDFs ->
+# documents.
+#
+# Run from this directory:
+#     pixi run -e report snakemake --cores all
+# or, from anywhere in the repo, via the pixi tasks:
+#     pixi run report / report-dry / report-clean
+#
+# Design notes
+#
+# - FIGURES is the single registry. Adding a figure means dropping
+#   report/figures/plot_<name>.py on disk and adding <name> to the document's
+#   entry in DOCUMENT_FIGURES. tests/test_report_build.py checks those two
+#   stay in sync in both directions, because a file-per-figure layout invites
+#   exactly that drift.
+# - FIGURES is empty today: every figure in the paper is a committed PNG under
+#   assets/, the published render. The `figure` rule below is kept so the
+#   first generated figure is a registry edit rather than a new rule.
+# - Documents depend on the figure PDFs they include, so editing one figure
+#   script rebuilds that figure and the documents that use it, and nothing
+#   else. They also depend on the theme, the bibliography and the asset PNGs,
+#   so editing any of those rebuilds the PDF too.
+# - Everything generated lands in build/, which is gitignored.
+# - Commands are kept to plain `python` / `typst` invocations with no shell
+#   builtins, so the same rules run under cmd.exe, PowerShell and bash.
+
+from pathlib import Path
+
+REPORT_DIR = Path(workflow.basedir)
+BUILD = "build"
+FIGDIR = f"{BUILD}/figures"
+
+# Which generated figures each document includes. Kept explicit rather than
+# "all figures" so a document only rebuilds when something it actually shows
+# changes.
+DOCUMENT_FIGURES = {
+    "paper": [],
+}
+
+# The figure registry: stem <name> maps to figures/plot_<name>.py ->
+# build/figures/<name>.pdf. Derived rather than written out, because a figure
+# that no document includes should not be built, and a figure a document
+# includes must be. Deriving makes both true by construction instead of
+# leaving them as invariants to remember.
+FIGURES = sorted({name for names in DOCUMENT_FIGURES.values() for name in names})
+
+DOCUMENTS = sorted(DOCUMENT_FIGURES)
+
+THEME = "lib/theme.typ"
+BIBLIOGRAPHY = "biblio.bib"
+ASSETS = sorted(str(p.relative_to(REPORT_DIR)) for p in (REPORT_DIR / "assets").glob("*.png"))
+
+# Without this, the unconstrained {document} wildcard in `rule document` also
+# matches "figures/<name>", so Snakemake evaluates a figure PDF as a candidate
+# document output and its input function raises KeyError on every run. Pinning
+# both wildcards to their registries keeps the DAG unambiguous.
+#
+# An empty registry needs care: "|".join([]) is the empty string, and
+# Snakemake interpolates a constraint as (?P<name>...), so that yields
+# (?P<name>) -- a group matching zero characters. `{name}` would then be
+# satisfiable only by the empty string, which is not the same as "no figure
+# name is valid" and leaves the rule reachable with a degenerate match.
+# `(?!)` is a regex that can never match anything, which is the correct
+# reading of "no name is a valid figure" while FIGURES is empty.
+wildcard_constraints:
+    document="|".join(DOCUMENTS),
+    name="|".join(FIGURES) if FIGURES else "(?!)",
+
+
+def figure_pdfs(document):
+    return [f"{FIGDIR}/{name}.pdf" for name in DOCUMENT_FIGURES[document]]
+
+
+rule all:
+    input:
+        expand(f"{BUILD}/{{document}}.pdf", document=DOCUMENTS),
+
+
+rule figure:
+    """Render one figure. The script writes exactly the path it is handed."""
+    input:
+        script="figures/plot_{name}.py",
+        common="figures/_figcommon.py",
+    output:
+        f"{FIGDIR}/{{name}}.pdf",
+    shell:
+        "python {input.script} --output {output}"
+
+
+rule document:
+    """Compile a Typst document against its figures, theme, bib and assets."""
+    input:
+        source="{document}.typ",
+        theme=THEME,
+        bibliography=BIBLIOGRAPHY,
+        assets=ASSETS,
+        figures=lambda wildcards: figure_pdfs(wildcards.document),
+    output:
+        f"{BUILD}/{{document}}.pdf",
+    shell:
+        "typst compile --root . {input.source} {output}"
+
+
+rule clean:
+    """Remove every generated artifact."""
+    run:
+        import shutil
+
+        shutil.rmtree(REPORT_DIR / BUILD, ignore_errors=True)

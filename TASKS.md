@@ -1,5 +1,12 @@
 # Triphase ML Tasks
 
+## Auto-research setup
+
+- [ ] **Generate the paper figures through the Snakemake DAG** -- replace `report/assets/` static PNGs with figures generated through the Snakemake DAG, by revitalizing `plots/PaperFigures.py` into `report/figures/plot_<name>.py` scripts. Each script takes `--output <path>` and writes exactly that path, must be deterministic (seed any RNG, since the DAG's caching is only trustworthy if rebuilding unchanged inputs is a no-op), and shares style via `report/figures/_figcommon.py`. Adding one takes three coordinated edits: the script, the name in the Snakefile's `FIGURES`, and the entry in `DOCUMENT_FIGURES`; `tests/test_report_build.py` fails if those drift.
+- [ ] **Split the slow cosPhi tests behind a `slow` marker** -- `pixi run test` now takes ~313s, up from ~95s, because making the closure estimator converge required raising shot counts (1D 50000 -> 200000, 2D 10000 -> 30000) in `tests/test_cosPhi_generation.py`, which is essentially all of that time. A suite that slow stops being run before every commit, which defeats the point of having just made it deterministic. Concrete fix: register a `slow` marker in `[tool.pytest.ini_options]`, mark the two Monte Carlo tests `@pytest.mark.slow`, change the `test` task to `-m "not slow"`, and add a `test-slow` task running the full set for pre-merge and CI. Overlaps with the variance-weighted assertion item under Code Quality & Testing: a per-element tolerance that holds at far fewer shots would make this split unnecessary, so do one or the other, not both.
+
+---
+
 ## Performance & Scalability
 
 - [ ] **4D `g3` via Numba** -- write a function that computes the 4D `g3` directly using Numba, avoiding storage of the full 6D tensor; also speeds up fine-tuning data generation
@@ -40,7 +47,7 @@
 ## Code Quality & Testing
 
 - [ ] **`setup_data()` dimension validation in `ModelTrainer`** -- compare dataset input dimensions to model expectations at setup time and raise a clear error on mismatch; avoids confusing failures at inference
-- [ ] **Update `test_cosPhi`** -- replace the current average correlation with a more sophisticated one that accounts for high variance at specific pixels
+- [ ] **Consider a variance-weighted assertion for `test_cosPhi`** -- `tests/test_cosPhi_generation.py` is deterministic and green now that both classes take a seeded `rng`, so this is an accuracy-of-the-assertion item, not a flakiness one. The residual is strongly non-uniform across the array for a known reason: `cosPhi_from_data` divides the measured closure by the triple product `g1[n] * g1[m] * g1[n + m]`, so at pixels where the coherent structure factor has a near-zero the shot noise is amplified by ~`1/g1`. Measured in 1D at seed 7: `|g1| = 0.048` at one pixel (smallest of 41) and the row through it carried ~7x the mean error of every other row. The estimator is unbiased -- errors fall off with num_shots (seed 7 worst element 0.49 at 50000 shots -> 0.16 at 800000 -> 0.10 at 3200000) -- so a flat `atol` is simply the wrong shape for the residual: it is slack where `g1` is large and tight where `g1` is small. A per-element tolerance scaled by the predicted `1/(g1[n] g1[m] g1[n+m])` variance would test the same claim at a fraction of the shots, which matters because the 2D test costs ~5 min at 30000 shots. Not done here: reverse-fitting tolerance to observed noise is how the old flaky band was created, and deriving the variance properly is real work, not a test tweak.
 
 ---
 

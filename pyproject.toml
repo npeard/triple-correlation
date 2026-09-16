@@ -6,11 +6,11 @@ authors = [
     {name = "Nolan Peard", email = "nolan.peard@gmail.com"},
 ]
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 license = {text = "MIT"}
 classifiers = [
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.14",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
@@ -80,6 +80,24 @@ dev = [
 [tool.flit.module]
 name = "fluo"
 
+[tool.ruff]
+# Keep ruff away from the two verbatim copies of agent-config's scripts,
+# formatter included. Ruff targets the version in `requires-python`, so at
+# 3.14 the formatter rewrites `except (A, B):` into PEP 758's `except A, B:`.
+# That is valid Python here, but it forks the copies from upstream on every
+# `pixi run format` -- exactly what the per-file-ignores comment below
+# forbids, and those ignores cannot stop it because they configure the linter
+# and this is the formatter. Upstream adopts new syntax on its own schedule;
+# this project does not get to decide that for it.
+#
+# `force-exclude` is the load-bearing half. Plain `exclude` is ignored when a
+# path is passed explicitly, which is precisely how the pre-commit hooks
+# invoke ruff (`ruff format <staged files>`) -- so without it the hook
+# re-forks the file on every commit even though `pixi run format` leaves it
+# alone.
+extend-exclude = ["scripts/preflight.py", "scripts/platform_paths.py"]
+force-exclude = true
+
 [tool.ruff.format]
 quote-style = "single"
 docstring-code-format = true
@@ -144,27 +162,94 @@ allow-dict-calls-with-keyword-arguments = true
 "scripts/check_ascii.py" = ["S603", "S607", "T201"]
 "tests/test_cosPhi_generation.py" = ["N999"]
 "biphase/solver/biphase2d.py" = ["E501"]
+# These two are copied verbatim from ~/Documents/Projects/claude-config, where
+# they are maintained and linted against that project's own rules.
+# Reformatting them here would fork them from upstream and turn the next copy
+# into a merge, so the rules they trip are disabled rather than the files
+# edited. Keep them byte-identical to the originals.
+#
+# Each list is scoped to the rules its own file actually trips, verified with
+# `ruff check --isolated --select ...`. smi pastes the union of both lists onto
+# both files; copying that would leave T201 suppressed in platform_paths.py,
+# which prints nothing today -- so a stray print added to a file that is
+# supposed to stay byte-identical to upstream would never be flagged.
+"scripts/preflight.py" = ["ANN202", "B007", "PLC0415", "S603", "S607", "T201"]
+"scripts/platform_paths.py" = ["D301", "INP001", "PTH115", "S603", "S607"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
 [tool.codespell]
-skip = ".git,*.ipynb"
+# codespell walks the filesystem, not the git index, so gitignoring a
+# directory does not hide it -- scratch/, docs/superpowers/ and report/build/
+# are all ignored and all still have to be named here. The first two hold
+# untracked drafts and session-scoped specs, which are not prose this project
+# ships. report/build/ holds the compiled PDF: codespell reads it as text and
+# reports "typos" in the binary font and stream data, which is noise with no
+# possible fix.
+skip = ".git,*.ipynb,./.pixi,./scratch,./docs/superpowers,./report/build"
+# "clos" is the deliberate abbreviation of "closure" (closure phase) used as a
+# local in fluo/fluo1d.py and fluo/fluo2d.py, not a truncated "close".
+# "ket" is Dirac notation -- the |x> half of bra-ket -- and names the Typst
+# math helper in report/lib/theme.typ that renders it.
+# Both silenced here rather than renaming physics-facing identifiers to
+# satisfy a spell checker.
+ignore-words-list = ["clos", "ket"]
 
 [tool.pixi.workspace]
 channels = ["conda-forge"]
-platforms = ["osx-64", "osx-arm64", "linux-64"]
+# win-64 is the machine this is developed on; without it every `pixi run` here
+# fails with `unsupported-platform`, which is why no .pixi/ ever existed. The
+# macOS entries are dropped deliberately rather than kept alongside: nobody
+# develops or runs this project on a Mac, and keeping them makes the solver
+# find a torch/numpy/numba set consistent across Intel and Apple-silicon
+# macOS as well, which is what historically forced backdated pins. Re-add
+# them only together with someone who actually tests there.
+platforms = ["win-64", "linux-64"]
 
 [tool.pixi.dependencies]
-python = ">=3.12,<3.13"
-numba = "*"
+# 3.14, not 3.15: numba is the binding constraint and ships no cp315 wheel,
+# while numpy, torch and matplotlib all have one. numba is load-bearing here
+# (the JIT-compiled encode_1d/encode_2d on the training path), so the ceiling
+# is whatever it supports. 3.15 was also still a release candidate on
+# conda-forge when this was set. Re-check numba's wheel tags before bumping:
+#   curl -s https://pypi.org/pypi/numba/json | grep -oE 'cp3[0-9]+'
+python = ">=3.14,<3.15"
+# numba deliberately comes from PyPI (via [project.dependencies]), NOT conda.
+# Conda-forge's numeric packages link libomp while the PyPI torch wheels
+# bundle Intel's libiomp5md.dll; loading both OpenMP runtimes in one process
+# makes OpenMP abort with "OMP: Error #15". The documented
+# KMP_DUPLICATE_LIB_OK escape hatch is explicitly unsafe -- its own error text
+# warns it can silently produce incorrect results -- so instead keep a single
+# OpenMP runtime by sourcing the whole numeric stack (numpy, numba, torch)
+# from one place. Do not move numba back here.
+#
+# ruff and codespell live in the *default* env because [tool.pixi.tasks]
+# (below) runs in the default env and defines `format`, `lint` and `spell` in
+# terms of them. While they were dev-feature-only, those three tasks were
+# broken by construction. Sourcing them here means the tasks use the pinned,
+# lockfile-backed tools instead of whatever happens to be first on PATH.
+ruff = ">=0.15,<0.16"
+codespell = "*"
 
 [tool.pixi.pypi-dependencies]
 triple-correlation = { path = ".", editable = true }
 
+# Torch arrives via the editable `triple-correlation` install, and PyPI's
+# default win-64 torch wheel is CPU-only by design -- which makes the GPT
+# training path in biphase/transformer/ unusably slow on the machine this is
+# developed on. Pin a CUDA index explicitly on both supported platforms so
+# `torch.cuda.is_available()` is true out of the box.
+#
+# cu126, not the cu124 that `smi` pins: the cu124 index was frozen at torch
+# 2.6.0, so copying that pin would drag torch back eight minor versions from
+# the 2.14.0 this environment already solves for -- and the numba/numpy
+# co-installability that the OpenMP note in [tool.pixi.dependencies] is about
+# was verified against 2.14.0. cu126 is the oldest index that still carries
+# 2.14.0. Both GPUs here (sm_86, sm_75) and the installed driver support it.
+torch = { version = ">=2.14", index = "https://download.pytorch.org/whl/cu126" }
+
 [tool.pixi.feature.dev.pypi-dependencies]
-ruff = "*"
-codespell = "*"
 pre-commit = "*"
 nbstripout = "*"
 ty = "*"
@@ -178,24 +263,73 @@ pytest-benchmark = "*"
 coverage = { version = "*", extras = ["toml"] }
 
 [tool.pixi.environments]
-default = { solve-group = "default" }
+# The default env includes the test feature because `test` is defined under
+# [tool.pixi.tasks], which runs in the default env -- so pytest has to be
+# resolvable there, not just in dev.
+default = { features = ["test"], solve-group = "default" }
 dev = { features = ["dev", "test"], solve-group = "default" }
 test = { features = ["test"], solve-group = "default" }
+report = { features = ["report"], solve-group = "default" }
 
 [tool.pixi.tasks]
 format = "ruff format . && ruff check --fix ."
 lint = "ruff check ."
 ascii = "python scripts/check_ascii.py"
-test = "pytest"
-spell = "codespell ."
+# `python -m pytest` / `python -m codespell_lib` rather than a bare `pytest` /
+# `codespell`, so the tool runs through this environment's interpreter instead
+# of resolving against PATH -- PATH resolution is the exact failure mode being
+# fixed here.
+test = "python -m pytest"
+spell = "python -m codespell_lib ."
 precommit = "pre-commit run --all-files"
 
 [tool.pixi.feature.dev.tasks]
 typecheck = "ty check"
+# Step 0 of the workflow spine collapsed into one command: pre-commit wired up
+# and current, tests green, clean tree, expected branch. In the dev feature
+# because the hooks it inspects are installed from that environment. Pass
+# `--with-tests` to actually run the suite rather than just report the command.
+preflight = "python scripts/preflight.py"
 all = { depends-on = ["format", "lint", "ascii", "typecheck", "test"] }
 
+# Typst report build (report/). The whole document toolchain is
+# lockfile-reproducible, unlike a TeX engine, which is the reason the paper
+# lives here as Typst rather than as the original LaTeX.
+[tool.pixi.feature.report.dependencies]
+# typst only: it is a self-contained Rust binary with no OpenMP/BLAS linkage,
+# so it cannot collide with the PyPI numeric stack that the OpenMP note in
+# [tool.pixi.dependencies] above is about.
+typst = "*"
+
+# Snakemake has no conda-forge win-64 build at all (it is packaged only for
+# linux-64/osx), so it comes from PyPI, where the wheels are pure Python and
+# run fine here. Only *local* (--cores) execution is exercised; the cluster
+# and --use-conda executors are the parts with real Windows gaps. matplotlib
+# is here for the figure scripts this DAG is being prepared for -- the paper's
+# figures are committed PNGs today.
+[tool.pixi.feature.report.pypi-dependencies]
+snakemake = ">=8"
+matplotlib = "*"
+
+# Report build tasks. These live under the `report` feature, not
+# [tool.pixi.tasks], because the latter runs in the default env, which has
+# neither typst nor snakemake. `cwd` points them at report/ so the Snakefile's
+# relative paths resolve the same whether you invoke a task from the repo root
+# or run snakemake by hand from inside report/.
+[tool.pixi.feature.report.tasks]
+report = { cmd = "snakemake --cores all", cwd = "report" }
+report-dry = { cmd = "snakemake --cores all -n", cwd = "report" }
+report-clean = { cmd = "snakemake --cores 1 clean", cwd = "report" }
+
 [tool.ty.environment]
-python-version = "3.12"
+python-version = "3.14"
+# Pin import resolution to the dev environment. `ty` otherwise infers a
+# search path from the interpreter it happens to find, so a machine with a
+# system Python on PATH can get different diagnostics than the pixi env
+# produces -- and the dev env is the only one that has `ty` installed at all.
+# Naming it here makes `typecheck` answer the same question everywhere,
+# including under a pre-commit hook that runs with no env activated.
+python = ".pixi/envs/dev"
 
 [tool.ty.src]
 exclude = [".pixi", "**/*.ipynb"]

@@ -1,10 +1,19 @@
 #!/usr/bin/env python
+"""Figures for the triple-correlation paper.
+
+Dependency note: the harmonic-inversion figures require the `harminv` Python
+bindings, which must be installed **manually**. `harminv` is a C library from
+the MEEP ecosystem and is published on neither conda-forge nor PyPI under that
+name, so `pixi.lock` will never provide it and it cannot be added to
+`[project.dependencies]`. Every other figure in this module works without it,
+which is why the import is deferred to the call sites via `_require_harminv()`
+rather than taken at module scope.
+"""
 
 import copy
 import logging
 from typing import Any
 
-import harminv
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.ticker
@@ -13,11 +22,45 @@ import pylab as P
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from PIL import Image
 from skimage.restoration import unwrap_phase
+from skimage.transform import resize
 
 logger = logging.getLogger(__name__)
 
 from biphase.solver.iterative import IterativeSolver
 from fluo import Fluorescence1D, Fluorescence2D
+from plots.plot2d import Plot2D
+
+
+def _require_harminv() -> Any:
+    """Imports and returns the optional `harminv` module.
+
+    The import is deferred so this module stays importable without `harminv`,
+    which has no conda-forge or PyPI distribution and must be installed by
+    hand. Only the harmonic-inversion figures need it.
+
+    Returns:
+        The imported `harminv` module.
+
+    Raises:
+        ModuleNotFoundError: If `harminv` is not importable, naming what to
+            install.
+    """
+    try:
+        # PLC0415 is suppressed deliberately, not missed: `harminv` is an
+        # optional native dependency with no packaged distribution, so a
+        # module-scope import would make every figure in this file
+        # unimportable. The `ty: ignore` is the same fact: with no package on
+        # any index, no lockfile can ever make this import resolve.
+        import harminv  # noqa: PLC0415 # ty: ignore[unresolved-import]
+    except ModuleNotFoundError as exc:
+        msg = (
+            'The harmonic-inversion figures require the `harminv` Python '
+            'bindings, which are on neither conda-forge nor PyPI and must be '
+            'installed manually (see https://github.com/NanoComp/harminv). '
+            'All other figures in this module work without it.'
+        )
+        raise ModuleNotFoundError(msg) from exc
+    return harminv
 
 
 def highlight_cell(
@@ -326,7 +369,11 @@ def Figure_1() -> None:  # noqa: PLR0915
     # Hide axes ticks
     ax1.set_xticks([])
     ax1.set_yticks([])
-    ax1.set_zticks([])
+    # Axes3D.set_zticks is synthesized at class-definition time by
+    # _axis_method_wrapper('zaxis', 'set_ticks'), a descriptor matplotlib
+    # ships with no declared __call__, so a typechecker sees a non-callable.
+    # Going through the axis directly is what set_zticks forwards to anyway.
+    ax1.zaxis.set_ticks([])
 
     P.tight_layout()
     P.show()
@@ -977,8 +1024,6 @@ def Figure_4_Rows():
     using manual (user-input) resolving to minimize the total error.
     """
     np.random.seed(0x5EED)
-    from plots.plot2d import Plot2D
-
     plot = Plot2D(num_pix=11, num_atoms=7, kmax=2)
 
     # First, user should do manual resolving to generate subfigures A-D
@@ -1438,6 +1483,7 @@ def Figure_S5():  # noqa: PLR0915
     # Harmonic inversion
     signal = np.sqrt(fluo.coh_ft_double) * np.exp(1j * truth)
     signal = np.real(signal)
+    harminv = _require_harminv()
     inversion = harminv.invert(
         signal, fmin=0, fmax=1, dt=2 * 2 * fluo.kmax / (2 * fluo.num_pix), nf=6
     )
@@ -1497,6 +1543,7 @@ def Figure_S5():  # noqa: PLR0915
     # Harmonic inversion
     signal = np.sqrt(fluo.coh_ft_double) * np.exp(1j * ramped)
     signal = np.real(signal)
+    harminv = _require_harminv()
     inversion = harminv.invert(
         signal[:], fmin=0, fmax=0.6, dt=2 * 2 * fluo.kmax / (2 * fluo.num_pix), nf=6
     )
@@ -1557,6 +1604,7 @@ def Figure_S5():  # noqa: PLR0915
     # Harmonic inversion
     signal = np.sqrt(fluo.coh_ft_double) * np.exp(1j * flipped)
     signal = np.real(signal)
+    harminv = _require_harminv()
     inversion = harminv.invert(
         signal[fluo.num_pix :],
         fmin=0,
@@ -1622,7 +1670,7 @@ def Figure_S5():  # noqa: PLR0915
     P.show()
 
 
-def Figure_S4():  # noqa: PLR0915
+def Figure_S4():
     np.random.seed(0x5EED + 2)
     fluo = Fluorescence2D(kmax=3, num_pix=101, num_atoms=5)
 
@@ -1653,8 +1701,6 @@ def Figure_S4():  # noqa: PLR0915
         va='top',
         c='white',
     )
-
-    from skimage.transform import resize
 
     spline_order = 5
     ax2 = fig.add_subplot(222)

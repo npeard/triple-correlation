@@ -149,9 +149,7 @@ def PhiSolver(cosPhi: np.ndarray, initial_phase: float = 0) -> tuple:  # noqa: P
 
 
 def find_next_phi(
-    xdata: np.ndarray | None = None,
-    ydata: np.ndarray | None = None,
-    AltReturn: bool = False,
+    xdata: np.ndarray, ydata: np.ndarray, AltReturn: bool = False
 ) -> tuple:
     """Finds the nearest intersection of sets of possible theta by finding
     the pairs of vertical and horizontal lines that best fit the data when
@@ -195,9 +193,9 @@ def find_next_phi(
     # Find candidate theta by doing brute force search of the 1D parameter
     # space
     theta = np.linspace(-np.pi, np.pi, 50000)
-    logThetaError = logThetaError(theta)
+    theta_error = logThetaError(theta)
     num_theta = 2  # Number of candidates to accept. Two is optimal.
-    mask = np.argpartition(logThetaError, num_theta)[:num_theta]
+    mask = np.argpartition(theta_error, num_theta)[:num_theta]
     logger.debug('Possible Theta = %s', theta[mask])
     theta0 = theta[mask]
 

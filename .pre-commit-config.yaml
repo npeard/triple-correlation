@@ -9,7 +9,17 @@ repos:
 -   repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
+        # report/biblio.bib is a verbatim copy of the published paper's
+        # bibliography, kept byte-identical so re-exporting it from the
+        # reference manager stays a plain overwrite rather than a merge. 16 of
+        # its entries carry trailing spaces; stripping them is a diff against
+        # upstream for no benefit, since Typst does not care.
+        #
+        # Only this hook needs the exemption. The file already ends in exactly
+        # one newline, so end-of-file-fixer is a no-op on it and excluding it
+        # there would weaken the hook while protecting nothing.
     -   id: trailing-whitespace
+        exclude: '^report/biblio\.bib$'
     -   id: end-of-file-fixer
     -   id: check-yaml
     -   id: check-added-large-files
@@ -17,12 +27,24 @@ repos:
     -   id: debug-statements
     -   id: check-merge-conflict
 
--   repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.12.10
+    # Use the pixi-managed ruff (same binary, version and config as
+    # `pixi run lint`) rather than a separately pinned ruff-pre-commit, so the
+    # hook and the task cannot diverge in version or configuration. Invoked
+    # via `pixi run -e dev` rather than a hardcoded .pixi/envs/dev/bin/ path,
+    # which is Unix-only and silently breaks every commit on win-64.
+    # Requires `pixi install -e dev`.
+-   repo: local
     hooks:
     -   id: ruff
-        args: [--fix, --exit-non-zero-on-fix]
+        name: ruff
+        entry: pixi run -e dev ruff check --fix --exit-non-zero-on-fix
+        language: system
+        types: [python]
     -   id: ruff-format
+        name: ruff-format
+        entry: pixi run -e dev ruff format
+        language: system
+        types: [python]
 
 -   repo: https://github.com/codespell-project/codespell
     rev: v2.4.1
@@ -31,18 +53,21 @@ repos:
 
 -   repo: local
     hooks:
-    # Use the Pixi dev-env binaries directly so the hooks work even when git
-    # invokes pre-commit outside an activated Pixi shell (bare `ty`/`python`
-    # would not be on PATH). Requires `pixi install -e dev`.
+    # Go through `pixi run -e dev` so the hooks work even when git invokes
+    # pre-commit outside an activated Pixi shell (bare `ty`/`python` would not
+    # be on PATH), and so they resolve on both supported platforms -- a
+    # hardcoded .pixi/envs/dev/bin/ path is Unix-only and breaks on win-64,
+    # where the interpreter lives under Scripts/. Requires
+    # `pixi install -e dev`.
     -   id: ty
         name: ty type check
-        entry: .pixi/envs/dev/bin/ty check
+        entry: pixi run -e dev ty check
         language: system
         types: [python]
         pass_filenames: false
     -   id: ascii-only
         name: ASCII-only source (no Unicode; use plain text or LaTeX)
-        entry: .pixi/envs/dev/bin/python scripts/check_ascii.py
+        entry: pixi run -e dev python scripts/check_ascii.py
         language: system
         types_or: [python, markdown]
 

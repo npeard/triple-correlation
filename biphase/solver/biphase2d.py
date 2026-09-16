@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import logging
+import sys
 from itertools import permutations
 
 import numpy as np
@@ -181,8 +182,6 @@ def PhiSolver(  # noqa: PLR0915,PLR0912,C901
                     )
                     # Then, go back to the default case (no alternates) and proceed anyways.
                     # For now, just exit.
-                    import sys
-
                     sys.exit(1)
 
                 logger.debug('Permutations: %s', perms)
@@ -406,9 +405,7 @@ def PhiSolver_manualSelect(  # noqa: PLR0915
 
 
 def find_next_phi(
-    xdata: np.ndarray | None = None,
-    ydata: np.ndarray | None = None,
-    AltReturn: bool = False,
+    xdata: np.ndarray, ydata: np.ndarray, AltReturn: bool = False
 ) -> tuple:
     """Finds the nearest intersection of sets of possible theta by finding
     the pairs of vertical and horizontal lines that best fit the data when
@@ -452,9 +449,9 @@ def find_next_phi(
     # Find candidate theta by doing brute force search of the 1D parameter
     # space
     theta = np.linspace(-np.pi, np.pi, 50000)
-    logThetaError = logThetaError(theta)
+    theta_error = logThetaError(theta)
     num_theta = 2  # Number of candidates to accept. Two is optimal.
-    mask = np.argpartition(logThetaError, num_theta)[:num_theta]
+    mask = np.argpartition(theta_error, num_theta)[:num_theta]
     logger.debug('Possible Theta = %s', theta[mask])
     theta0 = theta[mask]
 

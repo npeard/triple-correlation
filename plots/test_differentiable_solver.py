@@ -30,7 +30,7 @@ def test_1d_solver():
     logger.debug('Loss decreased: %s', loss_history[0] > loss_history[-1])
 
     # Plot results
-    fig, ((ax1, ax2, ax3), (ax4, ax5, _)) = plt.subplots(2, 3, figsize=(15, 8))
+    _fig, ((ax1, ax2, ax3), (ax4, ax5, _)) = plt.subplots(2, 3, figsize=(15, 8))
 
     # Plot true phase
     ax1.plot(true_phase, 'b-o', label='True Phase')
@@ -110,7 +110,7 @@ def test_2d_solver():
     logger.debug('Loss decreased: %s', loss_history[0] > loss_history[-1])
 
     # Plot results
-    fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(15, 4))
+    _fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(15, 4))
 
     # Plot true phase
     im1 = ax1.imshow(

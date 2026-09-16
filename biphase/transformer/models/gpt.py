@@ -32,7 +32,7 @@ class LayerNorm(nn.Module):
 
 
 class SelfAttention(nn.Module):
-    def __init__(self, config: 'GPTConfig'):
+    def __init__(self, config: GPTConfig):
         super().__init__()
         assert config.n_embd % config.n_head == 0
         # key, query, value projections for all heads, but in a batch
@@ -107,7 +107,7 @@ class SelfAttention(nn.Module):
 
 
 class MLP(nn.Module):
-    def __init__(self, config: 'GPTConfig'):
+    def __init__(self, config: GPTConfig):
         super().__init__()
         self.c_fc = nn.Linear(config.n_embd, 4 * config.n_embd, bias=config.bias)
         self.gelu = nn.GELU()
@@ -122,7 +122,7 @@ class MLP(nn.Module):
 
 
 class Block(nn.Module):
-    def __init__(self, config: 'GPTConfig'):
+    def __init__(self, config: GPTConfig):
         super().__init__()
         self.ln_1 = LayerNorm(config.n_embd, bias=config.bias)
         self.attn = SelfAttention(config)
@@ -156,8 +156,8 @@ class TemporalBlock(nn.Module):
         stride: int,
         dilation: int,
         padding: int,
+        activation_fn: nn.Module,
         dropout: float = 0.2,
-        activation_fn: nn.Module = None,
     ):
         super().__init__()
 
@@ -218,7 +218,7 @@ class RegressionTCN(nn.Module):
     to get the final output.
     """
 
-    def __init__(self, config: 'GPTConfig'):
+    def __init__(self, config: GPTConfig):
         super().__init__()
         self.config = config
 
@@ -326,24 +326,23 @@ class GPTConfig:
 
 
 class GPT(nn.Module):
-    def __init__(self, config: 'GPTConfig'):
+    def __init__(self, config: GPTConfig):
         super().__init__()
         assert config.input_dim is not None
         assert config.in_seq_len is not None
         assert config.out_seq_len is not None
         self.config = config
 
-        self.transformer = nn.ModuleDict(
-            dict(
-                # Replace embedding with linear projection for continuous inputs
-                wte=nn.Linear(config.input_dim, config.n_embd),
-                # Keep positional embeddings for sequence structure
-                wpe=nn.Embedding(config.in_seq_len, config.n_embd),
-                drop=nn.Dropout(config.dropout),
-                h=nn.ModuleList([Block(config) for _ in range(config.n_layer)]),
-                ln_f=LayerNorm(config.n_embd, bias=config.bias),
-            )
-        )
+        # Submodules are plain attributes rather than an nn.ModuleDict: every one
+        # is reached by a fixed attribute name, so the dict bought nothing but a
+        # `Tensor | Module` static type from ModuleDict.__getattr__.
+        # Replace embedding with linear projection for continuous inputs
+        self.wte = nn.Linear(config.input_dim, config.n_embd)
+        # Keep positional embeddings for sequence structure
+        self.wpe = nn.Embedding(config.in_seq_len, config.n_embd)
+        self.drop = nn.Dropout(config.dropout)
+        self.h = nn.ModuleList([Block(config) for _ in range(config.n_layer)])
+        self.ln_f = LayerNorm(config.n_embd, bias=config.bias)
 
         # regression head
         # We use a TCN here, because a simple MLP or Linear layer would be enormous
@@ -363,11 +362,11 @@ class GPT(nn.Module):
         """
         n_params = sum(p.numel() for p in self.parameters())
         if non_embedding:
-            n_params -= self.transformer.wpe.weight.numel()
+            n_params -= self.wpe.weight.numel()
 
-        embedding_params = sum(p.numel() for p in self.transformer.wte.parameters())
-        position_params = sum(p.numel() for p in self.transformer.wpe.parameters())
-        block_params = sum(p.numel() for p in self.transformer.h.parameters())
+        embedding_params = sum(p.numel() for p in self.wte.parameters())
+        position_params = sum(p.numel() for p in self.wpe.parameters())
+        block_params = sum(p.numel() for p in self.h.parameters())
         regression_params = sum(p.numel() for p in self.regression_head.parameters())
 
         logger.info('Number of embedding params: %.3fM', embedding_params / 1e6)
@@ -393,7 +392,7 @@ class GPT(nn.Module):
         device = x.device
         x = x.squeeze(1)
         x = x.unsqueeze(-1)
-        batch_size, seq_len, n_features = x.size()  # batch, sequence length, features
+        _batch_size, seq_len, _n_features = x.size()  # batch, sequence length, features
         assert seq_len <= self.config.in_seq_len, (
             f'Cannot forward sequence of length {seq_len}, '
             f'block size is only {self.config.in_seq_len}'
@@ -402,14 +401,14 @@ class GPT(nn.Module):
         # Input sequence processing
         pos = torch.arange(0, seq_len, dtype=torch.long, device=device)
         # project inputs to embedding dimension (batch_size, seq_len, n_embd)
-        tok_emb = self.transformer.wte(x)
+        tok_emb = self.wte(x)
         # position embeddings of shape (seq_len, n_embd)
-        pos_emb = self.transformer.wpe(pos)
-        x = self.transformer.drop(tok_emb + pos_emb)
+        pos_emb = self.wpe(pos)
+        x = self.drop(tok_emb + pos_emb)
 
         # Process through transformer blocks
-        for block in self.transformer.h:
+        for block in self.h:
             x = block(x)
-        x = self.transformer.ln_f(x)
+        x = self.ln_f(x)
 
         return self.regression_head(x)

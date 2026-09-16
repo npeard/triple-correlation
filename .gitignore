@@ -3,12 +3,20 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-# Distribution / packaging
-build/
-dist/
+# Distribution / packaging. Anchored to the repo root: these are build-backend
+# output, and an unanchored pattern also swallows any nested directory of the
+# same name. In smi a bare `lib/` silently hid `report/lib/`, which is source;
+# `build/` has the identical hazard against a nested source tree, so the
+# report's own build directory is ignored by name below instead of by accident.
+/build/
+/dist/
 *.egg-info/
 .installed.cfg
 *.egg
+
+# Pixi's materialized environments (multi-GB, fully reproducible from
+# pixi.lock, which is committed).
+.pixi/
 
 # Unit test / coverage reports
 .pytest_cache/
@@ -36,6 +44,22 @@ venv/
 **/data/*
 **/checkpoints/*
 **/lightning_logs/*
+
+# Session-scoped agent scaffolding (specs, plans) -- durable rationale goes in
+# commit messages and code comments instead.
+docs/superpowers/
+scratch/
+
+# Generated report artifacts: the compiled document and Snakemake's own state.
+# Everything under these is reproducible from the .typ sources and
+# report/assets via `pixi run report`. Note what is deliberately NOT here:
+# report/lib/ (shared Typst source), report/assets/ (committed figure PNGs)
+# and report/figures/ (figure scripts) are all version-controlled. The three
+# catch-all patterns above (*.csv, **/data/*) would silently hide a committed
+# report input of that shape; un-ignore it explicitly with `!` if that ever
+# comes up rather than loosening the pattern.
+report/build/
+report/.snakemake/
 
 # MacOS
 .DS_Store

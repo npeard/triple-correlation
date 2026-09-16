@@ -2,6 +2,7 @@
 
 import numpy as np
 import pylab as P
+from skimage.restoration import unwrap_phase
 
 from biphase.solver.iterative import IterativeSolver
 from fluo import Fluorescence1D
@@ -232,8 +233,6 @@ class Plot1D:
         ][1]
         solver = IterativeSolver(cosPhi)
         solved = solver.naive_solve(initial_phase=initial_phase)
-        from skimage.restoration import unwrap_phase
-
         solved = unwrap_phase(solved)
         real_phase = self.fluo.coh_phase[self.fluo.num_pix // 2 :]
         real_phase = unwrap_phase(real_phase)
@@ -268,14 +267,12 @@ class Plot1D:
             self.num_pix - 1 : 3 * self.num_pix // 2
         ][1]
         solver = IterativeSolver(cosPhi, log_level='DEBUG')
-        solved, error = solver.solve(initial_phase=initial_phase)
+        solved, _error = solver.solve(initial_phase=initial_phase)
         # from biphase.solver.biphase1d import PhiSolver
         # solved = PhiSolver(cosPhi)
         real_phase = self.fluo.coh_phase_double[self.fluo.num_pix - 1 :]
 
         # Unwrap the phase
-        from skimage.restoration import unwrap_phase
-
         plot_solved = unwrap_phase(solved[:])
         plot_real_phase = unwrap_phase(real_phase)
 

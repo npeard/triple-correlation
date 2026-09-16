@@ -40,6 +40,7 @@ class Fluorescence2D:
         num_pix: int = 51,
         num_atoms: int = 3,
         x: np.ndarray | None = None,
+        rng: np.random.Generator | int | None = None,
     ):
         """Simulate fluorescence speckle from a 2D array of atoms and compute
         various correlation functions.
@@ -52,11 +53,15 @@ class Fluorescence2D:
             numbers of atoms lead to less HBT phase noise
             x (float): array of user-supplied coordinates to define custom atom
             array
+            rng: source of randomness for the atom array and the per-shot
+            emitter phases. Accepts a np.random.Generator, an int seed, or
+            None for fresh entropy (the default, non-deterministic).
         """
         self.kmax = kmax
         self.num_pix = num_pix
         self.x = x  # User-supplied coordinates
         self.num_atoms = num_atoms
+        self.rng = np.random.default_rng(rng)
         self.init_system()
 
     def init_system(self):
@@ -146,8 +151,7 @@ class Fluorescence2D:
         """Randomize or load atomic coordinates and compute coherent
         diffraction quantities.
         """
-        rng = np.random.default_rng()
-        self.coords = rng.random((2, self.num_atoms)) * 2 - 1
+        self.coords = self.rng.random((2, self.num_atoms)) * 2 - 1
 
         self.kr_product_x = np.multiply.outer(self.k_pix[0, :, :], self.coords[0, :])
         self.kr_product_y = np.multiply.outer(self.k_pix[1, :, :], self.coords[1, :])
@@ -170,8 +174,7 @@ class Fluorescence2D:
             (float) - The fluorescence intensity (2d array) across the
             detector
         """
-        rng = np.random.default_rng()
-        random_nums = rng.random(self.num_atoms)
+        random_nums = self.rng.random(self.num_atoms)
         exponential = np.exp(
             -1j * ((self.kr_product_x + self.kr_product_y + random_nums) * 2.0 * np.pi)
         )

@@ -15,6 +15,7 @@ class Fluorescence1D:
         num_pix: int = 201,
         num_atoms: int = 4,
         x: np.ndarray | None = None,
+        rng: np.random.Generator | int | None = None,
     ):
         """Simulate fluorescence speckle from a 1D array of atoms and compute
         various correlation functions.
@@ -30,11 +31,16 @@ class Fluorescence1D:
 
             x (float) - array of user-supplied coordinates to define custom
             atom array
+
+            rng - source of randomness for the atom array and the per-shot
+            emitter phases. Accepts a np.random.Generator, an int seed, or
+            None for fresh entropy (the default, non-deterministic).
         """
         self.kmax = kmax
         self.num_pix = num_pix
         self.num_atoms = num_atoms
         self.x = x  # User-supplied coordinates
+        self.rng = np.random.default_rng(rng)
         self.init_system()
 
     def init_system(self):
@@ -110,8 +116,7 @@ class Fluorescence1D:
         diffraction quantities.
         """
         # Set spatial extent of real space object here
-        rng = np.random.default_rng()
-        self.coords = rng.random(self.num_atoms) * 2 - 1
+        self.coords = self.rng.random(self.num_atoms) * 2 - 1
 
         # Define the coherent diffraction
         self.kr_product = np.outer(self.k_pix, self.coords)
@@ -127,8 +132,7 @@ class Fluorescence1D:
         Returns:
             float: The fluorescence intensity (1d array) across the detector
         """
-        rng = np.random.default_rng()
-        random_values = rng.random(self.num_atoms)
+        random_values = self.rng.random(self.num_atoms)
         phase_factor = np.exp(-1j * (self.kr_product + random_values) * 2 * np.pi)
         return np.abs(phase_factor.mean(1)) ** 2
 
