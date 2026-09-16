@@ -81,6 +81,22 @@ Environments: `default` (library + test feature), `dev` (dev + test; tooling),
 
 ### Environment constraints (easy to break, so stated here)
 
+**Python is 3.14, and numba is what sets the ceiling.** Not 3.15: numba ships
+no cp315 wheel, while numpy, torch and matplotlib all do, and numba is
+load-bearing here (the JIT-compiled `encode_1d`/`encode_2d` on the training
+path). 3.15 was also still a release candidate on conda-forge when this was
+set. Before bumping again, check numba's wheel tags rather than Python's
+release notes -- `curl -s https://pypi.org/pypi/numba/json | grep -oE
+'cp3[0-9]+'` -- and expect five sites to move together:
+`requires-python`, the classifier, `[tool.pixi.dependencies].python`,
+`[tool.ty.environment].python-version`, and the CI matrix.
+
+Bumping the interpreter does **not** rebuild the PyPI wheels. `pixi install`
+swaps the conda interpreter and reuses the cached wheels, which are
+ABI-tagged, so the environment lands with a 3.14 interpreter and `cp312`
+extension modules and numpy fails to import at all. Delete `.pixi/envs/<env>`
+and reinstall for each environment.
+
 **Platforms are `win-64` and `linux-64`.** The macOS entries were dropped
 deliberately: nobody develops or runs this on a Mac, and carrying them makes
 the solver find a torch/numpy/numba set consistent across Intel and
@@ -268,7 +284,7 @@ Run with: `pixi run test` or `pixi run -e test pytest`
 ## Code Quality
 
 - Ruff formatting and linting with Google-style docstrings
-- Type hints required (Python 3.12+)
+- Type hints required (Python 3.14+)
 - Pre-commit hooks: ruff, ty, ascii-only, codespell, nbstripout, standard checks
 
 ### ASCII-only source convention

@@ -32,7 +32,7 @@ class LayerNorm(nn.Module):
 
 
 class SelfAttention(nn.Module):
-    def __init__(self, config: 'GPTConfig'):
+    def __init__(self, config: GPTConfig):
         super().__init__()
         assert config.n_embd % config.n_head == 0
         # key, query, value projections for all heads, but in a batch
@@ -107,7 +107,7 @@ class SelfAttention(nn.Module):
 
 
 class MLP(nn.Module):
-    def __init__(self, config: 'GPTConfig'):
+    def __init__(self, config: GPTConfig):
         super().__init__()
         self.c_fc = nn.Linear(config.n_embd, 4 * config.n_embd, bias=config.bias)
         self.gelu = nn.GELU()
@@ -122,7 +122,7 @@ class MLP(nn.Module):
 
 
 class Block(nn.Module):
-    def __init__(self, config: 'GPTConfig'):
+    def __init__(self, config: GPTConfig):
         super().__init__()
         self.ln_1 = LayerNorm(config.n_embd, bias=config.bias)
         self.attn = SelfAttention(config)
@@ -218,7 +218,7 @@ class RegressionTCN(nn.Module):
     to get the final output.
     """
 
-    def __init__(self, config: 'GPTConfig'):
+    def __init__(self, config: GPTConfig):
         super().__init__()
         self.config = config
 
@@ -326,7 +326,7 @@ class GPTConfig:
 
 
 class GPT(nn.Module):
-    def __init__(self, config: 'GPTConfig'):
+    def __init__(self, config: GPTConfig):
         super().__init__()
         assert config.input_dim is not None
         assert config.in_seq_len is not None

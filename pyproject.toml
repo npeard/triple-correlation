@@ -6,11 +6,11 @@ authors = [
     {name = "Nolan Peard", email = "nolan.peard@gmail.com"},
 ]
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 license = {text = "MIT"}
 classifiers = [
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.14",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
@@ -79,6 +79,24 @@ dev = [
 
 [tool.flit.module]
 name = "fluo"
+
+[tool.ruff]
+# Keep ruff away from the two verbatim copies of agent-config's scripts,
+# formatter included. Ruff targets the version in `requires-python`, so at
+# 3.14 the formatter rewrites `except (A, B):` into PEP 758's `except A, B:`.
+# That is valid Python here, but it forks the copies from upstream on every
+# `pixi run format` -- exactly what the per-file-ignores comment below
+# forbids, and those ignores cannot stop it because they configure the linter
+# and this is the formatter. Upstream adopts new syntax on its own schedule;
+# this project does not get to decide that for it.
+#
+# `force-exclude` is the load-bearing half. Plain `exclude` is ignored when a
+# path is passed explicitly, which is precisely how the pre-commit hooks
+# invoke ruff (`ruff format <staged files>`) -- so without it the hook
+# re-forks the file on every commit even though `pixi run format` leaves it
+# alone.
+extend-exclude = ["scripts/preflight.py", "scripts/platform_paths.py"]
+force-exclude = true
 
 [tool.ruff.format]
 quote-style = "single"
@@ -190,7 +208,13 @@ channels = ["conda-forge"]
 platforms = ["win-64", "linux-64"]
 
 [tool.pixi.dependencies]
-python = ">=3.12,<3.13"
+# 3.14, not 3.15: numba is the binding constraint and ships no cp315 wheel,
+# while numpy, torch and matplotlib all have one. numba is load-bearing here
+# (the JIT-compiled encode_1d/encode_2d on the training path), so the ceiling
+# is whatever it supports. 3.15 was also still a release candidate on
+# conda-forge when this was set. Re-check numba's wheel tags before bumping:
+#   curl -s https://pypi.org/pypi/numba/json | grep -oE 'cp3[0-9]+'
+python = ">=3.14,<3.15"
 # numba deliberately comes from PyPI (via [project.dependencies]), NOT conda.
 # Conda-forge's numeric packages link libomp while the PyPI torch wheels
 # bundle Intel's libiomp5md.dll; loading both OpenMP runtimes in one process
@@ -298,7 +322,7 @@ report-dry = { cmd = "snakemake --cores all -n", cwd = "report" }
 report-clean = { cmd = "snakemake --cores 1 clean", cwd = "report" }
 
 [tool.ty.environment]
-python-version = "3.12"
+python-version = "3.14"
 # Pin import resolution to the dev environment. `ty` otherwise infers a
 # search path from the interpreter it happens to find, so a machine with a
 # system Python on PATH can get different diagnostics than the pixi env

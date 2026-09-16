@@ -7,7 +7,7 @@ import random
 from dataclasses import dataclass
 from itertools import product
 from pathlib import Path
-from typing import Any, Union
+from typing import Any
 
 import lightning as L  # noqa: N812
 import matplotlib.pyplot as plt
@@ -50,9 +50,7 @@ class TrainingConfig:
         self.training_config.setdefault('steps_per_epoch', 100)
 
     @classmethod
-    def from_yaml(
-        cls, config_path: str
-    ) -> Union['TrainingConfig', list['TrainingConfig']]:
+    def from_yaml(cls, config_path: str) -> TrainingConfig | list[TrainingConfig]:
         """Load configuration from YAML file.
 
         If the file is a hyperparameter search config, returns a list of configs.
@@ -79,7 +77,7 @@ class TrainingConfig:
     @classmethod
     def _create_search_configs(
         cls, config_dict: dict[str, Any]
-    ) -> list['TrainingConfig']:
+    ) -> list[TrainingConfig]:
         """Create multiple configurations for hyperparameter search."""
         model_lists = {
             k: v for k, v in config_dict['model'].items() if isinstance(v, list)
