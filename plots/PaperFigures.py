@@ -12,6 +12,7 @@ rather than taken at module scope.
 
 import copy
 import logging
+from pathlib import Path
 from typing import Any
 
 import matplotlib
@@ -25,6 +26,9 @@ from skimage.restoration import unwrap_phase
 from skimage.transform import resize
 
 logger = logging.getLogger(__name__)
+
+# Figure inputs are resolved against this file, not the process CWD.
+_IMAGES = Path(__file__).parent / 'images'
 
 from biphase.solver.iterative import IterativeSolver
 from fluo import Fluorescence1D, Fluorescence2D
@@ -385,8 +389,8 @@ def Figure_S1():  # noqa: PLR0915
     """
     np.random.seed(0x5EED)
 
-    MITPhysics = np.array(Image.open('images/MITPhysics.jpeg').convert('L'))
-    MITCamera = np.array(Image.open('images/MITCamera.jpeg').convert('L'))
+    MITPhysics = np.array(Image.open(_IMAGES / 'MITPhysics.jpeg').convert('L'))
+    MITCamera = np.array(Image.open(_IMAGES / 'MITCamera.jpeg').convert('L'))
     Mod_MITPhysics = np.abs(np.fft.fftshift(np.fft.fft2(MITPhysics)))
     # Mod_MITPhysics = np.ones_like(Mod_MITPhysics)
     Angle_MITPhysics = np.angle(np.fft.fftshift(np.fft.fft2(MITPhysics)))
@@ -484,7 +488,7 @@ def BiSpectrumClosure():  # noqa: PLR0915
     fluo = Fluorescence1D(kmax=5, num_pix=101, num_atoms=3)
     num_shots = 10000
 
-    cmap = copy.copy(matplotlib.cm.get_cmap('viridis'))
+    cmap = copy.copy(matplotlib.colormaps['viridis'])
     cmap.set_bad(color='white')
 
     fig = P.figure(figsize=(20, 5))
@@ -740,9 +744,13 @@ def Figure_ResolvingDemo():  # noqa: PLR0915
     cosPhi = fluo.cosPhi_from_data(num_shots=num_shots)
     initialPhase = [real_phase[0, 1], real_phase[1, 0]]
     solver = IterativeSolver(cosPhi)
-    solved, error = solver.solve(initial_phase=initialPhase[0], error_reject=50)
+    solved, error = solver.solve(initial_phase=initialPhase, error_reject=50)
 
-    solved = solved
+    # IterativeSolver reports on the (2N-1) correlation grid, so crop to the
+    # physical quadrant that real_phase above was sliced to. The no-op this
+    # replaces is where that crop used to be.
+    solved = solved[: fluo.num_pix, : fluo.num_pix]
+    error = error[: fluo.num_pix, : fluo.num_pix]
     box_extent = 2 * fluo.kmax
 
     fig = P.figure(figsize=(20, 10))
@@ -879,6 +887,9 @@ def Figure_ResolvingDemo():  # noqa: PLR0915
     initialPhase = [real_phase[0, 1], real_phase[1, 0]]
     solver = IterativeSolver(cosPhi)
     solved, error = solver.solve(initial_phase=initialPhase, error_reject=-1)
+    # Same (2N-1) -> physical-quadrant crop as the un-resolved panels above.
+    solved = solved[: fluo.num_pix, : fluo.num_pix]
+    error = error[: fluo.num_pix, : fluo.num_pix]
     # Plot the solved phase branch
     ax1 = fig.add_subplot(243)
     ax1.imshow(
