@@ -288,10 +288,16 @@ ascii = "python scripts/check_ascii.py"
 # fixed here.
 test = "python -m pytest"
 spell = "python -m codespell_lib ."
-precommit = "pre-commit run --all-files"
 
 [tool.pixi.feature.dev.tasks]
 typecheck = "ty check"
+# `precommit` belongs here, not in [tool.pixi.tasks]: pre-commit is a
+# dev-feature dependency, so a task defined in the default env could never
+# resolve it and `pixi run precommit` failed with "command not found" for
+# every invocation. Same reason `typecheck` is here rather than there. The
+# alternative -- adding pre-commit to the default env -- would install it
+# twice to fix a task nothing needs outside dev.
+precommit = "pre-commit run --all-files"
 # Step 0 of the workflow spine collapsed into one command: pre-commit wired up
 # and current, tests green, clean tree, expected branch. In the dev feature
 # because the hooks it inspects are installed from that environment. Pass
