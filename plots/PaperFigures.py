@@ -140,8 +140,7 @@ def Figure_1() -> None:  # noqa: PLR0915
     direction (coherent diffraction) and a set of incoherent frames collected
     from the side (incoherent diffraction).
     """
-    np.random.seed(0x5EED)
-    fluo = Fluorescence2D(kmax=5, num_pix=201, num_atoms=19)
+    fluo = Fluorescence2D(kmax=5, num_pix=201, num_atoms=19, rng=0x5EED)
 
     def draw_sphere(
         x_center: float, y_center: float, z_center: float, radius: float
@@ -734,8 +733,7 @@ def Figure_ResolvingDemo():  # noqa: PLR0915
     """Show how the use of resolving to minimize the total error leads to a
     correct phase solution.
     """
-    np.random.seed(0x5EED)
-    fluo = Fluorescence2D(kmax=3, num_pix=11, num_atoms=3)
+    fluo = Fluorescence2D(kmax=3, num_pix=11, num_atoms=3, rng=0x5EED)
     real_phase = fluo.coh_phase_double[
         fluo.num_pix - 1 : 2 * fluo.num_pix - 1, fluo.num_pix - 1 : 2 * fluo.num_pix - 1
     ]
@@ -1048,8 +1046,7 @@ def Figure_S2():  # noqa: PLR0915
     """Show how the double correlation may be used to obtain scattering
     intensities outside the detector area despite the sum of shots giving noise.
     """
-    np.random.seed(0x5EED + 1)
-    fluo = Fluorescence2D(kmax=5, num_pix=101, num_atoms=7)
+    fluo = Fluorescence2D(kmax=5, num_pix=101, num_atoms=7, rng=0x5EED + 1)
 
     # Changing this will affect colorbar placement for the whole figure, be
     # careful
@@ -1242,8 +1239,7 @@ def Figure_S3():  # noqa: PLR0915
     """Show how having extra k-space gives better real space resolution with
     and without phase information.
     """
-    np.random.seed(0x5EED + 2)
-    fluo = Fluorescence2D(kmax=8, num_pix=201, num_atoms=5)
+    fluo = Fluorescence2D(kmax=8, num_pix=201, num_atoms=5, rng=0x5EED + 2)
     P.rcParams.update({'font.size': 22})
 
     box_extent = np.max(fluo.x_pix[0])
@@ -1682,11 +1678,9 @@ def Figure_S5():  # noqa: PLR0915
 
 
 def Figure_S4():
-    np.random.seed(0x5EED + 2)
-    fluo = Fluorescence2D(kmax=3, num_pix=101, num_atoms=5)
+    fluo = Fluorescence2D(kmax=3, num_pix=101, num_atoms=5, rng=0x5EED + 2)
 
-    np.random.seed(0x5EED + 2)
-    fluo_coarse = Fluorescence2D(kmax=3, num_pix=15, num_atoms=5)
+    fluo_coarse = Fluorescence2D(kmax=3, num_pix=15, num_atoms=5, rng=0x5EED + 2)
 
     P.rcParams.update({'font.size': 22})
     box_extent = 2 * fluo.kmax

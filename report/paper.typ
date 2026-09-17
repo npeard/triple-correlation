@@ -15,7 +15,7 @@
 // tests/test_report_build.py enforces this on report/*.typ.
 
 #import "lib/theme.typ": (
-  abs, abstract, asset, bmsection, bra, iu, ket, report-theme, vv, xcorr,
+  abs, abstract, asset, bmsection, bra, fig, iu, ket, report-theme, vv, xcorr,
 )
 
 #show: report-theme.with(
@@ -120,8 +120,8 @@ may be used to reconstruct images of star clusters or, with some corrections to
 account for the use of a quantum light source, arrays of fluorescent molecules
 or atoms.
 
-#asset(
-  "figure_1",
+#fig(
+  "intro",
   caption: [
     Schematic sketch of coherent diffraction in the forward detection plane,
     intersecting with the incident beam $vv(K)$. Fluorescence speckle is
@@ -1093,8 +1093,8 @@ of atoms. The autocorrelation enables accurate retrieval of the coherent
 diffraction pattern out to $2 abs(vv(k)_"max")$ (past the physical edge of the
 detector at $abs(vv(k)_"max")$) @Trost_2020.
 
-#asset(
-  "figure_6",
+#fig(
+  "simulatedamplitude",
   caption: [
     Simulated fluorescence from a 2D array of seven classical point sources.
     (A) shows a speckle pattern, representing a single (random) phase
@@ -1116,8 +1116,8 @@ Fig. @fig:ResolutionDemo shows that extended sampling of momentum space enhances
 the resolution of the real space autocorrelation and, if the phase information
 is available, the resolution of inverse Fourier Transform (the object).
 
-#asset(
-  "figure_7",
+#fig(
+  "resolutiondemo",
   caption: [
     (A) and (B) show the same array of atoms. (B) has double the spatial
     resolution (localization) of (A). The inverse Fourier Transform of
@@ -1192,8 +1192,8 @@ at 30 pixels combined with the modulus from coherent diffraction data sampled
 at 200 pixels across the same region of $vv(k)$-space retrieves a noisy, but
 discernible structure.
 
-#asset(
-  "figure_8",
+#fig(
+  "coarsephase",
   caption: [
     (A) shows the phase $phi(vv(k))$ sampled and unwrapped across 201 by 201
     pixels. (B) shows $phi(vv(k))$ sampled and unwrapped across 29 by 29
@@ -1310,8 +1310,8 @@ and the structure optimization method achieve similar results.
 Figure @fig:PhaseTogglingAppendix illustrates how phase toggling is implemented in the
 algorithm from the main text.
 
-#asset(
-  "figure_11",
+#fig(
+  "phasetogglingappendix",
   caption: [
     In these examples, the value of $phi(vv(k))$ in (A) and (C) in each
     diagonal $k_y = -k_x + n$, $n in bb(Z)$ is determined beginning at the

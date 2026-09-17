@@ -23,9 +23,14 @@ This repository implements phase retrieval from triple correlations of fluoresce
 The codebase follows a modular structure:
 
 ### Core Simulation (`fluo/`)
-- `speckle1d.py` / `speckle2d.py`: Main fluorescence simulation classes with methods for computing intensity patterns, correlations, and phase retrieval
-- `triphase1d.py` / `triphase2d.py`: Triple correlation and phase retrieval algorithms
-- `xtal.py`: Crystal structure utilities
+- `fluo1d.py` / `fluo2d.py`: the `Fluorescence1D` / `Fluorescence2D`
+  simulation classes, with methods for intensity patterns and for the second-
+  and third-order correlations. Both are re-exported from `fluo/__init__.py`,
+  so import them as `from fluo import Fluorescence1D`.
+
+Phase retrieval itself lives in `biphase/solver/`, not here: `iterative.py`
+(`IterativeSolver`, the exact diagonal-by-diagonal solver) and
+`differentiable.py` (`TrainablePhase`, `DifferentiableSolver`).
 
 ### Neural Network Training (`biphase/transformer/`)
 - `lit_module.py`: Unified PyTorch Lightning module (`LitModule`) that handles model creation, on-the-fly data generation, training/validation/test steps, and loss computation

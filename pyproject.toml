@@ -149,6 +149,13 @@ allow-dict-calls-with-keyword-arguments = true
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401", "N999"]
 "docs/**.py" = ["INP001", "ARG001", "ANN"]
+# The report's figure scripts are standalone entry points the Snakemake
+# `figure` rule invokes as `python plot_<name>.py --output <path>`, not an
+# importable package. INP001 wants an __init__.py, which would be actively
+# wrong here: each script relies on Python putting its own directory on
+# sys.path to import the sibling `_figcommon`, and a package would instead
+# require the whole tree to be imported by dotted name.
+"report/figures/*.py" = ["INP001"]
 "conftest.py" = ["ANN"]
 "tests/**.py" = ["ANN", "N999"]
 "notebooks/**.py" = ["T201"]
