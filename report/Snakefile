@@ -13,7 +13,7 @@
 #   entry in DOCUMENT_FIGURES. tests/test_report_build.py checks those two
 #   stay in sync in both directions, because a file-per-figure layout invites
 #   exactly that drift.
-# - FIGURES is partially populated: five of the paper's eleven figures are
+# - FIGURES is partially populated: four of the paper's eleven figures are
 #   generated here, and the rest remain committed PNGs under assets/ for the
 #   reasons recorded beside DOCUMENT_FIGURES below.
 # - Documents depend on the figure PDFs they include, so editing one figure
@@ -37,18 +37,17 @@ FIGDIR = f"{BUILD}/figures"
 # figure labels (fig:Intro -> intro), not the published asset numbers, so a
 # figure inserted mid-paper does not renumber every script on disk.
 #
-# Six published figures are still `#asset` PNGs rather than entries here, each
-# for a reason recorded in TASKS.md: the naive-solver degeneracy (figure_2),
-# two missing generators (figure_3, figure_10), harminv (figure_9), and two
-# composites assembled outside this repo from several separate figures
-# (figure_4, figure_5).
+# Seven published figures are still `#asset` PNGs rather than entries here,
+# each for a reason recorded in TASKS.md: the naive-solver degeneracy
+# (figure_2), the 2D solver not reproducing its own claim (figure_11), two
+# missing generators (figure_3, figure_10), harminv (figure_9), and two
+# composites assembled outside this repo (figure_4, figure_5).
 DOCUMENT_FIGURES = {
     "paper": [
         "intro",
         "simulatedamplitude",
         "resolutiondemo",
         "coarsephase",
-        "phasetogglingappendix",
     ],
 }
 

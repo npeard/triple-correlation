@@ -1310,8 +1310,8 @@ and the structure optimization method achieve similar results.
 Figure @fig:PhaseTogglingAppendix illustrates how phase toggling is implemented in the
 algorithm from the main text.
 
-#fig(
-  "phasetogglingappendix",
+#asset(
+  "figure_11",
   caption: [
     In these examples, the value of $phi(vv(k))$ in (A) and (C) in each
     diagonal $k_y = -k_x + n$, $n in bb(Z)$ is determined beginning at the
