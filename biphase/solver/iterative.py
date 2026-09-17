@@ -96,11 +96,22 @@ class IterativeSolver:
             # is passed through, which is what the docstring above promises.
             # Wrapping unconditionally turned a correct [a, b] into [[a, b],
             # [a, b]] and only appeared to work for a scalar.
-            pair = (
-                [float(initial_phase), float(initial_phase)]
-                if np.isscalar(initial_phase)
-                else [float(v) for v in initial_phase]
-            )
+            #
+            # np.ndim rather than np.isscalar: the latter is False for a 0-d
+            # array, which would send `np.asarray(0.7)` down the sequence
+            # branch and raise "iteration over a 0-d array" -- a scalar by
+            # every reasonable reading of the docstring above.
+            if np.ndim(initial_phase) == 0:
+                pair = [float(initial_phase), float(initial_phase)]
+            else:
+                pair = [float(v) for v in initial_phase]
+                if len(pair) != 2:
+                    msg = (
+                        f'2D initial_phase needs exactly 2 values, one per seeded '
+                        f'pixel; got {len(pair)}. _solve_2d reads only the first '
+                        f'two, so a longer sequence would be silently truncated.'
+                    )
+                    raise ValueError(msg)
             return self._solve_2d(pair, error_reject)
 
     def manual_solve(

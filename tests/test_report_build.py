@@ -20,10 +20,12 @@ The failure modes these exist to catch:
    enforced by ``scripts/check_ascii.py`` for ``*.py`` and ``*.md`` only, so
    ``.typ`` is not covered by the pre-commit hook. This is where that gap is
    closed.
-4. Registry drift between the Snakefile's ``FIGURES`` and the
-   ``figures/plot_*.py`` scripts on disk. Inert today because every figure is
-   a committed asset and ``FIGURES`` is empty; written so it becomes
-   load-bearing the moment the first generated figure lands.
+4. Registry drift between the Snakefile's ``FIGURES``, the
+   ``figures/plot_*.py`` scripts on disk, and the ``#fig()`` call sites in
+   ``paper.typ``. Adding a generated figure takes all three edits, so each
+   pair is checked in both directions: a registered figure with no script, a
+   script nobody registered, a registered figure the document never shows, and
+   a ``#fig()`` call for a name that was never registered.
 """
 
 from __future__ import annotations
@@ -56,6 +58,11 @@ def _paper_source() -> str:
 def _referenced_assets() -> set[str]:
     """Asset stems named by ``#asset("<name>", ...)`` calls in paper.typ."""
     return set(re.findall(r'#asset\(\s*"([^"]+)"', _paper_source()))
+
+
+def _referenced_figures() -> set[str]:
+    """Figure names named by ``#fig("<name>", ...)`` calls in paper.typ."""
+    return set(re.findall(r'#fig\(\s*"([^"]+)"', _paper_source()))
 
 
 def _asset_stems_on_disk() -> set[str]:
@@ -177,9 +184,9 @@ def test_documents_in_snakefile_exist():
 def test_every_registered_figure_has_a_script():
     """Every name in the Snakefile's FIGURES maps to a script on disk.
 
-    Vacuously true while FIGURES is empty -- every figure is a committed asset
-    today. It becomes load-bearing as soon as a generated figure is
-    registered, which is the point of writing it now.
+    A registered name with no script makes the DAG fail at the `figure` rule
+    with a missing-input error, which names the file but not the registry edit
+    that introduced it.
     """
     missing = sorted(
         name
@@ -202,4 +209,36 @@ def test_every_script_is_registered():
     assert not unregistered, (
         f'plot_*.py scripts absent from the Snakefile FIGURES list: {unregistered}. '
         f'Add them to a document in DOCUMENT_FIGURES, or delete them.'
+    )
+
+
+def test_every_registered_figure_is_referenced():
+    """Every name in the Snakefile's FIGURES has a ``#fig()`` call in paper.typ.
+
+    This is the third of the three coordinated edits that adding a figure
+    takes -- script on disk, name in DOCUMENT_FIGURES, ``#fig()`` at the call
+    site -- and it was the one edit nothing checked. Without it, registering a
+    figure and forgetting the call site builds a PDF that no document
+    includes: the DAG goes green and the figure never reaches the paper.
+    """
+    unreferenced = sorted(_registered_figures() - _referenced_figures())
+    assert not unreferenced, (
+        f'Snakefile FIGURES names with no #fig("<name>") call in {PAPER}: '
+        f'{unreferenced}. Add the call site, or unregister them.'
+    )
+
+
+def test_every_referenced_figure_is_registered():
+    """Every ``#fig()`` call in paper.typ names a registered figure.
+
+    The other direction. This one does fail without the test -- at Typst
+    compile, on a missing build/figures/<name>.pdf -- but only after the whole
+    DAG has run, and the error names a missing file rather than the registry
+    edit that was forgotten.
+    """
+    unregistered = sorted(_referenced_figures() - _registered_figures())
+    assert not unregistered, (
+        f'paper.typ calls #fig() for names absent from the Snakefile FIGURES '
+        f'list: {unregistered}. Register them in DOCUMENT_FIGURES, or switch '
+        f'the call site to #asset().'
     )

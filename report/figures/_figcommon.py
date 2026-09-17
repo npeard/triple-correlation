@@ -24,6 +24,19 @@ matplotlib.use('Agg')
 
 import matplotlib.pyplot as plt
 
+# Cheap guard on the import order above. If a future edit hoists the pyplot
+# import over `matplotlib.use`, the backend silently reverts to an interactive
+# one and every figure body fails on a machine with no display -- a failure
+# that would surface in CI, not here. Asserting it fails loudly at the source
+# instead.
+if plt.get_backend().lower() != 'agg':
+    msg = (
+        f'Expected the Agg backend, got {plt.get_backend()!r}. Something '
+        f'imported matplotlib.pyplot before this module called '
+        f'matplotlib.use("Agg").'
+    )
+    raise RuntimeError(msg)
+
 # The published figures were rendered at this DPI. Kept explicit so a
 # matplotlib default change cannot silently rescale every figure in the paper.
 DPI = 200

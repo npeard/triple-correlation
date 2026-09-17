@@ -386,8 +386,6 @@ def Figure_S1():  # noqa: PLR0915
     """Show how the inverse Fourier transform loses fidelity when the phases
     from the Fourier transform of two images are swapped.
     """
-    np.random.seed(0x5EED)
-
     MITPhysics = np.array(Image.open(_IMAGES / 'MITPhysics.jpeg').convert('L'))
     MITCamera = np.array(Image.open(_IMAGES / 'MITCamera.jpeg').convert('L'))
     Mod_MITPhysics = np.abs(np.fft.fftshift(np.fft.fft2(MITPhysics)))
@@ -675,8 +673,7 @@ def Figure_2() -> None:
     equation in Phi without the sign information, the phase solution has
     contours at the expected locations but the sign of the slope is incorrect.
     """
-    np.random.seed(0x5EED + 1)
-    fluo = Fluorescence1D(kmax=5, num_pix=201, num_atoms=3)
+    fluo = Fluorescence1D(kmax=5, num_pix=201, num_atoms=3, rng=0x5EED + 1)
     cosPhi = fluo.cosPhi_from_data(num_shots=10000)
     initialPhase = fluo.coh_phase[fluo.num_pix // 2 :][0]
 
@@ -723,7 +720,6 @@ def Figure_3():
     intersection-finding optimization problem. Also show the error landscape
     for the optimization.
     """
-    np.random.seed(0x5EED)
     # fluo = Fluorescence1D(kmax=5, num_pix=51, num_atoms=3)  # Unused variable
     # This code was previously a commented section in PhiSolver. This needs
     # to be retrieved from a previous commit.
@@ -1032,6 +1028,13 @@ def Figure_4_Rows():
     """Shows that exact ab initio phase solving on a 2D array is possible
     using manual (user-input) resolving to minimize the total error.
     """
+    # This seed does nothing: Plot2D builds its own Fluorescence2D, which draws
+    # from a np.random.default_rng Generator that never consults the legacy
+    # global RNG. Making this figure reproducible means threading an `rng`
+    # parameter through Plot2D.__init__, which is an API change to plot2d.py
+    # rather than a conversion -- see the TASKS.md entry. Left in place, and
+    # labelled, because silently dropping it would hide that this figure is
+    # non-deterministic.
     np.random.seed(0x5EED)
     plot = Plot2D(num_pix=11, num_atoms=7, kmax=2)
 
@@ -1439,10 +1442,9 @@ def Figure_S3():  # noqa: PLR0915
 
 
 def Figure_S5():  # noqa: PLR0915
-    np.random.seed(0x5EED + 2)
     # Show the effects of phase ramps, sign flips, and the use of harmonic
     # inversion to find a 1D structure
-    fluo = Fluorescence1D(kmax=5, num_pix=501, num_atoms=3)
+    fluo = Fluorescence1D(kmax=5, num_pix=501, num_atoms=3, rng=0x5EED + 2)
 
     fig = P.figure(figsize=(20, 5))
     P.rcParams.update({'font.size': 22})
