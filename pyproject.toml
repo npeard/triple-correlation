@@ -241,6 +241,10 @@ codespell = "*"
 
 [tool.pixi.pypi-dependencies]
 triple-correlation = { path = ".", editable = true }
+# The generic gates (`check-ascii`, `preflight`) as pinned commands, in every
+# environment because `ascii` runs in the default one. Move the tag together
+# with the agent-config `rev:` in .pre-commit-config.yaml.
+agent-config = { git = "https://github.com/npeard/agent-config", tag = "v0.1.0" }
 
 # Torch arrives via the editable `triple-correlation` install, and PyPI's
 # default win-64 torch wheel is CPU-only by design -- which makes the GPT
@@ -281,7 +285,7 @@ report = { features = ["report"], solve-group = "default" }
 [tool.pixi.tasks]
 format = "ruff format . && ruff check --fix ."
 lint = "ruff check ."
-ascii = "python scripts/check_ascii.py"
+ascii = "check-ascii"
 # `python -m pytest` / `python -m codespell_lib` rather than a bare `pytest` /
 # `codespell`, so the tool runs through this environment's interpreter instead
 # of resolving against PATH -- PATH resolution is the exact failure mode being
@@ -302,7 +306,7 @@ precommit = "pre-commit run --all-files"
 # and current, tests green, clean tree, expected branch. In the dev feature
 # because the hooks it inspects are installed from that environment. Pass
 # `--with-tests` to actually run the suite rather than just report the command.
-preflight = "python scripts/preflight.py"
+preflight = "preflight"
 all = { depends-on = ["format", "lint", "ascii", "typecheck", "test"] }
 
 # Typst report build (report/). The whole document toolchain is
