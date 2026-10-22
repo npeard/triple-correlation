@@ -4,7 +4,7 @@
 //
 //   report-theme(title: ..., subtitle: ..., author: ..., date: ...)
 //
-// ASCII only, matching the repo-wide convention that scripts/check_ascii.py
+// ASCII only, matching the repo-wide convention that the check-ascii hook
 // enforces for *.py and *.md. Write "->", "<=", "+/-" rather than the
 // corresponding Unicode glyphs; tests/test_report_build.py extends the same
 // rule to report/*.typ, which the pre-commit hook does not reach.
@@ -162,16 +162,19 @@
 #let assetpath(name) = "/assets/" + name + ".png"
 #let figpath(name) = "/build/figures/" + name + ".pdf"
 
-// A committed static PNG from assets/. These are the published renders; the
-// plan is for the Snakefile's `figure` rule and `fig` below to replace them.
+// A committed static PNG from assets/: the published render. Seven of the
+// paper's eleven figures are still these, each for a reason recorded in
+// TASKS.md -- a missing generator, an unpackageable dependency, a composite
+// assembled outside the repo, or a solver that does not reproduce its own
+// published claim. The remaining four go through `fig` below.
 #let asset(name, caption: none, width: 100%) = figure(
   image(assetpath(name), width: width),
   caption: caption,
 )
 
 // A generated figure, named exactly as the Snakefile's FIGURES list names it.
-// Unused while FIGURES is empty; kept so the first generated figure is a
-// one-line change at the call site.
+// The name must appear in both DOCUMENT_FIGURES and a `report/figures/
+// plot_<name>.py`; tests/test_report_build.py checks all three sites agree.
 #let fig(name, caption: none, width: 100%) = figure(
   image(figpath(name), width: width),
   caption: caption,

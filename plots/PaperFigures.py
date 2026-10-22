@@ -12,6 +12,7 @@ rather than taken at module scope.
 
 import copy
 import logging
+from pathlib import Path
 from typing import Any
 
 import matplotlib
@@ -25,6 +26,9 @@ from skimage.restoration import unwrap_phase
 from skimage.transform import resize
 
 logger = logging.getLogger(__name__)
+
+# Figure inputs are resolved against this file, not the process CWD.
+_IMAGES = Path(__file__).parent / 'images'
 
 from biphase.solver.iterative import IterativeSolver
 from fluo import Fluorescence1D, Fluorescence2D
@@ -136,8 +140,7 @@ def Figure_1() -> None:  # noqa: PLR0915
     direction (coherent diffraction) and a set of incoherent frames collected
     from the side (incoherent diffraction).
     """
-    np.random.seed(0x5EED)
-    fluo = Fluorescence2D(kmax=5, num_pix=201, num_atoms=19)
+    fluo = Fluorescence2D(kmax=5, num_pix=201, num_atoms=19, rng=0x5EED)
 
     def draw_sphere(
         x_center: float, y_center: float, z_center: float, radius: float
@@ -383,10 +386,8 @@ def Figure_S1():  # noqa: PLR0915
     """Show how the inverse Fourier transform loses fidelity when the phases
     from the Fourier transform of two images are swapped.
     """
-    np.random.seed(0x5EED)
-
-    MITPhysics = np.array(Image.open('images/MITPhysics.jpeg').convert('L'))
-    MITCamera = np.array(Image.open('images/MITCamera.jpeg').convert('L'))
+    MITPhysics = np.array(Image.open(_IMAGES / 'MITPhysics.jpeg').convert('L'))
+    MITCamera = np.array(Image.open(_IMAGES / 'MITCamera.jpeg').convert('L'))
     Mod_MITPhysics = np.abs(np.fft.fftshift(np.fft.fft2(MITPhysics)))
     # Mod_MITPhysics = np.ones_like(Mod_MITPhysics)
     Angle_MITPhysics = np.angle(np.fft.fftshift(np.fft.fft2(MITPhysics)))
@@ -484,7 +485,7 @@ def BiSpectrumClosure():  # noqa: PLR0915
     fluo = Fluorescence1D(kmax=5, num_pix=101, num_atoms=3)
     num_shots = 10000
 
-    cmap = copy.copy(matplotlib.cm.get_cmap('viridis'))
+    cmap = copy.copy(matplotlib.colormaps['viridis'])
     cmap.set_bad(color='white')
 
     fig = P.figure(figsize=(20, 5))
@@ -672,8 +673,7 @@ def Figure_2() -> None:
     equation in Phi without the sign information, the phase solution has
     contours at the expected locations but the sign of the slope is incorrect.
     """
-    np.random.seed(0x5EED + 1)
-    fluo = Fluorescence1D(kmax=5, num_pix=201, num_atoms=3)
+    fluo = Fluorescence1D(kmax=5, num_pix=201, num_atoms=3, rng=0x5EED + 1)
     cosPhi = fluo.cosPhi_from_data(num_shots=10000)
     initialPhase = fluo.coh_phase[fluo.num_pix // 2 :][0]
 
@@ -720,7 +720,6 @@ def Figure_3():
     intersection-finding optimization problem. Also show the error landscape
     for the optimization.
     """
-    np.random.seed(0x5EED)
     # fluo = Fluorescence1D(kmax=5, num_pix=51, num_atoms=3)  # Unused variable
     # This code was previously a commented section in PhiSolver. This needs
     # to be retrieved from a previous commit.
@@ -730,8 +729,7 @@ def Figure_ResolvingDemo():  # noqa: PLR0915
     """Show how the use of resolving to minimize the total error leads to a
     correct phase solution.
     """
-    np.random.seed(0x5EED)
-    fluo = Fluorescence2D(kmax=3, num_pix=11, num_atoms=3)
+    fluo = Fluorescence2D(kmax=3, num_pix=11, num_atoms=3, rng=0x5EED)
     real_phase = fluo.coh_phase_double[
         fluo.num_pix - 1 : 2 * fluo.num_pix - 1, fluo.num_pix - 1 : 2 * fluo.num_pix - 1
     ]
@@ -740,9 +738,13 @@ def Figure_ResolvingDemo():  # noqa: PLR0915
     cosPhi = fluo.cosPhi_from_data(num_shots=num_shots)
     initialPhase = [real_phase[0, 1], real_phase[1, 0]]
     solver = IterativeSolver(cosPhi)
-    solved, error = solver.solve(initial_phase=initialPhase[0], error_reject=50)
+    solved, error = solver.solve(initial_phase=initialPhase, error_reject=50)
 
-    solved = solved
+    # IterativeSolver reports on the (2N-1) correlation grid, so crop to the
+    # physical quadrant that real_phase above was sliced to. The no-op this
+    # replaces is where that crop used to be.
+    solved = solved[: fluo.num_pix, : fluo.num_pix]
+    error = error[: fluo.num_pix, : fluo.num_pix]
     box_extent = 2 * fluo.kmax
 
     fig = P.figure(figsize=(20, 10))
@@ -879,6 +881,9 @@ def Figure_ResolvingDemo():  # noqa: PLR0915
     initialPhase = [real_phase[0, 1], real_phase[1, 0]]
     solver = IterativeSolver(cosPhi)
     solved, error = solver.solve(initial_phase=initialPhase, error_reject=-1)
+    # Same (2N-1) -> physical-quadrant crop as the un-resolved panels above.
+    solved = solved[: fluo.num_pix, : fluo.num_pix]
+    error = error[: fluo.num_pix, : fluo.num_pix]
     # Plot the solved phase branch
     ax1 = fig.add_subplot(243)
     ax1.imshow(
@@ -1023,6 +1028,13 @@ def Figure_4_Rows():
     """Shows that exact ab initio phase solving on a 2D array is possible
     using manual (user-input) resolving to minimize the total error.
     """
+    # This seed does nothing: Plot2D builds its own Fluorescence2D, which draws
+    # from a np.random.default_rng Generator that never consults the legacy
+    # global RNG. Making this figure reproducible means threading an `rng`
+    # parameter through Plot2D.__init__, which is an API change to plot2d.py
+    # rather than a conversion -- see the TASKS.md entry. Left in place, and
+    # labelled, because silently dropping it would hide that this figure is
+    # non-deterministic.
     np.random.seed(0x5EED)
     plot = Plot2D(num_pix=11, num_atoms=7, kmax=2)
 
@@ -1037,8 +1049,7 @@ def Figure_S2():  # noqa: PLR0915
     """Show how the double correlation may be used to obtain scattering
     intensities outside the detector area despite the sum of shots giving noise.
     """
-    np.random.seed(0x5EED + 1)
-    fluo = Fluorescence2D(kmax=5, num_pix=101, num_atoms=7)
+    fluo = Fluorescence2D(kmax=5, num_pix=101, num_atoms=7, rng=0x5EED + 1)
 
     # Changing this will affect colorbar placement for the whole figure, be
     # careful
@@ -1231,8 +1242,7 @@ def Figure_S3():  # noqa: PLR0915
     """Show how having extra k-space gives better real space resolution with
     and without phase information.
     """
-    np.random.seed(0x5EED + 2)
-    fluo = Fluorescence2D(kmax=8, num_pix=201, num_atoms=5)
+    fluo = Fluorescence2D(kmax=8, num_pix=201, num_atoms=5, rng=0x5EED + 2)
     P.rcParams.update({'font.size': 22})
 
     box_extent = np.max(fluo.x_pix[0])
@@ -1432,10 +1442,9 @@ def Figure_S3():  # noqa: PLR0915
 
 
 def Figure_S5():  # noqa: PLR0915
-    np.random.seed(0x5EED + 2)
     # Show the effects of phase ramps, sign flips, and the use of harmonic
     # inversion to find a 1D structure
-    fluo = Fluorescence1D(kmax=5, num_pix=501, num_atoms=3)
+    fluo = Fluorescence1D(kmax=5, num_pix=501, num_atoms=3, rng=0x5EED + 2)
 
     fig = P.figure(figsize=(20, 5))
     P.rcParams.update({'font.size': 22})
@@ -1671,11 +1680,9 @@ def Figure_S5():  # noqa: PLR0915
 
 
 def Figure_S4():
-    np.random.seed(0x5EED + 2)
-    fluo = Fluorescence2D(kmax=3, num_pix=101, num_atoms=5)
+    fluo = Fluorescence2D(kmax=3, num_pix=101, num_atoms=5, rng=0x5EED + 2)
 
-    np.random.seed(0x5EED + 2)
-    fluo_coarse = Fluorescence2D(kmax=3, num_pix=15, num_atoms=5)
+    fluo_coarse = Fluorescence2D(kmax=3, num_pix=15, num_atoms=5, rng=0x5EED + 2)
 
     P.rcParams.update({'font.size': 22})
     box_extent = 2 * fluo.kmax

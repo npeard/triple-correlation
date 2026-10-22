@@ -23,9 +23,14 @@ This repository implements phase retrieval from triple correlations of fluoresce
 The codebase follows a modular structure:
 
 ### Core Simulation (`fluo/`)
-- `speckle1d.py` / `speckle2d.py`: Main fluorescence simulation classes with methods for computing intensity patterns, correlations, and phase retrieval
-- `triphase1d.py` / `triphase2d.py`: Triple correlation and phase retrieval algorithms
-- `xtal.py`: Crystal structure utilities
+- `fluo1d.py` / `fluo2d.py`: the `Fluorescence1D` / `Fluorescence2D`
+  simulation classes, with methods for intensity patterns and for the second-
+  and third-order correlations. Both are re-exported from `fluo/__init__.py`,
+  so import them as `from fluo import Fluorescence1D`.
+
+Phase retrieval itself lives in `biphase/solver/`, not here: `iterative.py`
+(`IterativeSolver`, the exact diagonal-by-diagonal solver) and
+`differentiable.py` (`TrainablePhase`, `DifferentiableSolver`).
 
 ### Neural Network Training (`biphase/transformer/`)
 - `lit_module.py`: Unified PyTorch Lightning module (`LitModule`) that handles model creation, on-the-fly data generation, training/validation/test steps, and loss computation
@@ -60,7 +65,7 @@ always invoke Python and tools through `pixi run` (or from inside `pixi shell`)
 - `pixi run -e dev preflight` - Step 0: is this repo fit to work in right now?
   (pre-commit installed and current, clean tree, expected branch, tests
   detected). Add `--with-tests` to actually run the suite:
-  `pixi run -e dev python scripts/preflight.py --with-tests`
+  `pixi run -e dev preflight --with-tests`
 - `pixi run report` - Build `report/build/paper.pdf` via the Snakemake DAG
 - `pixi run report-dry` - Show what `report` would rebuild, without building
 - `pixi run report-clean` - Delete `report/build/`
@@ -295,6 +300,6 @@ notation in docstrings, comments, and string literals must be written in
 `<psi|k>`, `->`, `<=`, `+/-`, `d^2`, `A^T` instead of the corresponding
 Greek letters, angle brackets, arrows, and relation glyphs.
 
-Enforcement: `scripts/check_ascii.py` (run via `pixi run ascii`, part of
-`pixi run all`, and the `ascii-only` pre-commit hook) fails on any non-ASCII
+Enforcement: agent-config's `check-ascii` (run via `pixi run ascii`, part of
+`pixi run all`, and the `check-ascii` pre-commit hook) fails on any non-ASCII
 codepoint in `*.py`/`*.md`.

@@ -13,9 +13,9 @@
 #   entry in DOCUMENT_FIGURES. tests/test_report_build.py checks those two
 #   stay in sync in both directions, because a file-per-figure layout invites
 #   exactly that drift.
-# - FIGURES is empty today: every figure in the paper is a committed PNG under
-#   assets/, the published render. The `figure` rule below is kept so the
-#   first generated figure is a registry edit rather than a new rule.
+# - FIGURES is partially populated: four of the paper's eleven figures are
+#   generated here, and the rest remain committed PNGs under assets/ for the
+#   reasons recorded beside DOCUMENT_FIGURES below.
 # - Documents depend on the figure PDFs they include, so editing one figure
 #   script rebuilds that figure and the documents that use it, and nothing
 #   else. They also depend on the theme, the bibliography and the asset PNGs,
@@ -33,8 +33,22 @@ FIGDIR = f"{BUILD}/figures"
 # Which generated figures each document includes. Kept explicit rather than
 # "all figures" so a document only rebuilds when something it actually shows
 # changes.
+# Names match the Typst `#fig("<name>")` call sites and are the paper's own
+# figure labels (fig:Intro -> intro), not the published asset numbers, so a
+# figure inserted mid-paper does not renumber every script on disk.
+#
+# Seven published figures are still `#asset` PNGs rather than entries here,
+# each for a reason recorded in TASKS.md: the naive-solver degeneracy
+# (figure_2), the 2D solver not reproducing its own claim (figure_11), two
+# missing generators (figure_3, figure_10), harminv (figure_9), and two
+# composites assembled outside this repo (figure_4, figure_5).
 DOCUMENT_FIGURES = {
-    "paper": [],
+    "paper": [
+        "intro",
+        "simulatedamplitude",
+        "resolutiondemo",
+        "coarsephase",
+    ],
 }
 
 # The figure registry: stem <name> maps to figures/plot_<name>.py ->

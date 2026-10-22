@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import logging
+from collections.abc import Sequence
 from itertools import permutations
 
 import numpy as np
@@ -74,7 +75,7 @@ class IterativeSolver:
             raise NotImplementedError('2D naive solve not implemented in original code')
 
     def solve(
-        self, initial_phase: float = 0, error_reject: float = -10
+        self, initial_phase: float | Sequence[float] = 0, error_reject: float = -10
     ) -> tuple[np.ndarray, np.ndarray]:
         """Full iterative phase solver with error correction.
 
@@ -90,7 +91,28 @@ class IterativeSolver:
         if self.is_1d:
             return self._solve_1d(initial_phase)
         else:
-            return self._solve_2d([initial_phase, initial_phase], error_reject)
+            # The 2D path seeds two independent pixels, so it needs a pair. A
+            # scalar (including the default 0) is broadcast to both; a sequence
+            # is passed through, which is what the docstring above promises.
+            # Wrapping unconditionally turned a correct [a, b] into [[a, b],
+            # [a, b]] and only appeared to work for a scalar.
+            #
+            # np.ndim rather than np.isscalar: the latter is False for a 0-d
+            # array, which would send `np.asarray(0.7)` down the sequence
+            # branch and raise "iteration over a 0-d array" -- a scalar by
+            # every reasonable reading of the docstring above.
+            if np.ndim(initial_phase) == 0:
+                pair = [float(initial_phase), float(initial_phase)]
+            else:
+                pair = [float(v) for v in initial_phase]
+                if len(pair) != 2:
+                    msg = (
+                        f'2D initial_phase needs exactly 2 values, one per seeded '
+                        f'pixel; got {len(pair)}. _solve_2d reads only the first '
+                        f'two, so a longer sequence would be silently truncated.'
+                    )
+                    raise ValueError(msg)
+            return self._solve_2d(pair, error_reject)
 
     def manual_solve(
         self, initial_phase: list, alt_pixels: np.ndarray | None = None
@@ -660,7 +682,11 @@ class IterativeSolver:
                 options={'gtol': 1e-8, 'maxiter': 10000},
             )
             fCandidate.append(res.fun)
-            thetaCandidate.append(res.x)
+            # res.x is a shape-(1,) array, not a scalar. Unpacking it here keeps
+            # the declared tuple[float, float] contract: without it final_phi is a
+            # 1-element array, which the 1D paths silently broadcast into a scalar
+            # slot but the 2D `solved[i, j] = next_phi` rejects outright.
+            thetaCandidate.append(res.x.item())
 
         fCandidate = np.asarray(fCandidate)
         thetaCandidate = np.asarray(thetaCandidate)
