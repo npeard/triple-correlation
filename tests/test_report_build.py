@@ -17,7 +17,7 @@ The failure modes these exist to catch:
    these as a visible marker rather than failing the build, so a broken
    citation ships unless something checks.
 3. Non-ASCII bytes in the Typst sources. The repo-wide ASCII convention is
-   enforced by ``scripts/check_ascii.py`` for ``*.py`` and ``*.md`` only, so
+   enforced by the ``check-ascii`` hook for ``*.py`` and ``*.md`` only, so
    ``.typ`` is not covered by the pre-commit hook. This is where that gap is
    closed.
 4. Registry drift between the Snakefile's ``FIGURES``, the
@@ -157,7 +157,7 @@ def test_every_citation_resolves():
 def test_typ_sources_are_ascii(source: Path):
     """No non-ASCII bytes in the Typst sources.
 
-    scripts/check_ascii.py covers *.py and *.md only, so .typ files are not
+    The check-ascii hook covers *.py and *.md only, so .typ files are not
     reached by the pre-commit hook. Math notation belongs in Typst markup
     (``arrow(q)``, ``<=``, ``plus.minus``), not as Unicode glyphs.
     """

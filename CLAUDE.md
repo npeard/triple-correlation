@@ -65,7 +65,7 @@ always invoke Python and tools through `pixi run` (or from inside `pixi shell`)
 - `pixi run -e dev preflight` - Step 0: is this repo fit to work in right now?
   (pre-commit installed and current, clean tree, expected branch, tests
   detected). Add `--with-tests` to actually run the suite:
-  `pixi run -e dev python scripts/preflight.py --with-tests`
+  `pixi run -e dev preflight --with-tests`
 - `pixi run report` - Build `report/build/paper.pdf` via the Snakemake DAG
 - `pixi run report-dry` - Show what `report` would rebuild, without building
 - `pixi run report-clean` - Delete `report/build/`
@@ -300,6 +300,6 @@ notation in docstrings, comments, and string literals must be written in
 `<psi|k>`, `->`, `<=`, `+/-`, `d^2`, `A^T` instead of the corresponding
 Greek letters, angle brackets, arrows, and relation glyphs.
 
-Enforcement: `scripts/check_ascii.py` (run via `pixi run ascii`, part of
-`pixi run all`, and the `ascii-only` pre-commit hook) fails on any non-ASCII
+Enforcement: agent-config's `check-ascii` (run via `pixi run ascii`, part of
+`pixi run all`, and the `check-ascii` pre-commit hook) fails on any non-ASCII
 codepoint in `*.py`/`*.md`.

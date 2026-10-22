@@ -4,7 +4,7 @@
 //
 //   report-theme(title: ..., subtitle: ..., author: ..., date: ...)
 //
-// ASCII only, matching the repo-wide convention that scripts/check_ascii.py
+// ASCII only, matching the repo-wide convention that the check-ascii hook
 // enforces for *.py and *.md. Write "->", "<=", "+/-" rather than the
 // corresponding Unicode glyphs; tests/test_report_build.py extends the same
 // rule to report/*.typ, which the pre-commit hook does not reach.

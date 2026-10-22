@@ -80,24 +80,6 @@ dev = [
 [tool.flit.module]
 name = "fluo"
 
-[tool.ruff]
-# Keep ruff away from the two verbatim copies of agent-config's scripts,
-# formatter included. Ruff targets the version in `requires-python`, so at
-# 3.14 the formatter rewrites `except (A, B):` into PEP 758's `except A, B:`.
-# That is valid Python here, but it forks the copies from upstream on every
-# `pixi run format` -- exactly what the per-file-ignores comment below
-# forbids, and those ignores cannot stop it because they configure the linter
-# and this is the formatter. Upstream adopts new syntax on its own schedule;
-# this project does not get to decide that for it.
-#
-# `force-exclude` is the load-bearing half. Plain `exclude` is ignored when a
-# path is passed explicitly, which is precisely how the pre-commit hooks
-# invoke ruff (`ruff format <staged files>`) -- so without it the hook
-# re-forks the file on every commit even though `pixi run format` leaves it
-# alone.
-extend-exclude = ["scripts/preflight.py", "scripts/platform_paths.py"]
-force-exclude = true
-
 [tool.ruff.format]
 quote-style = "single"
 docstring-code-format = true
@@ -166,22 +148,8 @@ allow-dict-calls-with-keyword-arguments = true
 "plots/plot1d.py" = ["N812"]
 "plots/plot2d.py" = ["N812", "E402", "E501", "PLR0915"]
 "plots/test_differentiable_solver.py" = ["E402", "ANN201"]
-"scripts/check_ascii.py" = ["S603", "S607", "T201"]
 "tests/test_cosPhi_generation.py" = ["N999"]
 "biphase/solver/biphase2d.py" = ["E501"]
-# These two are copied verbatim from ~/Documents/Projects/claude-config, where
-# they are maintained and linted against that project's own rules.
-# Reformatting them here would fork them from upstream and turn the next copy
-# into a merge, so the rules they trip are disabled rather than the files
-# edited. Keep them byte-identical to the originals.
-#
-# Each list is scoped to the rules its own file actually trips, verified with
-# `ruff check --isolated --select ...`. smi pastes the union of both lists onto
-# both files; copying that would leave T201 suppressed in platform_paths.py,
-# which prints nothing today -- so a stray print added to a file that is
-# supposed to stay byte-identical to upstream would never be flagged.
-"scripts/preflight.py" = ["ANN202", "B007", "PLC0415", "S603", "S607", "T201"]
-"scripts/platform_paths.py" = ["D301", "INP001", "PTH115", "S603", "S607"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
